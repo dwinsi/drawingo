@@ -29,12 +29,11 @@ object AdcBackendClient {
     var customBackendUrl: String = ""
 
     private fun getCandidateUrls(): List<String> {
-        val list = mutableListOf<String>()
         if (isSecureBackendUrl(customBackendUrl)) {
-            list.add(customBackendUrl.trimEnd('/'))
+            // A parent's explicit server choice must not silently fall through to another host.
+            return listOf(customBackendUrl.trimEnd('/'))
         }
-        list.add(CLOUD_RUN_URL)
-        return list.distinct()
+        return listOf(CLOUD_RUN_URL)
     }
 
     fun isSecureBackendUrl(value: String): Boolean {
