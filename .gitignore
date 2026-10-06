@@ -1,18 +1,62 @@
-*.iml
-.gradle
-/local.properties
-local.properties
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java bytecode
+*.class
+
+# Log files
+*.log
+
+# Android Studio / IntelliJ IDEA / Gradle
 .idea/
-.vscode/
-.kotlin/
+*.iml
+.gradle/
+build/
+*/build/
+
+# Local configuration file (contains SDK path)
+local.properties
+
+# Proguard / R8 folder
+proguard/
+
+# OS generated files
 .DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Android Studio navigation and captures
+.navigation/
+captures/
+
+# External native build folders
+.externalNativeBuild/
+.cxx/
+
+# Signing files (Never commit keystores!)
+*.jks
+*.keystore
+
+# Node.js backend dependencies & logs (functions/)
 node_modules/
 **/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Editor / Tooling caches
+.vscode/
+.kotlin/
+
+# Profiler memory dumps
 *.hprof
