@@ -1,0 +1,98 @@
+name: Drawingo Backend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'functions/**'
+      - '.github/workflows/backend-ci-cd.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'functions/**'
+      - '.github/workflows/backend-ci-cd.yml'
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Deploy to Cloud Run even if not on main'
+        required: false
+        type: boolean
+        default: true
+
+env:
+  PROJECT_ID: 'project-2154682a-9280-4a32-a72'
+  REGION: 'us-central1'
+  SERVICE_NAME: 'drawingo-backend'
+  DEFAULT_WIF_PROVIDER: 'projects/357002186662/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+  DEFAULT_WIF_SA: 'drawingo-cicd@project-2154682a-9280-4a32-a72.iam.gserviceaccount.com'
+
+jobs:
+  test-and-build:
+    name: Build & Verify Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'functions/package-lock.json'
+
+      - name: Install Dependencies
+        working-directory: functions
+        run: npm ci
+
+      - name: Run Tests & Syntax Verification
+        working-directory: functions
+        run: npm test
+
+  deploy-cloud-run:
+    name: Deploy to Google Cloud Run
+    needs: test-and-build
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.force_deploy == true)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER || env.DEFAULT_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT || env.DEFAULT_WIF_SA }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Backend to Cloud Run
+        working-directory: functions
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --project="${{ env.PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --source=. \
+            --platform=managed \
+            --allow-unauthenticated \
+            --memory=512Mi \
+            --cpu=1 \
+            --set-env-vars="GCP_PROJECT_ID=${{ env.PROJECT_ID }},GCP_LOCATION=${{ env.REGION }},GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_GENAI_USE_ENTERPRISE=true"
+
+      - name: Verify Live Service Health
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --project="${{ env.PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --format="value(status.url)")
+          echo "Live Service URL: ${SERVICE_URL}"
+          echo "Pinging health endpoint..."
+          curl -f -s "${SERVICE_URL}/health" | grep "status"
+          echo "Health check succeeded!"

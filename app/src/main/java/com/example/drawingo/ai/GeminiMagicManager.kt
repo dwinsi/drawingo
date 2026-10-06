@@ -6,18 +6,23 @@ import com.example.drawingo.model.AnimationSceneResult
 import com.example.drawingo.model.AnimationSceneType
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
+import com.google.ai.client.generativeai.type.generationConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import kotlin.random.Random
 
 /**
  * Handles Google Gemini AI multimodal recognition of toddler drawings
- * and classifies artwork into animated scenes with nursery rhymes (Ages 1–8).
+ * and classifies artwork into animated scenes using a True Parallel Multi-Agent System.
  */
 object GeminiMagicManager {
 
     private const val TAG = "GeminiMagicManager"
-    private const val MODEL_NAME = "gemini-2.0-flash"
+    private const val MODEL_NAME = "gemini-2.5-flash" // Recommended fast model for structured output
+
 
     private val FallbackScenes = listOf(
         AnimationSceneResult(
@@ -67,86 +72,120 @@ object GeminiMagicManager {
         }
 
         try {
-            Log.i(TAG, "Connecting to live Gemini AI model ($MODEL_NAME)...")
-            val generativeModel = GenerativeModel(
+            Log.i(TAG, "Starting Multi-Agent Orchestration with $MODEL_NAME...")
+            
+            // Shared config for strict JSON output
+            val jsonConfig = generationConfig {
+                responseMimeType = "application/json"
+            }
+
+            // Step 1: The Vision Agent (Sequential First Step)
+            val visionModel = GenerativeModel(
                 modelName = MODEL_NAME,
-                apiKey = apiKey
+                apiKey = apiKey,
+                generationConfig = jsonConfig
             )
 
-            val prompt = """
-                You are a warm, magical AI friend for kids aged 1 to 8 years (fans of Like Nastya, Peppa Pig, ChuChu TV, Cocomelon).
-                Look at this child's drawing or scribbles and analyze what it is!
-                
-                Respond in EXACTLY this format:
-                SCENE: [OCEAN_LEAP or SKY_FLIGHT or SPACE_LAUNCH or LAND_SAFARI or MAGIC_DANCE]
-                SUBJECT: [Short 1-3 word name, e.g., Dolphin, Bird, Rocket, Car, Lion, Flower, Doodle]
-                RHYME: [2 to 4 line super catchy, rhythmic nursery rhyme in English or Hindi/Hinglish with sound effects and emojis!]
-                
-                SCENE GUIDELINES:
-                - Use OCEAN_LEAP for dolphins, fish, sea turtles, octopuses, boats, water creatures.
-                - Use SKY_FLIGHT for birds, butterflies, bees, airplanes, clouds, flying creatures.
-                - Use SPACE_LAUNCH for rockets, cars, spaceships, stars, comets, fast vehicles.
-                - Use LAND_SAFARI for lions, bears, elephants, dinosaurs, dogs, cats, land animals.
-                - Use MAGIC_DANCE for general doodles, scribbles, flowers, shapes, suns.
+            val visionPrompt = """
+                Analyze this child's drawing.
+                Return ONLY a JSON object with:
+                - "subject": Short 1-3 word name (e.g. Dolphin, Bird, Rocket, Car, Lion, Flower, Doodle).
+                - "colors": List of main colors used.
+                - "vibe": A descriptive word of the emotion (e.g. happy, fast, calm, silly).
+                - "action": What the subject might be doing.
             """.trimIndent()
 
-            val inputContent = content {
-                image(bitmap)
-                text(prompt)
-            }
+            val visionResponse = visionModel.generateContent(
+                content {
+                    image(bitmap)
+                    text(visionPrompt)
+                }
+            )
+            val visionJsonText = visionResponse.text?.trim() ?: throw Exception("Vision Agent returned null")
+            Log.i(TAG, "Vision Agent Output: ${visionJsonText}")
 
-            val response = generativeModel.generateContent(inputContent)
-            val responseText = response.text?.trim()
+            // Step 2: The Creative Team (Parallel Fan-Out)
+            coroutineScope {
+                // Agent 2: Storyteller
+                val storyJob = async {
+                    val model = GenerativeModel(modelName = MODEL_NAME, apiKey = apiKey, generationConfig = jsonConfig)
+                    val prompt = """
+                        You are a warm, magical AI friend for kids aged 1 to 8 years.
+                        Based on this context from a drawing: $visionJsonText
+                        Write a 2 to 4 line super catchy, rhythmic nursery rhyme in English or Hindi/Hinglish with sound effects and emojis!
+                        Return ONLY a JSON object with:
+                        - "rhymeText": The generated rhyme.
+                    """.trimIndent()
+                    model.generateContent(prompt).text?.trim() ?: "{}"
+                }
 
-            if (!responseText.isNullOrBlank()) {
-                Log.i(TAG, "Live Gemini AI response received successfully!")
-                parseGeminiResponse(responseText)
-            } else {
-                getRandomFallbackScene()
+                // Agent 3: Animator
+                val animatorJob = async {
+                    val model = GenerativeModel(modelName = MODEL_NAME, apiKey = apiKey, generationConfig = jsonConfig)
+                    val prompt = """
+                        Based on this context from a drawing: $visionJsonText
+                        Select the best animation scene, particle density, and a matching hex color.
+                        Valid scenes: OCEAN_LEAP, SKY_FLIGHT, SPACE_LAUNCH, LAND_SAFARI, MAGIC_DANCE.
+                        Valid particle density: LOW, MEDIUM, HIGH.
+                        Return ONLY a JSON object with:
+                        - "sceneType": One of the valid scenes.
+                        - "particleDensity": One of the valid densities.
+                        - "magicColorHex": A 6-character hex color code (e.g. #FF0000).
+                    """.trimIndent()
+                    model.generateContent(prompt).text?.trim() ?: "{}"
+                }
+
+                // Agent 4: Musician/Audio
+                val audioJob = async {
+                    val model = GenerativeModel(modelName = MODEL_NAME, apiKey = apiKey, generationConfig = jsonConfig)
+                    val prompt = """
+                        Based on this context from a drawing: $visionJsonText
+                        Determine the best voice style and music tempo for this scene.
+                        Valid voice styles: ENERGETIC, SOOTHING, SILLY.
+                        Valid music tempos: FAST, SLOW, WALTZ.
+                        Return ONLY a JSON object with:
+                        - "voiceStyle": One of the valid styles.
+                        - "musicTempo": One of the valid tempos.
+                    """.trimIndent()
+                    model.generateContent(prompt).text?.trim() ?: "{}"
+                }
+
+                // Step 3: Data Aggregation
+                val storyJsonText = storyJob.await()
+                val animatorJsonText = animatorJob.await()
+                val audioJsonText = audioJob.await()
+
+                Log.i(TAG, "Story Agent: $storyJsonText")
+                Log.i(TAG, "Animator Agent: $animatorJsonText")
+                Log.i(TAG, "Audio Agent: $audioJsonText")
+
+                // Parse and Merge
+                val visionJson = JSONObject(visionJsonText)
+                val storyJson = JSONObject(storyJsonText)
+                val animatorJson = JSONObject(animatorJsonText)
+                val audioJson = JSONObject(audioJsonText)
+
+                val sceneTypeStr = animatorJson.optString("sceneType", "MAGIC_DANCE")
+                val sceneType = try {
+                    AnimationSceneType.valueOf(sceneTypeStr)
+                } catch (e: Exception) {
+                    AnimationSceneType.MAGIC_DANCE
+                }
+
+                AnimationSceneResult(
+                    sceneType = sceneType,
+                    subjectName = visionJson.optString("subject", "Magic Drawing"),
+                    rhymeText = storyJson.optString("rhymeText", "✨ Magic is happening! 🎨"),
+                    voiceStyle = audioJson.optString("voiceStyle", "ENERGETIC"),
+                    musicTempo = audioJson.optString("musicTempo", "FAST"),
+                    particleDensity = animatorJson.optString("particleDensity", "MEDIUM"),
+                    magicColorHex = animatorJson.optString("magicColorHex", "#FFFFFF")
+                )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error generating animation scene from Gemini API: ${e.message}", e)
+            Log.e(TAG, "Error generating animation scene from Multi-Agent system: ${e.message}", e)
             getRandomFallbackScene()
         }
-    }
-
-    private fun parseGeminiResponse(text: String): AnimationSceneResult {
-        var sceneType = AnimationSceneType.MAGIC_DANCE
-        var subjectName = "Magic Drawing"
-        var rhymeText = text
-
-        val lines = text.lines()
-        val rhymeLines = mutableListOf<String>()
-
-        for (line in lines) {
-            val trimmed = line.trim()
-            if (trimmed.startsWith("SCENE:", ignoreCase = true)) {
-                val valStr = trimmed.substringAfter(":").trim().uppercase()
-                sceneType = when {
-                    valStr.contains("OCEAN") || valStr.contains("DOLPHIN") || valStr.contains("FISH") -> AnimationSceneType.OCEAN_LEAP
-                    valStr.contains("SKY") || valStr.contains("BIRD") || valStr.contains("FLIGHT") -> AnimationSceneType.SKY_FLIGHT
-                    valStr.contains("SPACE") || valStr.contains("ROCKET") || valStr.contains("CAR") -> AnimationSceneType.SPACE_LAUNCH
-                    valStr.contains("LAND") || valStr.contains("SAFARI") || valStr.contains("ANIMAL") -> AnimationSceneType.LAND_SAFARI
-                    else -> AnimationSceneType.MAGIC_DANCE
-                }
-            } else if (trimmed.startsWith("SUBJECT:", ignoreCase = true)) {
-                subjectName = trimmed.substringAfter(":").trim()
-            } else if (trimmed.startsWith("RHYME:", ignoreCase = true)) {
-                rhymeLines.add(trimmed.substringAfter(":").trim())
-            } else if (trimmed.isNotEmpty() && !trimmed.contains("SCENE:") && !trimmed.contains("SUBJECT:")) {
-                rhymeLines.add(trimmed)
-            }
-        }
-
-        if (rhymeLines.isNotEmpty()) {
-            rhymeText = rhymeLines.joinToString("\n")
-        }
-
-        return AnimationSceneResult(
-            sceneType = sceneType,
-            subjectName = subjectName,
-            rhymeText = rhymeText
-        )
     }
 
     private fun getRandomFallbackScene(): AnimationSceneResult {

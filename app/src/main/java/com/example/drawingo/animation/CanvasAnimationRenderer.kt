@@ -197,20 +197,74 @@ object CanvasAnimationRenderer {
     }
 
     private fun drawMagicBackground(drawScope: DrawScope, w: Float, h: Float, timeMs: Long) {
-        val magicGrad = Brush.radialGradient(
-            colors = listOf(Color(0xFF2E1065), Color(0xFF0F0728), Color(0xFF0A0C10)),
-            center = Offset(w / 2f, h / 2f),
-            radius = w * 0.8f
+        // Vibrant, kid-friendly colorful gradient
+        val magicGrad = Brush.linearGradient(
+            colors = listOf(Color(0xFFFF9A9E), Color(0xFFFECFEF), Color(0xFFFDEB71), Color(0xFFBAFFC9), Color(0xFFBAE1FF)),
+            start = Offset(0f, 0f),
+            end = Offset(w, h)
         )
         drawScope.drawRect(brush = magicGrad, size = Size(w, h))
 
-        val ringPulse = (sin(timeMs * 0.004f).toFloat() * 30f + 120f)
-        drawScope.drawCircle(
-            color = Color(0x3300F0FF),
-            radius = ringPulse,
-            center = Offset(w / 2f, h / 2f),
-            style = Stroke(width = 8f)
-        )
+        // Draw animated floating shapes (Triangles, Circles, Squares, Stars)
+        val shapeCount = 20
+        for (i in 0 until shapeCount) {
+            val speed = 0.05f + (i % 5) * 0.02f
+            val sy = (h + 200f) - ((timeMs * speed + i * 150f) % (h + 400f))
+            val sx = (i * 317f) % w + sin(timeMs * 0.002f + i).toFloat() * 50f
+            val size = 30f + (i % 4) * 25f
+            val rot = (timeMs * 0.06f * (if (i % 2 == 0) 1f else -1f) + i * 45f) % 360f
+
+            val alpha = (sin(timeMs * 0.003f + i).toFloat() * 0.3f + 0.5f).coerceIn(0.2f, 0.8f)
+
+            drawScope.withTransform({
+                translate(sx, sy)
+                rotate(rot, pivot = Offset.Zero)
+            }) {
+                val color = when (i % 5) {
+                    0 -> Color(0xFFFF007F) // Hot Magenta
+                    1 -> Color(0xFF00F0FF) // Cyber Aqua
+                    2 -> Color(0xFF39FF14) // Acid Lime
+                    3 -> Color(0xFFFFD600) // Sunshine Gold
+                    else -> Color(0xFF9333EA) // Royal Violet
+                }.copy(alpha = alpha)
+
+                when (i % 4) {
+                    0 -> { // Circle
+                        drawCircle(color = color, radius = size / 2f)
+                    }
+                    1 -> { // Triangle
+                        val path = Path().apply {
+                            moveTo(0f, -size / 1.5f)
+                            lineTo(size / 1.5f, size / 1.5f)
+                            lineTo(-size / 1.5f, size / 1.5f)
+                            close()
+                        }
+                        drawPath(path = path, color = color)
+                    }
+                    2 -> { // Square
+                        drawRect(
+                            color = color,
+                            topLeft = Offset(-size / 2f, -size / 2f),
+                            size = Size(size, size)
+                        )
+                    }
+                    3 -> { // Star
+                        val path = Path()
+                        val outerR = size / 1.2f
+                        val innerR = outerR * 0.4f
+                        for (j in 0 until 10) {
+                            val angle = j * PI / 5 - PI / 2
+                            val r = if (j % 2 == 0) outerR else innerR
+                            val px = cos(angle).toFloat() * r
+                            val py = sin(angle).toFloat() * r
+                            if (j == 0) path.moveTo(px, py) else path.lineTo(px, py)
+                        }
+                        path.close()
+                        drawPath(path = path, color = color)
+                    }
+                }
+            }
+        }
     }
 
     private fun drawCloud(drawScope: DrawScope, center: Offset, size: Float) {

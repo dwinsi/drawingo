@@ -222,7 +222,7 @@ fun ParentGateDialog(
                     OutlinedTextField(
                         value = backendUrlInput,
                         onValueChange = { backendUrlInput = it },
-                        placeholder = { Text("http://192.168.x.x:8080 or Cloud Function URL") },
+                        placeholder = { Text("https://drawingo-backend-357002186662.us-central1.run.app") },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = ElectricCyan,
                             unfocusedBorderColor = Color(0xFF475569),

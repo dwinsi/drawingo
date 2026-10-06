@@ -24,6 +24,7 @@ import java.net.URL
 object AdcBackendClient {
 
     private const val TAG = "AdcBackendClient"
+    const val CLOUD_RUN_URL = "https://drawingo-backend-357002186662.us-central1.run.app"
     var customBackendUrl: String = ""
 
     private fun getCandidateUrls(): List<String> {
@@ -31,6 +32,7 @@ object AdcBackendClient {
         if (customBackendUrl.isNotBlank()) {
             list.add(customBackendUrl.trimEnd('/'))
         }
+        list.add(CLOUD_RUN_URL)
         list.add("http://10.0.2.2:8080")
         list.add("http://127.0.0.1:8080")
         list.add("http://localhost:8080")
@@ -54,8 +56,8 @@ object AdcBackendClient {
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 connection.doOutput = true
-                connection.connectTimeout = 4000
-                connection.readTimeout = 6000
+                connection.connectTimeout = 10000
+                connection.readTimeout = 15000
 
                 connection.outputStream.use { os ->
                     os.write(jsonPayload)
@@ -106,8 +108,8 @@ object AdcBackendClient {
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 connection.doOutput = true
-                connection.connectTimeout = 4000
-                connection.readTimeout = 6000
+                connection.connectTimeout = 10000
+                connection.readTimeout = 15000
 
                 connection.outputStream.use { os ->
                     os.write(jsonPayload)
