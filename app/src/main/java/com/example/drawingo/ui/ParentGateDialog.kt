@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlin.math.roundToInt
 import com.example.drawingo.net.AdcBackendClient
 import kotlin.random.Random
 
@@ -52,8 +55,8 @@ fun ParentGateDialog(
     onScreenTimeSaved: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val num1 = remember { Random.nextInt(13, 30) }
-    val num2 = remember { Random.nextInt(12, 20) }
+    val num1 = remember { Random.nextInt(1, 10) }
+    val num2 = remember { Random.nextInt(1, 10) }
     val expectedAnswer = num1 * num2
 
     var isUnlocked by remember { mutableStateOf(false) }
@@ -63,17 +66,20 @@ fun ParentGateDialog(
     var kioskState by remember { mutableStateOf(isKioskEnabled) }
     var cloudAiState by remember { mutableStateOf(isCloudAiAllowed) }
     var backendUrlInput by remember { mutableStateOf(currentBackendUrl) }
-    var screenTimeInput by remember { mutableFloatStateOf(currentScreenTimeLimit.toFloat()) }
+    var screenTimeInput by remember { mutableFloatStateOf(currentScreenTimeLimit.coerceIn(1, 30).toFloat()) }
     val backendUrlValid = backendUrlInput.isBlank() || AdcBackendClient.isSecureBackendUrl(backendUrlInput.trim())
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             shape = RoundedCornerShape(32.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+                .fillMaxWidth(0.96f)
+                .widthIn(max = 640.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -268,7 +274,7 @@ fun ParentGateDialog(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "Daily Screen Time Limit: ${screenTimeInput.toInt()} mins",
+                        text = "Session screen time limit: ${screenTimeInput.roundToInt()} ${if (screenTimeInput.roundToInt() == 1) "minute" else "minutes"}",
                         style = MaterialTheme.typography.titleMedium,
                         color = Color(0xFF1F2937),
                         fontWeight = FontWeight.Bold,
@@ -276,9 +282,8 @@ fun ParentGateDialog(
                     )
                     Slider(
                         value = screenTimeInput,
-                        onValueChange = { screenTimeInput = it },
-                        valueRange = 15f..120f,
-                        steps = 6, // 15, 30, 45, 60, 75, 90, 105, 120
+                        onValueChange = { screenTimeInput = it.roundToInt().toFloat() },
+                        valueRange = 1f..30f,
                         colors = SliderDefaults.colors(
                             thumbColor = Color(0xFF4FC3F7),
                             activeTrackColor = Color(0xFF4FC3F7),
@@ -301,7 +306,7 @@ fun ParentGateDialog(
                                 onKioskToggled(kioskState)
                                 onCloudAiAllowedChanged(cloudAiState)
                                 onBackendUrlSaved(backendUrlInput.trim())
-                                onScreenTimeSaved(screenTimeInput.toInt())
+                                onScreenTimeSaved(screenTimeInput.roundToInt())
                                 onDismiss()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF06D6A0)), // Minty Green

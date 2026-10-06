@@ -6,9 +6,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import com.example.drawingo.net.AdcBackendClient
 
 /**
@@ -22,8 +19,6 @@ object KioskManager {
     private const val LEGACY_KEY_GEMINI_API_KEY = "key_gemini_api_key"
     private const val KEY_BACKEND_URL = "key_backend_url"
     private const val KEY_SCREEN_TIME_LIMIT = "key_screen_time_limit"
-    private const val KEY_SCREEN_TIME_DAY = "key_screen_time_day"
-    private const val KEY_SCREEN_TIME_USED_MS = "key_screen_time_used_ms"
     private const val TAG = "KioskManager"
 
     private fun getPrefs(context: Context): SharedPreferences {
@@ -70,37 +65,14 @@ object KioskManager {
 
     fun getScreenTimeLimit(context: Context): Int {
         // Default to 30 minutes
-        return getPrefs(context).getInt(KEY_SCREEN_TIME_LIMIT, 30)
+        return getPrefs(context).getInt(KEY_SCREEN_TIME_LIMIT, 30).coerceIn(1, 30)
     }
 
     fun setScreenTimeLimit(context: Context, limitMins: Int) {
-        getPrefs(context).edit().putInt(KEY_SCREEN_TIME_LIMIT, limitMins.coerceIn(15, 120)).apply()
+        getPrefs(context).edit().putInt(KEY_SCREEN_TIME_LIMIT, limitMins.coerceIn(1, 30)).apply()
     }
 
-    fun getRemainingScreenTimeMs(context: Context): Long {
-        val prefs = getPrefs(context)
-        val today = todayKey()
-        if (prefs.getString(KEY_SCREEN_TIME_DAY, null) != today) {
-            prefs.edit().putString(KEY_SCREEN_TIME_DAY, today).putLong(KEY_SCREEN_TIME_USED_MS, 0L).apply()
-        }
-        val limitMs = getScreenTimeLimit(context).coerceIn(1, 24 * 60) * 60_000L
-        return (limitMs - prefs.getLong(KEY_SCREEN_TIME_USED_MS, 0L)).coerceAtLeast(0L)
-    }
-
-    fun recordScreenTime(context: Context, durationMs: Long) {
-        if (durationMs <= 0L) return
-        val prefs = getPrefs(context)
-        val today = todayKey()
-        val used = if (prefs.getString(KEY_SCREEN_TIME_DAY, null) == today) {
-            prefs.getLong(KEY_SCREEN_TIME_USED_MS, 0L)
-        } else 0L
-        prefs.edit()
-            .putString(KEY_SCREEN_TIME_DAY, today)
-            .putLong(KEY_SCREEN_TIME_USED_MS, used + durationMs)
-            .apply()
-    }
-
-    private fun todayKey(): String = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
+    fun getSessionScreenTimeLimitMs(context: Context): Long = getScreenTimeLimit(context) * 60_000L
 
     fun configureDeviceOwnerIfPresent(context: Context) {
         try {

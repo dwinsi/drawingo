@@ -6,7 +6,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
-import com.example.drawingo.model.CanvasPaperStyle
 import com.example.drawingo.model.DrawingTool
 import com.example.drawingo.model.DrawnStroke
 
@@ -19,19 +18,13 @@ object CanvasBitmapUtils {
     fun createBitmapFromStrokes(
         strokes: List<DrawnStroke>,
         width: Int = 800,
-        height: Int = 800,
-        paperStyle: CanvasPaperStyle = CanvasPaperStyle.PURE_WHITE
+        height: Int = 800
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
         // Background paper color
-        val bgColor = when (paperStyle) {
-            CanvasPaperStyle.PURE_WHITE -> 0xFFFFFFFF.toInt()
-            CanvasPaperStyle.BLUE_GRID -> 0xFFF0F8FF.toInt()
-            CanvasPaperStyle.COSMIC_NIGHT -> 0xFF121826.toInt()
-            CanvasPaperStyle.WARM_CREAM -> 0xFFFFFDF5.toInt()
-        }
+        val bgColor = 0xFFFFFFFF.toInt()
         canvas.drawColor(bgColor)
 
         if (strokes.isEmpty()) {

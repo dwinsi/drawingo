@@ -15,7 +15,6 @@ import com.example.drawingo.model.AnimatedDrawingEntity
 import com.example.drawingo.model.AnimationSceneResult
 import com.example.drawingo.model.AnimationSceneType
 import com.example.drawingo.model.CanvasMode
-import com.example.drawingo.model.CanvasPaperStyle
 import com.example.drawingo.model.CreatureCategory
 import com.example.drawingo.model.CreatureType
 import com.example.drawingo.model.DrawingTool
@@ -61,10 +60,6 @@ class DrawingViewModel : ViewModel() {
     private val _canvasMode = MutableStateFlow(CanvasMode.DRAWINGO)
     val canvasMode: StateFlow<CanvasMode> = _canvasMode.asStateFlow()
 
-    // Canvas Paper Style
-    private val _paperStyle = MutableStateFlow(CanvasPaperStyle.PURE_WHITE)
-    val paperStyle: StateFlow<CanvasPaperStyle> = _paperStyle.asStateFlow()
-
     // 2-Finger Pan and Zoom State
     private val _canvasScale = MutableStateFlow(1.0f)
     val canvasScale: StateFlow<Float> = _canvasScale.asStateFlow()
@@ -84,6 +79,9 @@ class DrawingViewModel : ViewModel() {
 
     private val _selectedStrokeWidth = MutableStateFlow(20f)
     val selectedStrokeWidth: StateFlow<Float> = _selectedStrokeWidth.asStateFlow()
+
+    private val _selectedEraserWidth = MutableStateFlow(32f)
+    val selectedEraserWidth: StateFlow<Float> = _selectedEraserWidth.asStateFlow()
 
     // Undo and Redo Stacks
     private val _undoStack = MutableStateFlow<List<List<DrawnStroke>>>(emptyList())
@@ -256,16 +254,6 @@ class DrawingViewModel : ViewModel() {
         _canvasMode.value = mode
     }
 
-    fun cyclePaperStyle() {
-        val styles = CanvasPaperStyle.values()
-        val nextIndex = (paperStyle.value.ordinal + 1) % styles.size
-        _paperStyle.value = styles[nextIndex]
-    }
-
-    fun setPaperStyle(style: CanvasPaperStyle) {
-        _paperStyle.value = style
-    }
-
     fun setTool(tool: DrawingTool) {
         _selectedTool.value = tool
     }
@@ -276,6 +264,10 @@ class DrawingViewModel : ViewModel() {
 
     fun setStrokeWidth(width: Float) {
         _selectedStrokeWidth.value = width
+    }
+
+    fun setEraserWidth(width: Float) {
+        _selectedEraserWidth.value = width
     }
 
     fun onPanAndZoom(zoomChange: Float, panChange: Offset) {
@@ -385,7 +377,7 @@ class DrawingViewModel : ViewModel() {
                 DrawingTool.PEN -> _selectedStrokeWidth.value
                 DrawingTool.HIGHLIGHTER -> _selectedStrokeWidth.value * 2.2f
                 DrawingTool.BRUSH -> _selectedStrokeWidth.value * 1.8f
-                DrawingTool.ERASER -> _selectedStrokeWidth.value * 2.8f
+                DrawingTool.ERASER -> _selectedEraserWidth.value
                 DrawingTool.LASSO -> 4f
             }
             val alpha = when (tool) {

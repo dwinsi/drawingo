@@ -25,49 +25,53 @@ enum class CanvasPaperStyle {
 }
 
 /**
- * Modernized Drawingo 4-tier palette grid & kid-friendly stroke size presets.
+ * Drawingo's four-row palette, arranged in hue families down each column.
  */
 object DrawingoPalette {
     val grid = listOf(
-        // Row 1: Primary Vivids
+        // Row 1: Main colors, always visible in the dock
         listOf(
-            Color(0xFF000000), // Pitch Black
-            Color(0xFFFF2A2A), // Radiant Red
-            Color(0xFFFF8000), // Vivid Orange
-            Color(0xFF10B981), // Emerald Green
-            Color(0xFF0066FF), // Electric Blue
-            Color(0xFF9333EA), // Royal Violet
-            Color(0xFF8B5CF6)  // Vivid Indigo
+            Color(0xFF000000), // Black
+            Color(0xFFFF2A2A), // Red
+            Color(0xFFFF8000), // Orange
+            Color(0xFFFFD600), // Yellow
+            Color(0xFF10B981), // Green
+            Color(0xFF0066FF), // Blue
+            Color(0xFF9333EA), // Purple
+            Color(0xFFFF007F)  // Pink
         ),
-        // Row 2: Deep Midnight
+        // Row 2: Deep shades, aligned by hue with row 1
         listOf(
-            Color(0xFFFFFFFF), // Pure White
+            Color(0xFF334155), // Charcoal
             Color(0xFF990000), // Deep Crimson
             Color(0xFFC2410C), // Deep Burnt Orange
-            Color(0xFF047857), // Forest Emerald
+            Color(0xFFF59E0B), // Amber
+            Color(0xFF047857), // Forest Green
             Color(0xFF1E3A8A), // Midnight Navy
             Color(0xFF581C87), // Deep Purple
-            Color(0xFF451A03)  // Dark Espresso
+            Color(0xFFF43F5E)  // Electric Rose
         ),
-        // Row 3: Cyber Neons
+        // Row 3: Bright accents, aligned by hue
         listOf(
             Color(0xFF64748B), // Slate Grey
-            Color(0xFFFF007F), // Hot Magenta
-            Color(0xFFFFD600), // Sunshine Gold
-            Color(0xFF39FF14), // Acid Lime
-            Color(0xFF00F0FF), // Cyber Aqua
-            Color(0xFFF43F5E), // Electric Rose
-            Color(0xFF00E5FF)  // Neon Cyan
+            Color(0xFFFB7185), // Coral
+            Color(0xFFF97316), // Tangerine
+            Color(0xFFFFD166), // Sunshine Gold
+            Color(0xFF65A30D), // Lime Green
+            Color(0xFF38BDF8), // Sky Blue
+            Color(0xFF7E22CE), // Plum
+            Color(0xFFD946EF)  // Fuchsia
         ),
-        // Row 4: Soft Pastels
+        // Row 4: Soft shades, aligned by hue
         listOf(
-            Color(0xFFF1F5F9), // Ghost White
+            Color(0xFFFFFFFF), // White
             Color(0xFFFFB3BA), // Blush Pink
             Color(0xFFFFDFBA), // Soft Peach
             Color(0xFFFFFFBA), // Lemon Pastel
             Color(0xFFBAFFC9), // Mint Green
             Color(0xFFBAE1FF), // Periwinkle
-            Color(0xFFE8DFF5)  // Soft Lavender
+            Color(0xFFE8DFF5), // Soft Lavender
+            Color(0xFFFBCFE8)  // Rose Pink
         )
     )
 

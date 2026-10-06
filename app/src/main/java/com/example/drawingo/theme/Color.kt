@@ -17,7 +17,7 @@ val BrightOrange = Color(0xFFFF9F1C)
 
 // Theme Surfaces ("Candy Cloud")
 val CloudWhite = Color(0xFFFFFFFF)
-val SoftSand = Color(0xFFF8F9FA)
+val SoftSand = Color(0xFFFFF8EE)
 val MilkyGlass = Color(0xE6FFFFFF)
 val DarkNavy = Color(0xFF2B2D42)
 
@@ -27,7 +27,6 @@ val CosmicSlate = Color(0xFF141722)
 val NeonRose = Color(0xFFFF007F)
 
 // Aliases for Material Theme
-val PrimaryKid = SkyBlue
+val PrimaryKid = Color(0xFF176B86)
 val SecondaryKid = BubblegumPink
 val TertiaryKid = SunnyYellow
-

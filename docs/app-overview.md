@@ -9,7 +9,7 @@ Drawingo is a child-focused Android drawing and coloring app. It combines a free
 - Choose Drawingo mode to make and edit freehand drawings.
 - Pick a pen, highlighter, brush, eraser, or wand tool.
 - Choose from the color palette and seven stroke-width presets.
-- Change the paper between white, blue grid, cosmic night, and warm cream.
+- Draw on a clean white page.
 - Pan and zoom the canvas with two fingers.
 - Undo and redo drawing strokes, or clear the current strokes and magic characters.
 
@@ -42,11 +42,11 @@ By default, scene selection uses curated on-device results and speech uses Andro
 - **Parent Settings gate:** a multiplication question must be answered to open settings.
 - **Cloud AI drawing analysis:** off by default; a parent can opt in or turn it off again.
 - **Backend URL:** parents can configure an HTTPS backend endpoint. If a custom endpoint is configured, the app only uses that host for backend requests.
-- **Daily screen-time limit:** configurable from 15 to 120 minutes (30 minutes by default). Foreground use is accumulated by local day; after the limit, the canvas is blocked until a parent changes the setting.
+- **Session screen-time limit:** configurable from 1 to 30 minutes (30 minutes by default). The timer applies to each foreground app session and starts fresh when the app is opened again, so a child can have multiple shorter sessions.
 - **Kiosk lock mode:** optionally uses Android lock task mode. Where device-owner policy permits kiosk mode, a four-finger hold for three seconds exits the lock.
 - **Idle clear:** after one minute without drawing activity, a wipe animation clears canvas content.
 
-The screen-time counter is local to the device and can be reset by clearing app data or changing the device clock. Kiosk enforcement depends on device configuration and owner privileges.
+The session timer is local to the current app foreground session; starting a new session begins a new allowance. Kiosk enforcement depends on device configuration and owner privileges.
 
 ## Privacy and storage summary
 

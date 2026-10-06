@@ -45,20 +45,13 @@ class MainActivity : ComponentActivity() {
     private val exitTouchCentroid = mutableStateOf<Offset?>(null)
     private val remainingScreenTimeMs = mutableLongStateOf(Long.MAX_VALUE)
     private var screenTimeSessionStartMs = 0L
-    private var screenTimePersistedThisSessionMs = 0L
 
     private val screenTimeTicker = object : Runnable {
         override fun run() {
             if (screenTimeSessionStartMs == 0L) return
             val elapsed = SystemClock.elapsedRealtime() - screenTimeSessionStartMs
-            val unpersisted = elapsed - screenTimePersistedThisSessionMs
-            if (unpersisted >= 60_000L) {
-                KioskManager.recordScreenTime(this@MainActivity, unpersisted)
-                screenTimePersistedThisSessionMs = elapsed
-            }
             remainingScreenTimeMs.longValue = (
-                KioskManager.getRemainingScreenTimeMs(this@MainActivity) -
-                    (elapsed - screenTimePersistedThisSessionMs)
+                KioskManager.getSessionScreenTimeLimitMs(this@MainActivity) - elapsed
                 ).coerceAtLeast(0L)
             exitCheckHandler.postDelayed(this, 1000L)
         }
@@ -98,7 +91,7 @@ class MainActivity : ComponentActivity() {
         soundManager = SoundManager(this)
         textToSpeechManager = TextToSpeechManager(this)
         naturalAudioPlayer = NaturalAudioPlayer(this)
-        remainingScreenTimeMs.longValue = KioskManager.getRemainingScreenTimeMs(this)
+        remainingScreenTimeMs.longValue = KioskManager.getSessionScreenTimeLimitMs(this)
 
         viewModel.soundManager = soundManager
         viewModel.textToSpeechManager = textToSpeechManager
@@ -117,7 +110,12 @@ class MainActivity : ComponentActivity() {
                     exitTouchCentroid = exitTouchCentroid.value,
                     remainingScreenTimeMs = remainingScreenTimeMs.longValue,
                     onScreenTimeLimitChanged = {
-                        remainingScreenTimeMs.longValue = KioskManager.getRemainingScreenTimeMs(this)
+                        val elapsed = if (screenTimeSessionStartMs == 0L) 0L else {
+                            SystemClock.elapsedRealtime() - screenTimeSessionStartMs
+                        }
+                        remainingScreenTimeMs.longValue = (
+                            KioskManager.getSessionScreenTimeLimitMs(this) - elapsed
+                        ).coerceAtLeast(0L)
                     },
                     onKioskToggled = { enabled ->
                         KioskManager.setKioskModeEnabled(this, enabled)
@@ -138,8 +136,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         screenTimeSessionStartMs = SystemClock.elapsedRealtime()
-        screenTimePersistedThisSessionMs = 0L
-        remainingScreenTimeMs.longValue = KioskManager.getRemainingScreenTimeMs(this)
+        remainingScreenTimeMs.longValue = KioskManager.getSessionScreenTimeLimitMs(this)
         exitCheckHandler.removeCallbacks(screenTimeTicker)
         exitCheckHandler.post(screenTimeTicker)
         if (KioskManager.isKioskModeEnabled(this)) {
@@ -152,11 +149,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         if (screenTimeSessionStartMs != 0L) {
-            val elapsed = SystemClock.elapsedRealtime() - screenTimeSessionStartMs
-            KioskManager.recordScreenTime(this, elapsed - screenTimePersistedThisSessionMs)
             screenTimeSessionStartMs = 0L
-            screenTimePersistedThisSessionMs = 0L
-            remainingScreenTimeMs.longValue = KioskManager.getRemainingScreenTimeMs(this)
+            remainingScreenTimeMs.longValue = KioskManager.getSessionScreenTimeLimitMs(this)
         }
         exitCheckHandler.removeCallbacks(screenTimeTicker)
         super.onPause()

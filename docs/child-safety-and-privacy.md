@@ -15,7 +15,7 @@ This document describes the current app behavior and the release work still need
 
 - A parent gate protects settings. The gate currently uses a randomly generated multiplication question. It is a child-resistant UI gate only; it is **not** a verifiable parental consent mechanism.
 - The cloud analysis switch is off unless a parent turns it on and saves settings.
-- The daily screen-time setting now tracks foreground use by local calendar day and blocks the canvas when the limit is reached. A parent can change the limit through the gate. This local control can be bypassed by changing device time or clearing app data, so it is not a managed-device enforcement guarantee.
+- The session screen-time setting allows 1–30 minutes per foreground app session and blocks the canvas when that session's limit is reached. Opening the app again starts a fresh session allowance. This local control is not a managed-device enforcement guarantee.
 - Optional kiosk mode uses Android lock task mode where device-owner policy permits it. Device-owner provisioning is a separate deployment step.
 - A custom backend URL must be HTTPS and cannot contain credentials, a path, query, or fragment. Cleartext traffic is disabled in the manifest.
 
