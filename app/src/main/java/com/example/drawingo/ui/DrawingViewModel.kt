@@ -7,10 +7,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.drawingo.ai.GeminiMagicManager
 import com.example.drawingo.animation.ParticleEngine
 import com.example.drawingo.audio.NaturalAudioPlayer
-import com.example.drawingo.audio.NaturalVoiceManager
 import com.example.drawingo.audio.SoundManager
 import com.example.drawingo.audio.TextToSpeechManager
 import com.example.drawingo.model.AnimatedDrawingEntity
@@ -592,7 +590,7 @@ class DrawingViewModel : ViewModel() {
     /**
      * Triggers Gemini AI Drawing-to-Animation recognition via ADC Backend Client with local fallback.
      */
-    fun triggerDrawingAnimation(context: Context, canvasBitmap: Bitmap, apiKey: String) {
+    fun triggerDrawingAnimation(context: Context, canvasBitmap: Bitmap, allowCloudAi: Boolean) {
         val strokes = _completedStrokes.value
         if (strokes.isEmpty()) return
 
@@ -600,12 +598,11 @@ class DrawingViewModel : ViewModel() {
             _isGeminiLoading.value = true
             soundManager?.playChimeTwinkle()
 
-            // 1. Try ADC Backend Client first
-            var sceneResult = AdcBackendClient.analyzeDrawing(canvasBitmap)
-
-            // 2. Fallback to Gemini AI direct API if ADC backend client is offline
-            if (sceneResult == null) {
-                sceneResult = GeminiMagicManager.analyzeDrawingForAnimation(canvasBitmap, apiKey)
+            // Child artwork stays on-device unless a parent explicitly opted into cloud analysis.
+            val sceneResult = if (allowCloudAi) {
+                AdcBackendClient.analyzeDrawing(canvasBitmap) ?: offlineAnimationScene()
+            } else {
+                offlineAnimationScene()
             }
 
             _isGeminiLoading.value = false
@@ -629,18 +626,12 @@ class DrawingViewModel : ViewModel() {
             _animatedEntity.value = AnimatedDrawingEntity(strokes = strokes, bounds = bounds)
 
             startAnimationLoop()
-            speakNaturalVoiceRhyme(context, sceneResult.rhymeText, apiKey)
+            speakNaturalVoiceRhyme(context, sceneResult.rhymeText, allowCloudAi)
         }
     }
 
-    private suspend fun speakNaturalVoiceRhyme(context: Context, text: String, apiKey: String) {
-        // 1. Try ADC Backend Client for speech synthesis
-        var naturalAudioFile = AdcBackendClient.synthesizeSpeech(context, text)
-
-        // 2. Fallback to NaturalVoiceManager / local cache
-        if (naturalAudioFile == null) {
-            naturalAudioFile = NaturalVoiceManager.fetchNaturalVoiceAudio(context, text, apiKey)
-        }
+    private suspend fun speakNaturalVoiceRhyme(context: Context, text: String, allowCloudAi: Boolean) {
+        val naturalAudioFile = if (allowCloudAi) AdcBackendClient.synthesizeSpeech(context, text) else null
 
         if (naturalAudioFile != null && naturalAudioFile.exists()) {
             textToSpeechManager?.stop()
@@ -714,17 +705,28 @@ class DrawingViewModel : ViewModel() {
         textToSpeechManager?.stop()
     }
 
-    fun replayGeminiSpeech(context: Context, apiKey: String) {
+    fun replayGeminiSpeech(context: Context, allowCloudAi: Boolean) {
         val text = _geminiRhymeText.value
         if (!text.isNullOrBlank()) {
             if (naturalAudioPlayer?.isPlaying() == false) {
                 naturalAudioPlayer?.replay()
             } else {
                 viewModelScope.launch {
-                    speakNaturalVoiceRhyme(context, text, apiKey)
+                    speakNaturalVoiceRhyme(context, text, allowCloudAi)
                 }
             }
         }
+    }
+
+    private fun offlineAnimationScene(): AnimationSceneResult {
+        val scenes = listOf(
+            AnimationSceneResult(AnimationSceneType.OCEAN_LEAP, "Little Fish", "Splish splash, little fish, swim around!\nShimmering bubbles dance without a sound!"),
+            AnimationSceneResult(AnimationSceneType.SKY_FLIGHT, "Little Bird", "Flap, flap, little bird, up in the sky!\nWave to the clouds as you flutter by!"),
+            AnimationSceneResult(AnimationSceneType.SPACE_LAUNCH, "Rocket", "Zoom, zoom, rocket, up to the stars!\nWave to the moon as you fly past Mars!"),
+            AnimationSceneResult(AnimationSceneType.LAND_SAFARI, "Happy Lion", "A happy lion dances around!\nMaking soft pawprints upon the ground!"),
+            AnimationSceneResult(AnimationSceneType.MAGIC_DANCE, "Magic Doodle", "Twirl and sparkle, colors so bright!\nYour lovely doodle is dancing tonight!")
+        )
+        return scenes[Random.nextInt(scenes.size)]
     }
 
     fun closeGeminiDialog() {

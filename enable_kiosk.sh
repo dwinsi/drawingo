@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# enable_kiosk.sh - Elevate Kautuk to Android Device Owner
+# enable_kiosk.sh - Elevate Drawingo to Android Device Owner
 #
-# Sets Kautuk as the Device Owner using Android Device Policy Manager (dpm).
-# This grants Kautuk the permission to use startLockTask() in true kiosk mode
+# Sets Drawingo as the Device Owner using Android Device Policy Manager (dpm).
+# This grants Drawingo the permission to use startLockTask() in true kiosk mode
 # without displaying system pinning confirmation dialogs or allowing home/recents.
 # ==============================================================================
 
 set -euo pipefail
 
-PACKAGE_NAME="com.example.kautuk"
-RECEIVER_NAME=".device.KautukDeviceAdminReceiver"
+PACKAGE_NAME="com.example.drawingo"
+RECEIVER_NAME=".device.DrawingoDeviceAdminReceiver"
 COMPONENT="${PACKAGE_NAME}/${RECEIVER_NAME}"
 
 echo "=========================================================="
-echo "          Kautuk Toddler Kiosk Setup Tool                "
+echo "          Drawingo Toddler Kiosk Setup Tool                "
 echo "=========================================================="
 
 # Check if ADB is available
@@ -45,7 +45,7 @@ if ! adb shell pm list packages | grep -q "${PACKAGE_NAME}"; then
     }
 fi
 
-echo "🚀 Elevating Kautuk to Device Owner via DPM..."
+echo "🚀 Elevating Drawingo to Device Owner via DPM..."
 echo "Executing: adb shell dpm set-device-owner ${COMPONENT}"
 echo "----------------------------------------------------------"
 
@@ -58,13 +58,13 @@ echo "${RESULT}"
 
 if [ $EXIT_CODE -eq 0 ] && [[ "${RESULT}" != *"Error"* && "${RESULT}" != *"IllegalStateException"* ]]; then
     echo "----------------------------------------------------------"
-    echo "✅ Success! Kautuk is now configured as the Device Owner."
+    echo "✅ Success! Drawingo is now configured as the Device Owner."
     echo "   startLockTask() will now lock into dedicated Kiosk Mode without popups."
     echo "   To exit kiosk mode in app: Press & hold with 4 fingers for 3 seconds."
 else
     echo "----------------------------------------------------------"
     if [[ "${RESULT}" == *"already has a device owner"* ]]; then
-        echo "ℹ️  Device already has an owner. If this is Kautuk, it is already active."
+        echo "ℹ️  Device already has an owner. If this is Drawingo, it is already active."
     elif [[ "${RESULT}" == *"Not allowed to set the device owner because there are already some accounts"* ]]; then
         echo "⚠️  Notice: Android prevents setting a Device Owner if user accounts (Google, etc.)"
         echo "   already exist on the device. To test on a personal device:"

@@ -19,12 +19,12 @@ object GooglyEyeRenderer {
 
     private val ScleraColor = Color(0xFFFDFDFD)
     private val ScleraShadowColor = Color(0x33000000)
-    private val BorderColor = Color(0xFF14151A)
-    private val PupilColor = Color(0xFF181920)
+    private val BorderColor = Color(0xFF374151)
+    private val PupilColor = Color(0xFF1F2937)
     private val SpecularHighlightColor = Color(0xFFFFFFFF)
     private val SecondaryHighlightColor = Color(0xAAFFFFFF)
-    private val CheekBlushColor = Color(0xE6FF6B8B)
-    private val TongueColor = Color(0xFFFF5252)
+    private val CheekBlushColor = Color(0xE6FF6B9E)
+    private val TongueColor = Color(0xFFFF6B9E)
 
     fun drawGooglyEyePair(
         drawScope: DrawScope,

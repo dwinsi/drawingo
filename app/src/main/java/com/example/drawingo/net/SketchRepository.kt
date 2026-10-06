@@ -3,6 +3,7 @@ package com.example.drawingo.net
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Log
 import com.example.drawingo.model.SketchCategory
 import com.example.drawingo.model.StockSketch
@@ -85,15 +86,20 @@ object SketchRepository {
         }
 
         // 4. Download from remote Cloud Storage URL
-        if (sketch.imageUrl.isNotBlank()) {
+        val imageUri = Uri.parse(sketch.imageUrl)
+        if (imageUri.scheme.equals("https", ignoreCase = true) &&
+            imageUri.host == "storage.googleapis.com") {
             try {
                 val url = URL(sketch.imageUrl)
                 val conn = url.openConnection() as HttpURLConnection
+                conn.instanceFollowRedirects = false
                 conn.connectTimeout = 10000
                 conn.readTimeout = 15000
                 if (conn.responseCode == HttpURLConnection.HTTP_OK) {
                     conn.inputStream.use { input ->
+                        if (conn.contentLengthLong > 8L * 1024L * 1024L) return@withContext null
                         val bytes = input.readBytes()
+                        if (bytes.size > 8 * 1024 * 1024) return@withContext null
                         // Save to disk cache
                         FileOutputStream(diskFile).use { it.write(bytes) }
                         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)

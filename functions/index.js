@@ -39,7 +39,7 @@ async function handleAnalyzeDrawing(req, res) {
       Respond in EXACTLY this format:
       SCENE: [OCEAN_LEAP or SKY_FLIGHT or SPACE_LAUNCH or LAND_SAFARI or MAGIC_DANCE]
       SUBJECT: [Short 1-3 word name, e.g., Dolphin, Bird, Rocket, Car, Lion, Flower, Doodle]
-      RHYME: [2 to 4 line super catchy, rhythmic nursery rhyme in English or Hindi/Hinglish with sound effects and emojis!]
+      RHYME: [2 to 4 line super catchy, rhythmic nursery rhyme in a mix of Hindi and English with sound effects and emojis!]
 
       SCENE GUIDELINES:
       - Use OCEAN_LEAP for dolphins, fish, sea turtles, octopuses, boats, water creatures.
@@ -52,7 +52,7 @@ async function handleAnalyzeDrawing(req, res) {
     const { responseText, modelName } = await generateGenAiContent(cleanBase64, mimeType, prompt);
 
     const parsed = parseGeminiResponse(responseText);
-    console.log(`✨ Drawing analyzed via Google Gen AI ADC (model: ${modelName}): ${parsed.subjectName} (${parsed.sceneType})`);
+    console.log(`Drawing analyzed via Google Gen AI ADC (model: ${modelName}).`);
     res.status(200).json(parsed);
   } catch (err) {
     console.error('Error in analyzeDrawing endpoint:', err);
@@ -111,11 +111,9 @@ async function handleSynthesizeSpeech(req, res) {
 
     const cleanText = text.replace(/[\uD83C-\uDBFF\uDC00-\uDFFF\u2600-\u27FF]/g, '').trim();
 
-    const isHindi = /[\u0900-\u097F]/.test(cleanText) ||
-      /chanda|titli|pyari|dost|machhli/i.test(cleanText);
-
-    const languageCode = isHindi ? 'hi-IN' : 'en-US';
-    const voiceName = isHindi ? 'hi-IN-Neural2-A' : 'en-US-Journey-F';
+    // Prefer Hindi/English bilingual voice by default
+    const languageCode = 'hi-IN';
+    const voiceName = 'hi-IN-Neural2-A';
 
     const ttsRequest = {
       input: { text: cleanText },
@@ -211,4 +209,3 @@ module.exports = {
   handleGetSketches,
   handleAddSketch
 };
-

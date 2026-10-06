@@ -11,54 +11,52 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme =
-    darkColorScheme(
-        primary = ElectricCyan,
-        onPrimary = Color(0xFF00363A),
-        primaryContainer = CyanDepth,
-        onPrimaryContainer = Color(0xFFB2F8FF),
-        secondary = CyberViolet,
-        onSecondary = Color(0xFF3B0764),
-        secondaryContainer = DeepViolet,
-        onSecondaryContainer = Color(0xFFF3E8FF),
-        tertiary = NeonRose,
-        onTertiary = Color(0xFF500022),
-        tertiaryContainer = RoseNight,
-        onTertiaryContainer = Color(0xFFFFD6E5),
-        background = ObsidianVoid,
-        onBackground = Color.White,
-        surface = CosmicSlate,
-        onSurface = Color.White,
-        surfaceVariant = GlassCardSurface,
-        onSurfaceVariant = Color(0xFFE2E8F0)
-    )
+private val KidLightColorScheme = lightColorScheme(
+    primary = PrimaryKid,
+    onPrimary = Color.White,
+    primaryContainer = SkyBlue,
+    onPrimaryContainer = DarkNavy,
+    secondary = SecondaryKid,
+    onSecondary = Color.White,
+    secondaryContainer = BubblegumPink,
+    onSecondaryContainer = DarkNavy,
+    tertiary = TertiaryKid,
+    onTertiary = DarkNavy,
+    tertiaryContainer = SunnyYellow,
+    onTertiaryContainer = DarkNavy,
+    background = SoftSand,
+    onBackground = DarkNavy,
+    surface = CloudWhite,
+    onSurface = DarkNavy,
+    surfaceVariant = MilkyGlass,
+    onSurfaceVariant = DarkNavy
+)
 
-private val LightColorScheme =
-    lightColorScheme(
-        primary = Color(0xFF006970),
-        onPrimary = Color.White,
-        primaryContainer = Color(0xFFA6F5FF),
-        onPrimaryContainer = Color(0xFF002022),
-        secondary = Color(0xFF7E22CE),
-        onSecondary = Color.White,
-        secondaryContainer = Color(0xFFF3E8FF),
-        onSecondaryContainer = Color(0xFF2E004E),
-        tertiary = Color(0xFFC2005A),
-        onTertiary = Color.White,
-        tertiaryContainer = Color(0xFFFFD9E2),
-        onTertiaryContainer = Color(0xFF3E001A),
-        background = Color(0xFFF8FAFC),
-        onBackground = Color(0xFF0F172A),
-        surface = Color.White,
-        onSurface = Color(0xFF0F172A),
-        surfaceVariant = Color(0xFFE2E8F0),
-        onSurfaceVariant = Color(0xFF334155)
-    )
+private val KidDarkColorScheme = darkColorScheme(
+    primary = PrimaryKid,
+    onPrimary = DarkNavy,
+    primaryContainer = SkyBlue.copy(alpha = 0.5f),
+    onPrimaryContainer = Color.White,
+    secondary = SecondaryKid,
+    onSecondary = DarkNavy,
+    secondaryContainer = BubblegumPink.copy(alpha = 0.5f),
+    onSecondaryContainer = Color.White,
+    tertiary = TertiaryKid,
+    onTertiary = DarkNavy,
+    tertiaryContainer = SunnyYellow.copy(alpha = 0.5f),
+    onTertiaryContainer = Color.White,
+    background = DarkNavy,
+    onBackground = CloudWhite,
+    surface = Color(0xFF1A1C29),
+    onSurface = CloudWhite,
+    surfaceVariant = Color(0xFF2A2D42),
+    onSurfaceVariant = CloudWhite
+)
 
 @Composable
 fun DrawingoTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false, // Disable dynamic color to enforce our kid-friendly vibrant theme
     content: @Composable () -> Unit,
 ) {
     val colorScheme =
@@ -67,8 +65,8 @@ fun DrawingoTheme(
                 val context = LocalContext.current
                 if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
             }
-            darkTheme -> DarkColorScheme
-            else -> LightColorScheme
+            darkTheme -> KidDarkColorScheme
+            else -> KidLightColorScheme
         }
 
     MaterialTheme(
@@ -76,13 +74,4 @@ fun DrawingoTheme(
         typography = com.example.drawingo.theme.Typography,
         content = content
     )
-}
-
-@Composable
-fun KautukTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit,
-) {
-    DrawingoTheme(darkTheme = darkTheme, dynamicColor = dynamicColor, content = content)
 }

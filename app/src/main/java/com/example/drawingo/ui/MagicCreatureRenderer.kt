@@ -26,10 +26,10 @@ import kotlin.math.sin
  */
 object MagicCreatureRenderer {
 
-    private val OutlineColor = Color(0xFF14151C)
+    private val OutlineColor = Color(0xFF374151)
     private val WhiteColor = Color(0xFFFFFFFF)
-    private val CheekColor = Color(0xE6FF6090)
-    private val NoseColor = Color(0xFF1E1B4B)
+    private val CheekColor = Color(0xE6FF6B9E)
+    private val NoseColor = Color(0xFF1F2937)
 
     fun drawCompanion(
         drawScope: DrawScope,

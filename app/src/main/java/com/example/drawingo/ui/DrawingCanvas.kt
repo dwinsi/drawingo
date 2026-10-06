@@ -85,7 +85,10 @@ import com.example.drawingo.model.StockSketch
 import com.example.drawingo.theme.ElectricCyan
 import com.example.drawingo.util.CanvasBitmapUtils
 
-val ToolDockBackgroundColor = Color(0xFF10131E)
+val ToolDockBackgroundColor = Color(0xFFFFFFFF)
+val DockIconBackground = Color(0xFFF3F4F6)
+val ActiveToolHighlight = Color(0xFFFF6B9E)
+val DockShadow = Color(0x33000000)
 
 enum class DrawerLevel {
     HIDDEN,
@@ -98,6 +101,8 @@ fun DrawingCanvas(
     viewModel: DrawingViewModel,
     exitHoldProgress: Float = 0f,
     exitTouchCentroid: Offset? = null,
+    remainingScreenTimeMs: Long = Long.MAX_VALUE,
+    onScreenTimeLimitChanged: () -> Unit = {},
     onKioskToggled: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -310,13 +315,11 @@ fun DrawingCanvas(
             onClear = { viewModel.clearCanvas() },
             onAnimateDrawingClick = {
                 val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(completedStrokes, paperStyle = paperStyle)
-                val apiKey = KioskManager.getGeminiApiKey(context)
-                viewModel.triggerDrawingAnimation(context, bitmap, apiKey)
+                viewModel.triggerDrawingAnimation(context, bitmap, KioskManager.isCloudAiAllowed(context))
             },
             onStopAnimationClick = { viewModel.stopAnimation() },
             onReplayVoiceClick = {
-                val apiKey = KioskManager.getGeminiApiKey(context)
-                viewModel.replayGeminiSpeech(context, apiKey)
+                viewModel.replayGeminiSpeech(context, KioskManager.isCloudAiAllowed(context))
             },
             onSettingsClick = { showParentSettings = true },
             selectedSketch = selectedSketch,
@@ -400,17 +403,22 @@ fun DrawingCanvas(
         if (showParentSettings) {
             ParentGateDialog(
                 isKioskEnabled = KioskManager.isKioskModeEnabled(context),
-                currentApiKey = KioskManager.getGeminiApiKey(context),
+                isCloudAiAllowed = KioskManager.isCloudAiAllowed(context),
                 currentBackendUrl = KioskManager.getBackendUrl(context),
+                currentScreenTimeLimit = KioskManager.getScreenTimeLimit(context),
                 onKioskToggled = { enabled ->
                     KioskManager.setKioskModeEnabled(context, enabled)
                     onKioskToggled(enabled)
                 },
-                onApiKeySaved = { key ->
-                    KioskManager.setGeminiApiKey(context, key)
+                onCloudAiAllowedChanged = { allowed ->
+                    KioskManager.setCloudAiAllowed(context, allowed)
                 },
                 onBackendUrlSaved = { url ->
                     KioskManager.setBackendUrl(context, url)
+                },
+                onScreenTimeSaved = { limitMins ->
+                    KioskManager.setScreenTimeLimit(context, limitMins)
+                    onScreenTimeLimitChanged()
                 },
                 onDismiss = { showParentSettings = false }
             )
@@ -462,6 +470,35 @@ fun DrawingCanvas(
                 onDismiss = { showSketchPicker = false }
             )
         }
+
+        if (remainingScreenTimeMs <= 0L) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xF51E2333))
+                    .clickable(onClick = {}),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(32.dp)
+                ) {
+                    Text("🌙", fontSize = 64.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Drawing time is finished for today!",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(onClick = { showParentSettings = true }) {
+                        Text("Ask a grown-up")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -492,157 +529,155 @@ fun TopKeepBar(
     ) {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
+                .border(2.dp, Color(0xFFE5E7EB), RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(24.dp))
                 .background(ToolDockBackgroundColor)
-                .padding(4.dp),
+                .padding(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(if (canvasMode == CanvasMode.DRAWINGO) ElectricCyan else Color.Transparent)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (canvasMode == CanvasMode.DRAWINGO) ActiveToolHighlight else Color.Transparent)
                     .clickable { onModeChanged(CanvasMode.DRAWINGO) }
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 Text(
                     text = "🎨 Drawingo",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (canvasMode == CanvasMode.DRAWINGO) Color(0xFF00363A) else Color.White
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if (canvasMode == CanvasMode.DRAWINGO) Color.White else Color(0xFF6B7280)
                 )
             }
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(if (canvasMode == CanvasMode.TODDLER_MAGIC) ElectricCyan else Color.Transparent)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (canvasMode == CanvasMode.TODDLER_MAGIC) ActiveToolHighlight else Color.Transparent)
                     .clickable { onModeChanged(CanvasMode.TODDLER_MAGIC) }
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 Text(
                     text = "✨ Magic",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (canvasMode == CanvasMode.TODDLER_MAGIC) Color(0xFF00363A) else Color.White
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if (canvasMode == CanvasMode.TODDLER_MAGIC) Color.White else Color(0xFF6B7280)
                 )
             }
         }
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier
+                .border(2.dp, Color(0xFFE5E7EB), RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(24.dp))
+                .background(ToolDockBackgroundColor)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
             if (isAnimationActive) {
                 // Replay Voice Button (🔊)
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF0066FF))
+                        .background(Color(0xFF4FC3F7)) // Sky Blue
                         .clickable { onReplayVoiceClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("🔊", fontSize = 20.sp)
+                    Text("🔊", fontSize = 24.sp)
                 }
 
                 // Stop Animation Button (✖)
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFFF1744))
+                        .background(Color(0xFFFF6B9E)) // Pink
                         .clickable { onStopAnimationClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("✖", fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("✖", fontSize = 24.sp, color = Color.White, fontWeight = FontWeight.ExtraBold)
                 }
             } else {
                 // Animate My Drawing Button (🪄✨)
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF9333EA))
+                        .background(Color(0xFFB39DDB)) // Soft Purple
                         .clickable { onAnimateDrawingClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("🪄", fontSize = 22.sp)
+                    Text("🪄", fontSize = 26.sp)
                 }
             }
 
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .background(ToolDockBackgroundColor)
+                    .background(DockIconBackground)
                     .clickable { onPaperStyleCycle() },
                 contentAlignment = Alignment.Center
             ) {
-                Text("📄", fontSize = 20.sp)
+                Text("📄", fontSize = 24.sp)
             }
 
             // Coloring Sketches Book Button
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .background(if (selectedSketch != null) Color(0xFF1E283E) else ToolDockBackgroundColor)
-                    .then(if (selectedSketch != null) Modifier.border(2.dp, ElectricCyan, CircleShape) else Modifier)
+                    .background(if (selectedSketch != null) Color(0xFFFFD166) else DockIconBackground) // Sunny Yellow
+                    .then(if (selectedSketch != null) Modifier.border(3.dp, Color(0xFFFF9F1C), CircleShape) else Modifier)
                     .clickable { onSketchesClick() },
                 contentAlignment = Alignment.Center
             ) {
-                Text(selectedSketch?.emoji ?: "🎨", fontSize = 20.sp)
+                Text(selectedSketch?.emoji ?: "🎨", fontSize = 24.sp)
             }
 
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .background(if (canUndo) ToolDockBackgroundColor else Color(0x3310131E))
+                    .background(if (canUndo) DockIconBackground else Color(0xFFF9FAFB))
                     .clickable(enabled = canUndo) { onUndo() },
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    painter = painterResource(id = if (canUndo) R.drawable.ic_undo else R.drawable.ic_undo_disabled),
-                    contentDescription = "Undo",
-                    modifier = Modifier.size(24.dp)
-                )
+                Text("⏪", fontSize = 20.sp, modifier = Modifier.padding(if (!canUndo) 2.dp else 0.dp))
             }
 
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .background(if (canRedo) ToolDockBackgroundColor else Color(0x3310131E))
+                    .background(if (canRedo) DockIconBackground else Color(0xFFF9FAFB))
                     .clickable(enabled = canRedo) { onRedo() },
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    painter = painterResource(id = if (canRedo) R.drawable.ic_redo else R.drawable.ic_redo_disabled),
-                    contentDescription = "Redo",
-                    modifier = Modifier.size(24.dp)
-                )
+                Text("⏩", fontSize = 20.sp, modifier = Modifier.padding(if (!canRedo) 2.dp else 0.dp))
             }
 
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .background(ToolDockBackgroundColor)
+                    .background(DockIconBackground)
                     .clickable { onClear() },
                 contentAlignment = Alignment.Center
             ) {
-                Text("🗑️", fontSize = 20.sp)
+                Text("🗑️", fontSize = 24.sp)
             }
 
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
-                    .background(ToolDockBackgroundColor)
+                    .background(DockIconBackground)
                     .clickable { onSettingsClick() },
                 contentAlignment = Alignment.Center
             ) {
-                Text("⚙️", fontSize = 20.sp)
+                Text("⚙️", fontSize = 24.sp)
             }
         }
     }
@@ -663,9 +698,11 @@ fun BottomDrawingoDock(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .border(3.dp, Color(0xFFE5E7EB), RoundedCornerShape(32.dp))
+            .clip(RoundedCornerShape(32.dp))
             .background(ToolDockBackgroundColor)
-            .padding(12.dp),
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AnimatedVisibility(
@@ -676,13 +713,16 @@ fun BottomDrawingoDock(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 12.dp),
+                    .padding(bottom = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 12.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(DockIconBackground)
+                        .padding(8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -690,30 +730,30 @@ fun BottomDrawingoDock(
                         val isSelected = selectedStrokeWidth == width
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
-                                .background(if (isSelected) ElectricCyan else Color(0xFF1E2333))
+                                .background(if (isSelected) ActiveToolHighlight else Color.Transparent)
                                 .clickable { onWidthSelected(width) },
                             contentAlignment = Alignment.Center
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size((width * 0.35f).coerceIn(6f, 24f).dp)
+                                    .size((width * 0.4f).coerceIn(8f, 32f).dp)
                                     .clip(CircleShape)
-                                    .background(if (isSelected) Color(0xFF00363A) else Color.White)
+                                    .background(if (isSelected) Color.White else Color(0xFF9CA3AF))
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 val visibleRows = if (drawerLevel == DrawerLevel.FULL) DrawingoPalette.grid else listOf(DrawingoPalette.grid[0])
                 for (row in visibleRows) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
+                            .padding(vertical = 6.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -721,12 +761,12 @@ fun BottomDrawingoDock(
                             val isSelected = selectedColor == color
                             Box(
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(color)
                                     .border(
-                                        width = if (isSelected) 3.dp else 0.dp,
-                                        color = if (isSelected) ElectricCyan else Color.Transparent,
+                                        width = if (isSelected) 4.dp else 0.dp,
+                                        color = if (isSelected) Color.White else Color.Transparent,
                                         shape = CircleShape
                                     )
                                     .clickable { onColorSelected(color) }
@@ -749,18 +789,38 @@ fun BottomDrawingoDock(
                 Pair(DrawingTool.ERASER, "🧹"),
                 Pair(DrawingTool.LASSO, "🪄")
             )
-
             for ((tool, icon) in tools) {
+                if (canvasMode == CanvasMode.TODDLER_MAGIC && tool == DrawingTool.LASSO) continue
+                
                 val isSelected = selectedTool == tool
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
-                        .background(if (isSelected) ElectricCyan else Color(0xFF1E2333))
+                        .background(if (isSelected) ActiveToolHighlight else DockIconBackground)
                         .clickable { onToolClick(tool) },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = icon, fontSize = 26.sp)
+                    Text(
+                        text = icon,
+                        fontSize = 32.sp
+                    )
+                }
+            }
+
+            if (canvasMode == CanvasMode.DRAWINGO) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(DockIconBackground)
+                        .clickable { onTogglePull() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (drawerLevel == DrawerLevel.FULL) "🔽" else "🔼",
+                        fontSize = 32.sp
+                    )
                 }
             }
         }

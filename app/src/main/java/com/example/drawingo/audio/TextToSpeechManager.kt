@@ -17,13 +17,16 @@ class TextToSpeechManager(context: Context) : TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            val resultEn = tts?.setLanguage(Locale.ENGLISH)
+            val localeHindi = Locale("hi", "IN")
+            val result = tts?.setLanguage(localeHindi)
+            
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.w(TAG, "Hindi language not supported, falling back to English")
+                tts?.setLanguage(Locale.ENGLISH)
+            }
             tts?.setPitch(1.15f) // Slightly higher energetic child-friendly pitch
             tts?.setSpeechRate(0.92f) // Slightly slower rate for clarity for toddlers
 
-            if (resultEn == TextToSpeech.LANG_MISSING_DATA || resultEn == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.w(TAG, "English language not supported or missing data in TTS")
-            }
             isInitialized = true
             Log.d(TAG, "TextToSpeech initialized successfully")
         } else {
@@ -37,20 +40,9 @@ class TextToSpeechManager(context: Context) : TextToSpeech.OnInitListener {
         try {
             tts?.stop()
 
-            // Check if text contains Devanagari or Hindi keywords
-            val containsHindi = text.any { it in '\u0900'..'\u097F' } ||
-                    text.contains("chanda", ignoreCase = true) ||
-                    text.contains("titli", ignoreCase = true) ||
-                    text.contains("pyari", ignoreCase = true) ||
-                    text.contains("dost", ignoreCase = true)
-
-            if (containsHindi) {
-                val localeHindi = Locale("hi", "IN")
-                val hiResult = tts?.setLanguage(localeHindi)
-                if (hiResult == TextToSpeech.LANG_MISSING_DATA || hiResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    tts?.language = Locale.ENGLISH
-                }
-            } else {
+            val localeHindi = Locale("hi", "IN")
+            val hiResult = tts?.setLanguage(localeHindi)
+            if (hiResult == TextToSpeech.LANG_MISSING_DATA || hiResult == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts?.language = Locale.ENGLISH
             }
 

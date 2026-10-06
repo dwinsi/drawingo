@@ -1,21 +1,12 @@
-import java.util.Properties
-
 plugins {
-  alias(libs.plugins.android.application)
-  alias(libs.plugins.compose.compiler)
-  alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.ksp)
 }
-
-val localProperties = Properties()
-val localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localProperties.load(localPropertiesFile.inputStream())
-}
-val geminiApiKey = localProperties.getProperty("gemini.api.key") ?: ""
 
 android {
     namespace = "com.example.drawingo"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.example.drawingo"
         minSdk = 24
@@ -23,8 +14,6 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
-        buildConfigField("String", "GCP_PROJECT_ID", "\"project-2154682a-9280-4a32-a72\"")
     }
 
     buildTypes {
@@ -89,11 +78,9 @@ dependencies {
   androidTestImplementation(libs.androidx.test.runner)
   androidTestImplementation(libs.androidx.test.espresso.core)
 
-  // Navigation
-  implementation(libs.androidx.navigation3.ui)
-  implementation(libs.androidx.navigation3.runtime)
-  implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+  // Room Database
+  implementation(libs.room.runtime)
+  implementation(libs.room.ktx)
+  ksp(libs.room.compiler)
 
-  // Google AI Generative AI SDK for Gemini
-  implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
 }

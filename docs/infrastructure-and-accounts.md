@@ -152,18 +152,14 @@ curl -s -X POST https://drawingo-backend-357002186662.us-central1.run.app/analyz
 
 The Android app communicates with the Cloud Run backend automatically via `AdcBackendClient.kt`:
 
-1. **Automatic Discovery & Priority Order:**
-   - When the user draws and taps the magic wand button, `DrawingViewModel` calls `AdcBackendClient.analyzeDrawing(canvasBitmap)`.
-   - `AdcBackendClient` checks the following endpoints in priority order:
-     1. **Custom URL** (if configured in Parent Gate settings)
-     2. **Cloud Run Production Endpoint:** `https://drawingo-backend-357002186662.us-central1.run.app`
-     3. **Local Dev Fallbacks:** `http://10.0.2.2:8080`, `http://127.0.0.1:8080`, `http://localhost:8080`
-   - If Cloud Run is unreachable or offline, the app automatically falls back to client-side direct Gemini API (`GeminiMagicManager`) and offline text-to-speech.
+1. **Parent-Controlled Cloud Processing:**
+   - Cloud drawing analysis is disabled until a parent enables it in Parent Settings. The app then tries a parent-configured HTTPS backend URL followed by the Cloud Run production endpoint.
+   - If cloud analysis is disabled or unavailable, the app uses a curated on-device animation and Android text-to-speech. There is no direct Gemini SDK or API key in the Android app.
+   - When cloud analysis is enabled, the drawing is sent to the backend and forwarded to Gemini. Generated rhyme text may be sent to the backend for Cloud Text-to-Speech.
 
 2. **Network Security & Timeouts:**
-   - Requests are sent over secure HTTPS (`android.permission.INTERNET`).
+   - Backend requests are sent over HTTPS (`android.permission.INTERNET`); manifest cleartext traffic is disabled. Parent-configured backend URLs are validated as HTTPS.
    - Timeouts are set to **10s connect / 15s read** to gracefully handle serverless container cold starts and multimodal AI inference.
 
 3. **Parent Gate Override:**
    - Parents can open the Parent Gate settings in the app to inspect or override the backend URL if testing a local dev environment.
-

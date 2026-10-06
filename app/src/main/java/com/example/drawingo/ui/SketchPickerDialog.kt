@@ -83,9 +83,10 @@ fun SketchPickerDialog(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
                 .fillMaxHeight(0.90f)
-                .clip(RoundedCornerShape(28.dp)),
-            color = Color(0xFF131722),
-            tonalElevation = 8.dp
+                .clip(RoundedCornerShape(32.dp))
+                .border(4.dp, Color(0xFFE5E7EB), RoundedCornerShape(32.dp)),
+            color = Color(0xFFF9FAFB),
+            tonalElevation = 16.dp
         ) {
             Column(
                 modifier = Modifier
@@ -100,19 +101,20 @@ fun SketchPickerDialog(
                 ) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("🎨", fontSize = 28.sp)
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("🎨", fontSize = 32.sp)
+                            Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "Coloring Sketches",
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                text = "Coloring Pages",
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF1F2937)
                             )
                         }
                         Text(
                             text = "Tap a sketch to load outline and color inside!",
-                            fontSize = 13.sp,
-                            color = Color(0xFF9E9E9E)
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF6B7280)
                         )
                     }
 
@@ -120,96 +122,97 @@ fun SketchPickerDialog(
                         // Refresh / Sync from Cloud button
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF222838))
+                                .background(Color(0xFFE5E7EB))
                                 .clickable { onRefresh() },
                             contentAlignment = Alignment.Center
                         ) {
                             if (isLoading) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    color = ElectricCyan,
-                                    strokeWidth = 2.5.dp
+                                    modifier = Modifier.size(24.dp),
+                                    color = Color(0xFF4FC3F7),
+                                    strokeWidth = 3.dp
                                 )
                             } else {
-                                Text("☁️", fontSize = 20.sp)
+                                Text("☁️", fontSize = 24.sp)
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
 
                         // Close Button
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFFF3B30).copy(alpha = 0.2f))
+                                .background(Color(0xFFFF6B9E))
                                 .clickable { onDismiss() },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("✖", color = Color(0xFFFF5252), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text("✖", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 // Active Sketch Banner (if any is active)
                 if (selectedSketch != null) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF1E283E))
-                            .border(1.dp, ElectricCyan.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color(0xFFFFD166).copy(alpha = 0.2f))
+                            .border(2.dp, Color(0xFFFF9F1C), RoundedCornerShape(20.dp))
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(selectedSketch.emoji, fontSize = 22.sp)
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(selectedSketch.emoji, fontSize = 28.sp)
+                            Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
                                     text = "Active: ${selectedSketch.title}",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = ElectricCyan
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF1F2937)
                                 )
                                 Text(
                                     text = "Ready to color with crayons & brushes",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFFB0BEC5)
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF6B7280)
                                 )
                             }
                         }
 
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFFFF5252).copy(alpha = 0.25f))
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFFFF6B9E))
                                 .clickable {
                                     onClearTemplate()
                                     onDismiss()
                                 }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
                             Text(
-                                text = "Clear Outline 📄",
-                                color = Color(0xFFFF8A80),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
+                                text = "Clear 📄",
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
 
                 // Category Chips Selector
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     val categories = listOf(
                         SketchCategory.ALL,
@@ -223,22 +226,22 @@ fun SketchPickerDialog(
                         val count = if (cat == SketchCategory.ALL) sketches.size else sketches.count { it.category == cat }
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(if (isSelected) ElectricCyan else Color(0xFF1E2333))
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (isSelected) Color(0xFF4FC3F7) else Color(0xFFE5E7EB))
                                 .clickable { selectedCategory = cat }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
                         ) {
                             Text(
                                 text = "${cat.emoji} ${cat.displayName} ($count)",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) Color(0xFF00363A) else Color.White
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (isSelected) Color.White else Color(0xFF4B5563)
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 // Sketches Grid
                 if (filteredSketches.isEmpty()) {
@@ -249,12 +252,13 @@ fun SketchPickerDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         if (isLoading) {
-                            CircularProgressIndicator(color = ElectricCyan)
+                            CircularProgressIndicator(color = Color(0xFF4FC3F7))
                         } else {
                             Text(
                                 text = "No sketches found. Tap ☁️ to sync from Cloud!",
-                                color = Color.Gray,
-                                fontSize = 14.sp
+                                color = Color(0xFF9CA3AF),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
@@ -302,19 +306,19 @@ fun SketchCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(24.dp))
             .clickable { onClick() }
             .then(
-                if (isCurrent) Modifier.border(2.5.dp, ElectricCyan, RoundedCornerShape(18.dp))
-                else Modifier.border(1.dp, Color(0xFF2B3349), RoundedCornerShape(18.dp))
+                if (isCurrent) Modifier.border(4.dp, Color(0xFF4FC3F7), RoundedCornerShape(24.dp))
+                else Modifier.border(2.dp, Color(0xFFE5E7EB), RoundedCornerShape(24.dp))
             ),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1B2030)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
+                .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Outline Thumbnail
@@ -322,9 +326,9 @@ fun SketchCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1.1f)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color.White)
-                    .padding(8.dp),
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFFF9FAFB))
+                    .padding(12.dp),
                 contentAlignment = Alignment.Center
             ) {
                 if (previewBitmap != null) {
@@ -334,7 +338,7 @@ fun SketchCard(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Text(sketch.emoji, fontSize = 42.sp)
+                    Text(sketch.emoji, fontSize = 48.sp)
                 }
 
                 if (isCurrent) {
@@ -342,32 +346,33 @@ fun SketchCard(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .clip(CircleShape)
-                            .background(ElectricCyan)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .background(Color(0xFF4FC3F7))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("Active 🖍️", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00363A))
+                        Text("Active 🖍️", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
                 text = "${sketch.emoji} ${sketch.title}",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF1F2937),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = sketch.category.displayName,
-                fontSize = 11.sp,
-                color = Color(0xFF80D8FF),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF6B7280),
                 textAlign = TextAlign.Center
             )
         }

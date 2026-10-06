@@ -13,6 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -42,6 +43,26 @@ class MainActivity : ComponentActivity() {
     // Hidden Exit Mechanism State
     private val exitHoldProgress = mutableFloatStateOf(0f)
     private val exitTouchCentroid = mutableStateOf<Offset?>(null)
+    private val remainingScreenTimeMs = mutableLongStateOf(Long.MAX_VALUE)
+    private var screenTimeSessionStartMs = 0L
+    private var screenTimePersistedThisSessionMs = 0L
+
+    private val screenTimeTicker = object : Runnable {
+        override fun run() {
+            if (screenTimeSessionStartMs == 0L) return
+            val elapsed = SystemClock.elapsedRealtime() - screenTimeSessionStartMs
+            val unpersisted = elapsed - screenTimePersistedThisSessionMs
+            if (unpersisted >= 60_000L) {
+                KioskManager.recordScreenTime(this@MainActivity, unpersisted)
+                screenTimePersistedThisSessionMs = elapsed
+            }
+            remainingScreenTimeMs.longValue = (
+                KioskManager.getRemainingScreenTimeMs(this@MainActivity) -
+                    (elapsed - screenTimePersistedThisSessionMs)
+                ).coerceAtLeast(0L)
+            exitCheckHandler.postDelayed(this, 1000L)
+        }
+    }
 
     private var fourFingerStartTime: Long = 0L
     private var isTrackingFourFingers: Boolean = false
@@ -71,11 +92,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        KioskManager.removeLegacyClientApiKey(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         soundManager = SoundManager(this)
         textToSpeechManager = TextToSpeechManager(this)
         naturalAudioPlayer = NaturalAudioPlayer(this)
+        remainingScreenTimeMs.longValue = KioskManager.getRemainingScreenTimeMs(this)
 
         viewModel.soundManager = soundManager
         viewModel.textToSpeechManager = textToSpeechManager
@@ -92,6 +115,10 @@ class MainActivity : ComponentActivity() {
                     viewModel = viewModel,
                     exitHoldProgress = exitHoldProgress.floatValue,
                     exitTouchCentroid = exitTouchCentroid.value,
+                    remainingScreenTimeMs = remainingScreenTimeMs.longValue,
+                    onScreenTimeLimitChanged = {
+                        remainingScreenTimeMs.longValue = KioskManager.getRemainingScreenTimeMs(this)
+                    },
                     onKioskToggled = { enabled ->
                         KioskManager.setKioskModeEnabled(this, enabled)
                         if (enabled) {
@@ -110,12 +137,29 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        screenTimeSessionStartMs = SystemClock.elapsedRealtime()
+        screenTimePersistedThisSessionMs = 0L
+        remainingScreenTimeMs.longValue = KioskManager.getRemainingScreenTimeMs(this)
+        exitCheckHandler.removeCallbacks(screenTimeTicker)
+        exitCheckHandler.post(screenTimeTicker)
         if (KioskManager.isKioskModeEnabled(this)) {
             hideSystemUI()
             KioskManager.applyKioskState(this)
         } else {
             showSystemUI()
         }
+    }
+
+    override fun onPause() {
+        if (screenTimeSessionStartMs != 0L) {
+            val elapsed = SystemClock.elapsedRealtime() - screenTimeSessionStartMs
+            KioskManager.recordScreenTime(this, elapsed - screenTimePersistedThisSessionMs)
+            screenTimeSessionStartMs = 0L
+            screenTimePersistedThisSessionMs = 0L
+            remainingScreenTimeMs.longValue = KioskManager.getRemainingScreenTimeMs(this)
+        }
+        exitCheckHandler.removeCallbacks(screenTimeTicker)
+        super.onPause()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

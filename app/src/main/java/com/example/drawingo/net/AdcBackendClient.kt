@@ -2,6 +2,7 @@ package com.example.drawingo.net
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import android.util.Base64
 import android.util.Log
 import com.example.drawingo.audio.AudioCacheManager
@@ -29,14 +30,19 @@ object AdcBackendClient {
 
     private fun getCandidateUrls(): List<String> {
         val list = mutableListOf<String>()
-        if (customBackendUrl.isNotBlank()) {
+        if (isSecureBackendUrl(customBackendUrl)) {
             list.add(customBackendUrl.trimEnd('/'))
         }
         list.add(CLOUD_RUN_URL)
-        list.add("http://10.0.2.2:8080")
-        list.add("http://127.0.0.1:8080")
-        list.add("http://localhost:8080")
         return list.distinct()
+    }
+
+    fun isSecureBackendUrl(value: String): Boolean {
+        val uri = Uri.parse(value)
+        return uri.scheme.equals("https", ignoreCase = true) &&
+            !uri.host.isNullOrBlank() && uri.userInfo == null &&
+            uri.fragment == null && uri.query == null &&
+            (uri.path.isNullOrEmpty() || uri.path == "/")
     }
 
     suspend fun analyzeDrawing(bitmap: Bitmap): AnimationSceneResult? = withContext(Dispatchers.IO) {
@@ -53,6 +59,7 @@ object AdcBackendClient {
             try {
                 val url = URL("$baseUrl/analyzeDrawing")
                 val connection = url.openConnection() as HttpURLConnection
+                connection.instanceFollowRedirects = false
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 connection.doOutput = true
@@ -80,7 +87,6 @@ object AdcBackendClient {
                     val subjectName = json.optString("subjectName", "Magic Drawing")
                     val rhymeText = json.optString("rhymeText", "")
 
-                    Log.i(TAG, "Successfully connected to ADC backend at $baseUrl! Subject: $subjectName")
                     return@withContext AnimationSceneResult(
                         sceneType = sceneType,
                         subjectName = subjectName,
@@ -105,6 +111,7 @@ object AdcBackendClient {
             try {
                 val url = URL("$baseUrl/synthesizeSpeech")
                 val connection = url.openConnection() as HttpURLConnection
+                connection.instanceFollowRedirects = false
                 connection.requestMethod = "POST"
                 connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 connection.doOutput = true
@@ -147,6 +154,7 @@ object AdcBackendClient {
             try {
                 val url = URL("$baseUrl/sketches$query")
                 val connection = url.openConnection() as HttpURLConnection
+                connection.instanceFollowRedirects = false
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 8000
                 connection.readTimeout = 10000
@@ -195,4 +203,3 @@ object AdcBackendClient {
         return@withContext null
     }
 }
-
