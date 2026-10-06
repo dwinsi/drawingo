@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="48dp"
+    android:viewportWidth="160"
+    android:viewportHeight="48">
+
+    <!-- Rainbow Magic Paint Arc Behind Logo -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF00F0FF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M12,36 C18,12 38,8 58,18" />
+
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF39FF14"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M16,40 C22,16 42,12 62,22" />
+
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFF007F"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M20,44 C26,20 46,16 66,26" />
+
+    <!-- Magic Brush Wand Base -->
+    <path
+        android:fillColor="#FF292F42"
+        android:strokeColor="#FF00F0FF"
+        android:strokeWidth="1.5"
+        android:pathData="M32,28 L14,40 C12,41.5 10,41.5 8.5,40 C7,38.5 7,36.5 8.5,35 L26.5,17 Z" />
+
+    <path
+        android:fillColor="#FF39FF14"
+        android:pathData="M30,15 L36,21 L32,25 L26,19 Z" />
+
+    <!-- Sparkle Stars -->
+    <path
+        android:fillColor="#FFFFD600"
+        android:pathData="M44,10 L45.2,13 L48,14.2 L45.2,15.4 L44,18.2 L42.8,15.4 L40,14.2 L42.8,13 Z" />
+
+    <path
+        android:fillColor="#FF00F0FF"
+        android:pathData="M56,22 L56.8,24 L59,24.8 L56.8,25.6 L56,27.8 L55.2,25.6 L53,24.8 L55.2,24 Z" />
+</vector>

@@ -1,0 +1,352 @@
+package com.example.drawingo.animation
+
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
+import com.example.drawingo.model.AnimatedDrawingEntity
+import com.example.drawingo.model.AnimationSceneType
+import com.example.drawingo.model.Particle
+import com.example.drawingo.model.ParticleType
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+
+/**
+ * Pure Compose Canvas Animation Renderer for Drawingo.
+ * Animates the child's actual drawn artwork across 5 dynamic interactive environments:
+ * Ocean Leap, Sky Flight, Space Launch, Land Safari, and Magic Dance.
+ */
+object CanvasAnimationRenderer {
+
+    private val OceanColorTop = Color(0xFF00E5FF)
+    private val OceanColorDeep = Color(0xFF00363A)
+    private val WaveColorFront = Color(0xFF00F0FF)
+    private val WaveColorBack = Color(0x9900838F)
+
+    private val SkyColorTop = Color(0xFF80D8FF)
+    private val SkyColorBottom = Color(0xFFE0F7FA)
+    private val CloudColor = Color(0xF2FFFFFF)
+
+    private val SpaceColorTop = Color(0xFF0A0C18)
+    private val SpaceColorBottom = Color(0xFF1A1C38)
+
+    private val HillColorBack = Color(0xFF4CAF50)
+    private val HillColorFront = Color(0xFF81C784)
+
+    fun renderScene(
+        drawScope: DrawScope,
+        sceneType: AnimationSceneType,
+        entity: AnimatedDrawingEntity?,
+        particles: List<Particle>,
+        progress: Float, // 0.0f to 1.0f
+        currentTimeMs: Long
+    ) {
+        val width = drawScope.size.width
+        val height = drawScope.size.height
+
+        // 1. Render animated environment background
+        when (sceneType) {
+            AnimationSceneType.OCEAN_LEAP -> drawOceanBackground(drawScope, width, height, currentTimeMs)
+            AnimationSceneType.SKY_FLIGHT -> drawSkyBackground(drawScope, width, height, currentTimeMs)
+            AnimationSceneType.SPACE_LAUNCH -> drawSpaceBackground(drawScope, width, height, currentTimeMs)
+            AnimationSceneType.LAND_SAFARI -> drawLandBackground(drawScope, width, height)
+            AnimationSceneType.MAGIC_DANCE -> drawMagicBackground(drawScope, width, height, currentTimeMs)
+        }
+
+        // 2. Render particle physics
+        drawParticles(drawScope, particles)
+
+        // 3. Render animated drawn artwork
+        if (entity != null && entity.strokes.isNotEmpty()) {
+            drawAnimatedArtwork(drawScope, entity, sceneType, progress, width, height, currentTimeMs)
+        }
+    }
+
+    // ==========================================
+    // BACKGROUND SCENE RENDERERS
+    // ==========================================
+
+    private fun drawOceanBackground(drawScope: DrawScope, w: Float, h: Float, timeMs: Long) {
+        val oceanGrad = Brush.verticalGradient(
+            colors = listOf(Color(0xFFE0F7FA), OceanColorTop, OceanColorDeep),
+            startY = 0f,
+            endY = h
+        )
+        drawScope.drawRect(brush = oceanGrad, size = Size(w, h))
+
+        val waterLine = h * 0.65f
+
+        // Back Wave
+        val backWavePath = Path().apply {
+            moveTo(0f, waterLine)
+            var x = 0f
+            while (x <= w + 20f) {
+                val y = waterLine + sin((x * 0.012f) + timeMs * 0.003f).toFloat() * 25f
+                lineTo(x, y)
+                x += 20f
+            }
+            lineTo(w, h)
+            lineTo(0f, h)
+            close()
+        }
+        drawScope.drawPath(path = backWavePath, color = WaveColorBack)
+
+        // Front Wave
+        val frontWavePath = Path().apply {
+            moveTo(0f, waterLine + 15f)
+            var x = 0f
+            while (x <= w + 20f) {
+                val y = waterLine + 15f + sin((x * 0.018f) - timeMs * 0.004f).toFloat() * 30f
+                lineTo(x, y)
+                x += 20f
+            }
+            lineTo(w, h)
+            lineTo(0f, h)
+            close()
+        }
+        drawScope.drawPath(path = frontWavePath, color = WaveColorFront.copy(alpha = 0.85f))
+    }
+
+    private fun drawSkyBackground(drawScope: DrawScope, w: Float, h: Float, timeMs: Long) {
+        val skyGrad = Brush.verticalGradient(
+            colors = listOf(SkyColorTop, SkyColorBottom),
+            startY = 0f,
+            endY = h
+        )
+        drawScope.drawRect(brush = skyGrad, size = Size(w, h))
+
+        // Rainbow Arc
+        drawScope.drawArc(
+            brush = Brush.sweepGradient(
+                colors = listOf(Color(0xFFFF007F), Color(0xFFFFD600), Color(0xFF39FF14), Color(0xFF00F0FF), Color(0xFFB026FF))
+            ),
+            startAngle = 180f,
+            sweepAngle = 180f,
+            useCenter = false,
+            topLeft = Offset(w * 0.1f, h * 0.2f),
+            size = Size(w * 0.8f, h * 0.8f),
+            style = Stroke(width = 24f)
+        )
+
+        // Drifting Fluffy Clouds
+        val cloudOffset1 = (timeMs * 0.03f) % (w + 200f) - 100f
+        drawCloud(drawScope, Offset(cloudOffset1, h * 0.25f), 70f)
+        val cloudOffset2 = ((timeMs * 0.02f) + w * 0.5f) % (w + 200f) - 100f
+        drawCloud(drawScope, Offset(cloudOffset2, h * 0.15f), 90f)
+    }
+
+    private fun drawSpaceBackground(drawScope: DrawScope, w: Float, h: Float, timeMs: Long) {
+        val spaceGrad = Brush.verticalGradient(
+            colors = listOf(SpaceColorTop, SpaceColorBottom),
+            startY = 0f,
+            endY = h
+        )
+        drawScope.drawRect(brush = spaceGrad, size = Size(w, h))
+
+        // Glowing Moon
+        drawScope.drawCircle(color = Color(0xFFFFF9C4), radius = 60f, center = Offset(w * 0.82f, h * 0.2f))
+        drawScope.drawCircle(color = Color(0x44FFF9C4), radius = 80f, center = Offset(w * 0.82f, h * 0.2f))
+
+        // Twinkling stars
+        val starCount = 20
+        for (i in 0 until starCount) {
+            val sx = (i * 137.5f) % w
+            val sy = (i * 97.3f) % (h * 0.7f)
+            val alpha = (sin(timeMs * 0.005f + i).toFloat() * 0.4f + 0.6f).coerceIn(0.2f, 1f)
+            drawScope.drawCircle(color = Color.White.copy(alpha = alpha), radius = (i % 3 + 2).toFloat(), center = Offset(sx, sy))
+        }
+    }
+
+    private fun drawLandBackground(drawScope: DrawScope, w: Float, h: Float) {
+        val skyGrad = Brush.verticalGradient(
+            colors = listOf(Color(0xFFB2EBF2), Color(0xFFE8F5E9)),
+            startY = 0f,
+            endY = h
+        )
+        drawScope.drawRect(brush = skyGrad, size = Size(w, h))
+
+        // Back Hill
+        val hillBack = Path().apply {
+            moveTo(-50f, h * 0.7f)
+            quadraticTo(w * 0.3f, h * 0.5f, w * 0.7f, h * 0.65f)
+            quadraticTo(w * 0.9f, h * 0.7f, w + 50f, h * 0.6f)
+            lineTo(w + 50f, h)
+            lineTo(-50f, h)
+            close()
+        }
+        drawScope.drawPath(path = hillBack, color = HillColorBack)
+
+        // Front Hill
+        val hillFront = Path().apply {
+            moveTo(-50f, h * 0.75f)
+            quadraticTo(w * 0.5f, h * 0.6f, w + 50f, h * 0.72f)
+            lineTo(w + 50f, h)
+            lineTo(-50f, h)
+            close()
+        }
+        drawScope.drawPath(path = hillFront, color = HillColorFront)
+    }
+
+    private fun drawMagicBackground(drawScope: DrawScope, w: Float, h: Float, timeMs: Long) {
+        val magicGrad = Brush.radialGradient(
+            colors = listOf(Color(0xFF2E1065), Color(0xFF0F0728), Color(0xFF0A0C10)),
+            center = Offset(w / 2f, h / 2f),
+            radius = w * 0.8f
+        )
+        drawScope.drawRect(brush = magicGrad, size = Size(w, h))
+
+        val ringPulse = (sin(timeMs * 0.004f).toFloat() * 30f + 120f)
+        drawScope.drawCircle(
+            color = Color(0x3300F0FF),
+            radius = ringPulse,
+            center = Offset(w / 2f, h / 2f),
+            style = Stroke(width = 8f)
+        )
+    }
+
+    private fun drawCloud(drawScope: DrawScope, center: Offset, size: Float) {
+        drawScope.drawCircle(color = CloudColor, radius = size * 0.5f, center = center)
+        drawScope.drawCircle(color = CloudColor, radius = size * 0.4f, center = Offset(center.x - size * 0.4f, center.y + size * 0.1f))
+        drawScope.drawCircle(color = CloudColor, radius = size * 0.4f, center = Offset(center.x + size * 0.4f, center.y + size * 0.1f))
+        drawScope.drawRoundRect(
+            color = CloudColor,
+            topLeft = Offset(center.x - size * 0.6f, center.y),
+            size = Size(size * 1.2f, size * 0.4f),
+            cornerRadius = CornerRadius(size * 0.2f)
+        )
+    }
+
+    // ==========================================
+    // DRAWN ARTWORK TRAJECTORY ANIMATION
+    // ==========================================
+
+    private fun drawAnimatedArtwork(
+        drawScope: DrawScope,
+        entity: AnimatedDrawingEntity,
+        sceneType: AnimationSceneType,
+        progress: Float,
+        w: Float,
+        h: Float,
+        timeMs: Long
+    ) {
+        val bounds = entity.bounds
+        val drawnWidth = bounds.width.coerceAtLeast(40f)
+        val drawnHeight = bounds.height.coerceAtLeast(40f)
+        val drawnCenterX = bounds.center.x
+        val drawnCenterY = bounds.center.y
+
+        val targetDim = (minOf(w, h) * 0.35f).coerceAtLeast(120f)
+        val baseScale = targetDim / maxOf(drawnWidth, drawnHeight)
+
+        val posX: Float
+        val posY: Float
+        val rotAngle: Float
+        var scaleX = baseScale
+        var scaleY = baseScale
+
+        when (sceneType) {
+            AnimationSceneType.OCEAN_LEAP -> {
+                val waterY = h * 0.65f
+                val startX = w * 0.12f
+                val endX = w * 0.88f
+                val jumpHeight = h * 0.38f
+
+                val p = progress.coerceIn(0f, 1f)
+                posX = startX + p * (endX - startX)
+                posY = waterY - sin(p * PI).toFloat() * jumpHeight
+
+                val dx = endX - startX
+                val dy = -cos(p * PI).toFloat() * jumpHeight * PI.toFloat()
+                rotAngle = (atan2(dy, dx) * 180f / PI.toFloat()).coerceIn(-65f, 65f)
+            }
+            AnimationSceneType.SKY_FLIGHT -> {
+                val p = progress.coerceIn(0f, 1f)
+                posX = -drawnWidth + p * (w + drawnWidth * 2f)
+                posY = h * 0.35f + sin(p * 4 * PI).toFloat() * h * 0.12f
+                rotAngle = sin(p * 4 * PI).toFloat() * 15f
+            }
+            AnimationSceneType.SPACE_LAUNCH -> {
+                val p = progress.coerceIn(0f, 1f)
+                posX = w * 0.15f + p * (w * 0.75f)
+                posY = h * 0.80f - p * (h * 0.65f)
+                rotAngle = -35f
+            }
+            AnimationSceneType.LAND_SAFARI -> {
+                val p = progress.coerceIn(0f, 1f)
+                posX = -drawnWidth + p * (w + drawnWidth * 2f)
+                val bounceY = kotlin.math.abs(sin(p * 8 * PI).toFloat()) * 35f
+                posY = h * 0.72f - bounceY
+
+                val squash = sin(p * 8 * PI).toFloat() * 0.12f
+                scaleX = baseScale * (1f + squash)
+                scaleY = baseScale * (1f - squash)
+                rotAngle = 0f
+            }
+            AnimationSceneType.MAGIC_DANCE -> {
+                posX = w * 0.5f + cos(progress * 2 * PI).toFloat() * w * 0.25f
+                posY = h * 0.5f + sin(progress * 2 * PI).toFloat() * h * 0.18f
+                rotAngle = sin(timeMs * 0.005f).toFloat() * 20f
+            }
+        }
+
+        drawScope.withTransform({
+            translate(posX, posY)
+            rotate(rotAngle, pivot = Offset.Zero)
+            scale(scaleX, scaleY, pivot = Offset.Zero)
+            translate(-drawnCenterX, -drawnCenterY)
+        }) {
+            for (stroke in entity.strokes) {
+                if (stroke.points.size < 2) continue
+                val path = Path().apply {
+                    moveTo(stroke.points[0].x, stroke.points[0].y)
+                    for (i in 1 until stroke.points.size) {
+                        lineTo(stroke.points[i].x, stroke.points[i].y)
+                    }
+                }
+                drawPath(
+                    path = path,
+                    color = stroke.color.copy(alpha = stroke.alpha),
+                    style = Stroke(
+                        width = stroke.strokeWidth,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round
+                    )
+                )
+            }
+        }
+    }
+
+    private fun drawParticles(drawScope: DrawScope, particles: List<Particle>) {
+        for (p in particles) {
+            val alphaColor = p.color.copy(alpha = (p.alpha * p.color.alpha).coerceIn(0f, 1f))
+            when (p.type) {
+                ParticleType.WATER_SPLASH -> {
+                    drawScope.drawCircle(color = alphaColor, radius = p.size * p.life, center = Offset(p.x, p.y))
+                }
+                ParticleType.BUBBLE -> {
+                    drawScope.drawCircle(color = alphaColor, radius = p.size, center = Offset(p.x, p.y))
+                    drawScope.drawCircle(color = Color.White.copy(alpha = p.alpha * 0.7f), radius = p.size * 0.28f, center = Offset(p.x - p.size * 0.25f, p.y - p.size * 0.25f))
+                }
+                ParticleType.STAR_DUST -> {
+                    val s = p.size * p.life
+                    drawScope.drawRect(color = alphaColor, topLeft = Offset(p.x - s / 2f, p.y - s / 2f), size = Size(s, s))
+                }
+                ParticleType.SMOKE_PUFF -> {
+                    drawScope.drawCircle(color = alphaColor, radius = p.size, center = Offset(p.x, p.y))
+                }
+                ParticleType.RAINBOW_SPARKLE -> {
+                    drawScope.drawCircle(color = alphaColor, radius = p.size * p.life, center = Offset(p.x, p.y))
+                }
+            }
+        }
+    }
+}

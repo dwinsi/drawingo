@@ -1,0 +1,17 @@
+{
+  "name": "drawingo-adc-backend",
+  "version": "1.0.0",
+  "description": "Premium ADC Cloud Backend for Drawingo (GCP Project project-2154682a-9280-4a32-a72)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "deploy": "bash deploy.sh"
+  },
+  "dependencies": {
+    "@google/genai": "^2.27.0",
+    "@google-cloud/text-to-speech": "^5.5.0",
+    "@google-cloud/storage": "^7.14.0",
+    "express": "^4.21.2",
+    "cors": "^2.8.5"
+  }
+}

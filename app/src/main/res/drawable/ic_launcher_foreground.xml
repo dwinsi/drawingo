@@ -1,0 +1,136 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Rainbow Paint Swoosh Behind Character -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF00F5FF"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:pathData="M23,65 C18,48 30,30 50,26 C68,22 84,33 87,48" />
+
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF39FF14"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:pathData="M26,68 C22,52 33,35 52,31 C68,28 82,37 85,52" />
+
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFF1493"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:pathData="M29,71 C26,57 36,41 53,37 C68,34 80,42 83,56" />
+
+    <!-- Cute Toddler Doodle Buddy Body Drop Shadow -->
+    <path
+        android:fillColor="#33000000"
+        android:pathData="M54,38 C42,38 33,46 33,59 C33,73 43,78 54,78 C65,78 75,73 75,59 C75,46 66,38 54,38 Z" />
+
+    <!-- Sunshine Yellow Body -->
+    <path
+        android:fillColor="#FFFFD54F"
+        android:strokeColor="#FF1E1B4B"
+        android:strokeWidth="2.2"
+        android:strokeLineJoin="round"
+        android:pathData="M54,35 C42,35 33,43 33,56 C33,70 43,75 54,75 C65,75 75,70 75,56 C75,43 66,35 54,35 Z" />
+
+    <!-- Rosy Blushing Cheeks -->
+    <path
+        android:fillColor="#E6FF6090"
+        android:pathData="M40,61m-3.5,0a3.5,3.2 0,1 1,7 0a3.5,3.2 0,1 1,-7 0" />
+    <path
+        android:fillColor="#E6FF6090"
+        android:pathData="M68,61m-3.5,0a3.5,3.2 0,1 1,7 0a3.5,3.2 0,1 1,-7 0" />
+
+    <!-- Cheerful Grin & Tongue -->
+    <path
+        android:fillColor="#FF1E1B4B"
+        android:strokeColor="#FF1E1B4B"
+        android:strokeWidth="1.2"
+        android:pathData="M48,62 C50,67.5 58,67.5 60,62 Z" />
+    <path
+        android:fillColor="#FFFF4081"
+        android:pathData="M51.5,65 C53,67.5 55,67.5 56.5,65 Z" />
+
+    <!-- Left Googly Eye -->
+    <!-- Sclera -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:strokeColor="#FF1E1B4B"
+        android:strokeWidth="1.8"
+        android:pathData="M45.5,47.5m-8.2,0a8.2,8.2 0,1 1,16.4 0a8.2,8.2 0,1 1,-16.4 0" />
+    <!-- Pupil -->
+    <path
+        android:fillColor="#FF1E1B4B"
+        android:pathData="M47.5,46.2m-4.2,0a4.2,4.2 0,1 1,8.4 0a4.2,4.2 0,1 1,-8.4 0" />
+    <!-- Specular Highlight Primary -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M49,44.8m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <!-- Specular Highlight Secondary -->
+    <path
+        android:fillColor="#CCFFFFFF"
+        android:pathData="M46.2,47.5m-0.7,0a0.7,0.7 0,1 1,1.4 0a0.7,0.7 0,1 1,-1.4 0" />
+
+    <!-- Right Googly Eye -->
+    <!-- Sclera -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:strokeColor="#FF1E1B4B"
+        android:strokeWidth="1.8"
+        android:pathData="M62.5,47.5m-8.2,0a8.2,8.2 0,1 1,16.4 0a8.2,8.2 0,1 1,-16.4 0" />
+    <!-- Pupil -->
+    <path
+        android:fillColor="#FF1E1B4B"
+        android:pathData="M64.5,46.2m-4.2,0a4.2,4.2 0,1 1,8.4 0a4.2,4.2 0,1 1,-8.4 0" />
+    <!-- Specular Highlight Primary -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M66,44.8m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <!-- Specular Highlight Secondary -->
+    <path
+        android:fillColor="#CCFFFFFF"
+        android:pathData="M63.2,47.5m-0.7,0a0.7,0.7 0,1 1,1.4 0a0.7,0.7 0,1 1,-1.4 0" />
+
+    <!-- Neon Paint Drops -->
+    <!-- Cyan Drop -->
+    <path
+        android:fillColor="#FF00F5FF"
+        android:strokeColor="#FF1E1B4B"
+        android:strokeWidth="1.2"
+        android:pathData="M77,34m-3.5,0a3.5,3.5 0,1 1,7 0a3.5,3.5 0,1 1,-7 0" />
+    <path
+        android:fillColor="#E6FFFFFF"
+        android:pathData="M77.8,33.2m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0" />
+
+    <!-- Pink Drop -->
+    <path
+        android:fillColor="#FFFF1493"
+        android:strokeColor="#FF1E1B4B"
+        android:strokeWidth="1.2"
+        android:pathData="M28,42m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <path
+        android:fillColor="#E6FFFFFF"
+        android:pathData="M28.7,41.3m-0.8,0a0.8,0.8 0,1 1,1.6 0a0.8,0.8 0,1 1,-1.6 0" />
+
+    <!-- Lime Green Drop -->
+    <path
+        android:fillColor="#FF39FF14"
+        android:strokeColor="#FF1E1B4B"
+        android:strokeWidth="1"
+        android:pathData="M76,68m-2.5,0a2.5,2.5 0,1 1,5 0a2.5,2.5 0,1 1,-5 0" />
+
+    <!-- Sparkle Stars -->
+    <path
+        android:fillColor="#FFFFEA00"
+        android:pathData="M70,20 L71.2,23 L74,24.2 L71.2,25.4 L70,28.2 L68.8,25.4 L66,24.2 L68.8,23 Z" />
+
+    <path
+        android:fillColor="#FF00F5FF"
+        android:pathData="M33,23 L33.9,25.3 L36.2,26.2 L33.9,27.1 L33,29.4 L32.1,27.1 L29.8,26.2 L32.1,25.3 Z" />
+</vector>

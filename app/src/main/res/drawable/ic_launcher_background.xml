@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Cosmic Playful Gradient Background -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="0"
+                android:endX="54"
+                android:endY="108"
+                android:type="linear">
+                <item android:color="#FF241744" android:offset="0.0" />
+                <item android:color="#FF100D24" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Soft glowing ambient bubbles -->
+    <path
+        android:fillColor="#1800F5FF"
+        android:pathData="M24,26m-13,0a13,13 0,1 1,26 0a13,13 0,1 1,-26 0" />
+    <path
+        android:fillColor="#18FF1493"
+        android:pathData="M84,28m-15,0a15,15 0,1 1,30 0a15,15 0,1 1,-30 0" />
+    <path
+        android:fillColor="#1839FF14"
+        android:pathData="M22,82m-14,0a14,14 0,1 1,28 0a14,14 0,1 1,-28 0" />
+    <path
+        android:fillColor="#1AFFE600"
+        android:pathData="M86,80m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0" />
+
+    <!-- Twinkle stars in background -->
+    <path
+        android:fillColor="#4DFFFFFF"
+        android:pathData="M30,19L30.8,21.8L33.5,22.5L30.8,23.2L30,26L29.2,23.2L26.5,22.5L29.2,21.8Z" />
+    <path
+        android:fillColor="#59FFE600"
+        android:pathData="M78,18L78.8,20.8L81.5,21.5L78.8,22.2L78,25L77.2,22.2L74.5,21.5L77.2,20.8Z" />
+    <path
+        android:fillColor="#4D00F5FF"
+        android:pathData="M82,88L82.6,90.2L84.8,90.8L82.6,91.4L82,93.5L81.4,91.4L79.2,90.8L81.4,90.2Z" />
+</vector>
