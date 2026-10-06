@@ -1,5 +1,6 @@
 package com.example.drawingo.ui
 
+import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.animation.expandVertically
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -50,10 +52,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.input.pointer.changedToUp
@@ -76,6 +81,7 @@ import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
 import com.example.drawingo.model.GooglyEyePair
 import com.example.drawingo.model.MagicCompanion
+import com.example.drawingo.model.StockSketch
 import com.example.drawingo.theme.ElectricCyan
 import com.example.drawingo.util.CanvasBitmapUtils
 
@@ -128,6 +134,17 @@ fun DrawingCanvas(
 
     var showParentSettings by remember { mutableStateOf(false) }
     var drawerLevel by remember { mutableStateOf(DrawerLevel.HIDDEN) }
+
+    // Stock Sketches & Coloring Templates State
+    val stockSketches by viewModel.stockSketches.collectAsState()
+    val selectedSketch by viewModel.selectedSketch.collectAsState()
+    val activeSketchBitmap by viewModel.activeSketchBitmap.collectAsState()
+    val isSketchesLoading by viewModel.isSketchesLoading.collectAsState()
+    var showSketchPicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.loadStockSketches(context)
+    }
 
     var frameTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -223,6 +240,14 @@ fun DrawingCanvas(
                                     googlyEyes = googlyEyes,
                                     magicCompanions = magicCompanions
                                 )
+                                activeSketchBitmap?.let { bmp ->
+                                    drawStockSketchTemplate(
+                                        drawScope = this,
+                                        bitmap = bmp,
+                                        canvasWidth = canvasWidth,
+                                        canvasHeight = canvasHeight
+                                    )
+                                }
                             }
 
                             val waveHeight = 60f
@@ -250,6 +275,14 @@ fun DrawingCanvas(
                                 googlyEyes = googlyEyes,
                                 magicCompanions = magicCompanions
                             )
+                            activeSketchBitmap?.let { bmp ->
+                                drawStockSketchTemplate(
+                                    drawScope = this,
+                                    bitmap = bmp,
+                                    canvasWidth = canvasWidth,
+                                    canvasHeight = canvasHeight
+                                )
+                            }
                         }
                     }
                 }
@@ -286,6 +319,8 @@ fun DrawingCanvas(
                 viewModel.replayGeminiSpeech(context, apiKey)
             },
             onSettingsClick = { showParentSettings = true },
+            selectedSketch = selectedSketch,
+            onSketchesClick = { showSketchPicker = true },
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
@@ -380,6 +415,53 @@ fun DrawingCanvas(
                 onDismiss = { showParentSettings = false }
             )
         }
+
+        // Active Sketch Indicator Badge (Floating on Top-Left)
+        if (selectedSketch != null && !isAnimationActive) {
+            Box(
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(top = 70.dp, start = 16.dp)
+                    .align(Alignment.TopStart)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xD910131E))
+                    .border(1.5.dp, ElectricCyan.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
+                    .clickable { showSketchPicker = true }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(selectedSketch!!.emoji, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = selectedSketch!!.title,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("🖍️", fontSize = 12.sp)
+                }
+            }
+        }
+
+        // Stock Sketch Picker Dialog
+        if (showSketchPicker) {
+            SketchPickerDialog(
+                sketches = stockSketches,
+                selectedSketch = selectedSketch,
+                isLoading = isSketchesLoading,
+                onSketchSelected = { sketch ->
+                    viewModel.selectSketch(context, sketch)
+                },
+                onClearTemplate = {
+                    viewModel.clearSketch()
+                },
+                onRefresh = {
+                    viewModel.loadStockSketches(context, forceRefresh = true)
+                },
+                onDismiss = { showSketchPicker = false }
+            )
+        }
     }
 }
 
@@ -399,6 +481,8 @@ fun TopKeepBar(
     onStopAnimationClick: () -> Unit,
     onReplayVoiceClick: () -> Unit = {},
     onSettingsClick: () -> Unit,
+    selectedSketch: StockSketch? = null,
+    onSketchesClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -494,6 +578,19 @@ fun TopKeepBar(
                 contentAlignment = Alignment.Center
             ) {
                 Text("📄", fontSize = 20.sp)
+            }
+
+            // Coloring Sketches Book Button
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(if (selectedSketch != null) Color(0xFF1E283E) else ToolDockBackgroundColor)
+                    .then(if (selectedSketch != null) Modifier.border(2.dp, ElectricCyan, CircleShape) else Modifier)
+                    .clickable { onSketchesClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(selectedSketch?.emoji ?: "🎨", fontSize = 20.sp)
             }
 
             Box(
@@ -756,5 +853,36 @@ private fun DrawScope.drawExitRing(centroid: Offset, progress: Float) {
         topLeft = Offset(centroid.x - radius, centroid.y - radius),
         size = Size(radius * 2, radius * 2),
         style = Stroke(width = 12f, cap = StrokeCap.Round)
+    )
+}
+
+private fun drawStockSketchTemplate(
+    drawScope: DrawScope,
+    bitmap: Bitmap,
+    canvasWidth: Float,
+    canvasHeight: Float
+) {
+    val bmpAspect = bitmap.width.toFloat() / bitmap.height.toFloat()
+    val margin = 80f
+    val availW = (canvasWidth - margin * 2).coerceAtLeast(100f)
+    val availH = (canvasHeight - margin * 2).coerceAtLeast(100f)
+
+    val targetWidth: Float
+    val targetHeight: Float
+    if (availW / availH > bmpAspect) {
+        targetHeight = availH
+        targetWidth = availH * bmpAspect
+    } else {
+        targetWidth = availW
+        targetHeight = availW / bmpAspect
+    }
+
+    val left = (canvasWidth - targetWidth) / 2f
+    val top = (canvasHeight - targetHeight) / 2f
+
+    drawScope.drawImage(
+        image = bitmap.asImageBitmap(),
+        dstOffset = IntOffset(left.toInt(), top.toInt()),
+        dstSize = IntSize(targetWidth.toInt(), targetHeight.toInt())
     )
 }

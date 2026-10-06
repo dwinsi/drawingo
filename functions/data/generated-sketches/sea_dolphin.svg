@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+        <!-- Dolphin Arched Body -->
+        <path d="M 230 450 C 230 250 480 200 620 350 C 680 410 730 480 730 480 C 730 480 660 480 610 440 C 510 500 370 530 280 490 C 210 510 180 500 150 470 C 180 440 210 450 230 450 Z"
+              stroke="#1A1A24" stroke-width="14" stroke-linejoin="round" fill="none" />
+        <!-- Dorsal Fin -->
+        <path d="M 450 240 C 470 160 540 180 530 260" stroke="#1A1A24" stroke-width="12" stroke-linejoin="round" fill="none" />
+        <!-- Flipper -->
+        <path d="M 380 420 C 370 490 440 480 440 410 Z" stroke="#1A1A24" stroke-width="12" stroke-linejoin="round" fill="none" />
+        <!-- Tail Fluke -->
+        <path d="M 680 430 C 740 370 760 450 710 480 C 760 510 740 590 680 530 Z" stroke="#1A1A24" stroke-width="12" stroke-linejoin="round" fill="none" />
+        <!-- Big Cute Eye -->
+        <circle cx="260" cy="380" r="18" fill="#1A1A24" />
+        <circle cx="264" cy="374" r="6" fill="#FFFFFF" />
+        <!-- Smile -->
+        <path d="M 200 460 Q 240 480 270 450" stroke="#1A1A24" stroke-width="10" stroke-linecap="round" fill="none" />
+        <!-- Splash Waves -->
+        <path d="M 140 640 Q 260 590 380 640 Q 500 690 620 640" stroke="#1A1A24" stroke-width="10" stroke-linecap="round" fill="none" />
+      </svg>

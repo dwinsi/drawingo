@@ -33,6 +33,14 @@ The Drawingo backend runs on **Google Cloud Run** as a fully managed serverless 
 | `/health` | `GET` | Service liveness and ADC status check |
 | `/analyzeDrawing` | `POST` | Toddler drawing classification + nursery rhyme generation via Gemini 2.5 Flash |
 | `/synthesizeSpeech` | `POST` | High-quality text-to-speech audio synthesis (hi-IN & en-US) |
+| `/sketches` | `GET` | Returns stock sketches catalog with categories (Celestial, Sea, Wild Animals) |
+| `/sketches` | `POST` | Upload and register new stock sketches to Cloud Storage & catalog database |
+
+### Cloud Storage (Sketches Database)
+- **Bucket:** `gs://drawingo-sketches-project-2154682a-9280-4a32-a72`
+- **Public CDN URL:** `https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/`
+- **Catalog File:** `gs://drawingo-sketches-project-2154682a-9280-4a32-a72/catalog.json`
+- **CLI Ingestion Tool:** `functions/scripts/add-sketch.js` (add sketches anytime with 1 command)
 
 ### AI Models & SDK
 - **SDK:** Google Gen AI SDK (`@google/genai@2.27.0`)

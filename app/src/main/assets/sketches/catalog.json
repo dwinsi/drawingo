@@ -1,0 +1,325 @@
+[
+  {
+    "id": "celestial_sun",
+    "title": "Smiling Sun",
+    "category": "CELESTIAL",
+    "emoji": "☀️",
+    "difficulty": "EASY",
+    "tags": [
+      "sun",
+      "space",
+      "sky",
+      "warm",
+      "happy"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_sun.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_sun.png",
+    "assetPath": "sketches/celestial_sun.png",
+    "createdAt": "2026-10-06T13:25:31.532Z"
+  },
+  {
+    "id": "celestial_moon",
+    "title": "Crescent Moon & Star",
+    "category": "CELESTIAL",
+    "emoji": "🌙",
+    "difficulty": "EASY",
+    "tags": [
+      "moon",
+      "star",
+      "night",
+      "sky",
+      "dream"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_moon.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_moon.png",
+    "assetPath": "sketches/celestial_moon.png",
+    "createdAt": "2026-10-06T13:25:31.673Z"
+  },
+  {
+    "id": "celestial_star",
+    "title": "Twinkle Star",
+    "category": "CELESTIAL",
+    "emoji": "⭐",
+    "difficulty": "EASY",
+    "tags": [
+      "star",
+      "twinkle",
+      "cute",
+      "sky"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_star.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_star.png",
+    "assetPath": "sketches/celestial_star.png",
+    "createdAt": "2026-10-06T13:25:31.801Z"
+  },
+  {
+    "id": "celestial_saturn",
+    "title": "Planet Saturn",
+    "category": "CELESTIAL",
+    "emoji": "🪐",
+    "difficulty": "MEDIUM",
+    "tags": [
+      "saturn",
+      "planet",
+      "space",
+      "ring",
+      "galaxy"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_saturn.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_saturn.png",
+    "assetPath": "sketches/celestial_saturn.png",
+    "createdAt": "2026-10-06T13:25:31.924Z"
+  },
+  {
+    "id": "celestial_rocket",
+    "title": "Cosmic Rocket",
+    "category": "CELESTIAL",
+    "emoji": "🚀",
+    "difficulty": "MEDIUM",
+    "tags": [
+      "rocket",
+      "spaceship",
+      "blastoff",
+      "launch",
+      "space"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_rocket.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_rocket.png",
+    "assetPath": "sketches/celestial_rocket.png",
+    "createdAt": "2026-10-06T13:25:32.041Z"
+  },
+  {
+    "id": "celestial_comet",
+    "title": "Shooting Comet",
+    "category": "CELESTIAL",
+    "emoji": "☄️",
+    "difficulty": "EASY",
+    "tags": [
+      "comet",
+      "shooting star",
+      "space",
+      "speed",
+      "tail"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_comet.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/celestial_comet.png",
+    "assetPath": "sketches/celestial_comet.png",
+    "createdAt": "2026-10-06T13:25:32.159Z"
+  },
+  {
+    "id": "sea_whale",
+    "title": "Baby Whale",
+    "category": "SEA_ANIMALS",
+    "emoji": "🐋",
+    "difficulty": "EASY",
+    "tags": [
+      "whale",
+      "ocean",
+      "sea",
+      "water",
+      "spout"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_whale.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_whale.png",
+    "assetPath": "sketches/sea_whale.png",
+    "createdAt": "2026-10-06T13:25:32.277Z"
+  },
+  {
+    "id": "sea_turtle",
+    "title": "Sea Turtle",
+    "category": "SEA_ANIMALS",
+    "emoji": "🐢",
+    "difficulty": "MEDIUM",
+    "tags": [
+      "turtle",
+      "sea",
+      "ocean",
+      "shell",
+      "swim"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_turtle.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_turtle.png",
+    "assetPath": "sketches/sea_turtle.png",
+    "createdAt": "2026-10-06T13:25:32.403Z"
+  },
+  {
+    "id": "sea_dolphin",
+    "title": "Jumping Dolphin",
+    "category": "SEA_ANIMALS",
+    "emoji": "🐬",
+    "difficulty": "MEDIUM",
+    "tags": [
+      "dolphin",
+      "sea",
+      "ocean",
+      "jump",
+      "playful"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_dolphin.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_dolphin.png",
+    "assetPath": "sketches/sea_dolphin.png",
+    "createdAt": "2026-10-06T13:25:32.520Z"
+  },
+  {
+    "id": "sea_octopus",
+    "title": "Jolly Octopus",
+    "category": "SEA_ANIMALS",
+    "emoji": "🐙",
+    "difficulty": "EASY",
+    "tags": [
+      "octopus",
+      "tentacles",
+      "sea",
+      "ocean",
+      "bubbles"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_octopus.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_octopus.png",
+    "assetPath": "sketches/sea_octopus.png",
+    "createdAt": "2026-10-06T13:25:32.694Z"
+  },
+  {
+    "id": "sea_fish",
+    "title": "Cute Goldfish",
+    "category": "SEA_ANIMALS",
+    "emoji": "🐠",
+    "difficulty": "EASY",
+    "tags": [
+      "fish",
+      "goldfish",
+      "sea",
+      "water",
+      "bubbles"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_fish.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_fish.png",
+    "assetPath": "sketches/sea_fish.png",
+    "createdAt": "2026-10-06T13:25:32.810Z"
+  },
+  {
+    "id": "sea_seahorse",
+    "title": "Baby Seahorse",
+    "category": "SEA_ANIMALS",
+    "emoji": "🫧",
+    "difficulty": "MEDIUM",
+    "tags": [
+      "seahorse",
+      "sea",
+      "ocean",
+      "curl",
+      "magic"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_seahorse.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/sea_seahorse.png",
+    "assetPath": "sketches/sea_seahorse.png",
+    "createdAt": "2026-10-06T13:25:32.924Z"
+  },
+  {
+    "id": "wild_lion",
+    "title": "Brave Little Lion",
+    "category": "WILD_ANIMALS",
+    "emoji": "🦁",
+    "difficulty": "EASY",
+    "tags": [
+      "lion",
+      "safari",
+      "wild",
+      "mane",
+      "king"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_lion.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_lion.png",
+    "assetPath": "sketches/wild_lion.png",
+    "createdAt": "2026-10-06T13:25:33.040Z"
+  },
+  {
+    "id": "wild_panda",
+    "title": "Cute Panda Bear",
+    "category": "WILD_ANIMALS",
+    "emoji": "🐼",
+    "difficulty": "EASY",
+    "tags": [
+      "panda",
+      "bear",
+      "bamboo",
+      "cute",
+      "wild"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_panda.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_panda.png",
+    "assetPath": "sketches/wild_panda.png",
+    "createdAt": "2026-10-06T13:25:33.157Z"
+  },
+  {
+    "id": "wild_elephant",
+    "title": "Sweet Baby Elephant",
+    "category": "WILD_ANIMALS",
+    "emoji": "🐘",
+    "difficulty": "MEDIUM",
+    "tags": [
+      "elephant",
+      "safari",
+      "wild",
+      "trunk",
+      "ears"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_elephant.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_elephant.png",
+    "assetPath": "sketches/wild_elephant.png",
+    "createdAt": "2026-10-06T13:25:33.269Z"
+  },
+  {
+    "id": "wild_bear",
+    "title": "Chubby Teddy Bear",
+    "category": "WILD_ANIMALS",
+    "emoji": "🐻",
+    "difficulty": "EASY",
+    "tags": [
+      "bear",
+      "teddy",
+      "wild",
+      "forest",
+      "cuddly"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_bear.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_bear.png",
+    "assetPath": "sketches/wild_bear.png",
+    "createdAt": "2026-10-06T13:25:33.386Z"
+  },
+  {
+    "id": "wild_giraffe",
+    "title": "Tall Happy Giraffe",
+    "category": "WILD_ANIMALS",
+    "emoji": "🦒",
+    "difficulty": "MEDIUM",
+    "tags": [
+      "giraffe",
+      "safari",
+      "wild",
+      "tall",
+      "spots"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_giraffe.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_giraffe.png",
+    "assetPath": "sketches/wild_giraffe.png",
+    "createdAt": "2026-10-06T13:25:33.504Z"
+  },
+  {
+    "id": "wild_monkey",
+    "title": "Playful Monkey",
+    "category": "WILD_ANIMALS",
+    "emoji": "🐵",
+    "difficulty": "EASY",
+    "tags": [
+      "monkey",
+      "jungle",
+      "wild",
+      "banana",
+      "playful"
+    ],
+    "imageUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_monkey.png",
+    "thumbnailUrl": "https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/sketches/wild_monkey.png",
+    "assetPath": "sketches/wild_monkey.png",
+    "createdAt": "2026-10-06T13:25:33.621Z"
+  }
+]

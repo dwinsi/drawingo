@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+        <!-- Sun Rays -->
+        <g stroke="#1A1A24" stroke-width="12" stroke-linecap="round" fill="none">
+          <line x1="400" y1="90" x2="400" y2="190" />
+          <line x1="400" y1="610" x2="400" y2="710" />
+          <line x1="90" y1="400" x2="190" y2="400" />
+          <line x1="610" y1="400" x2="710" y2="400" />
+          <line x1="180" y1="180" x2="250" y2="250" />
+          <line x1="550" y1="550" x2="620" y2="620" />
+          <line x1="620" y1="180" x2="550" y2="250" />
+          <line x1="180" y1="620" x2="250" y2="550" />
+        </g>
+        <!-- Center Body -->
+        <circle cx="400" cy="400" r="190" stroke="#1A1A24" stroke-width="14" fill="none" />
+        <!-- Big Cute Eyes -->
+        <circle cx="330" cy="370" r="24" fill="#1A1A24" />
+        <circle cx="338" cy="362" r="8" fill="#FFFFFF" />
+        <circle cx="470" cy="370" r="24" fill="#1A1A24" />
+        <circle cx="478" cy="362" r="8" fill="#FFFFFF" />
+        <!-- Rosy Cheeks -->
+        <circle cx="290" cy="425" r="26" stroke="#1A1A24" stroke-width="8" stroke-dasharray="6,8" fill="none" />
+        <circle cx="510" cy="425" r="26" stroke="#1A1A24" stroke-width="8" stroke-dasharray="6,8" fill="none" />
+        <!-- Big Happy Smile -->
+        <path d="M 330 430 Q 400 510 470 430" stroke="#1A1A24" stroke-width="12" stroke-linecap="round" fill="none" />
+        <path d="M 355 455 Q 400 495 445 455" stroke="#1A1A24" stroke-width="8" fill="none" />
+      </svg>

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+        <!-- Fish Body -->
+        <ellipse cx="380" cy="400" rx="180" ry="140" stroke="#1A1A24" stroke-width="14" fill="none" />
+        <!-- Head / Gill Curve -->
+        <path d="M 330 270 Q 370 400 330 530" stroke="#1A1A24" stroke-width="10" fill="none" />
+        <!-- Big Tail Fin -->
+        <path d="M 540 370 C 640 250 720 280 670 400 C 720 520 640 550 540 430 Z" stroke="#1A1A24" stroke-width="14" stroke-linejoin="round" fill="none" />
+        <!-- Top Dorsal Fin -->
+        <path d="M 320 265 C 380 180 480 200 490 275" stroke="#1A1A24" stroke-width="12" stroke-linecap="round" fill="none" />
+        <!-- Side Flipper Fin -->
+        <path d="M 370 420 C 420 480 450 450 430 400 Z" stroke="#1A1A24" stroke-width="10" stroke-linejoin="round" fill="none" />
+        <!-- Big Sparkly Eye -->
+        <circle cx="260" cy="360" r="25" fill="#1A1A24" />
+        <circle cx="268" cy="350" r="8" fill="#FFFFFF" />
+        <!-- Kissy Smile -->
+        <path d="M 190 410 Q 220 430 240 410" stroke="#1A1A24" stroke-width="10" stroke-linecap="round" fill="none" />
+        <!-- Floating Bubbles -->
+        <circle cx="160" cy="320" r="22" stroke="#1A1A24" stroke-width="8" fill="none" />
+        <circle cx="130" cy="230" r="16" stroke="#1A1A24" stroke-width="7" fill="none" />
+        <circle cx="110" cy="150" r="10" stroke="#1A1A24" stroke-width="6" fill="none" />
+      </svg>

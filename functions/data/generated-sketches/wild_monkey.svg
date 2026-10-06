@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+        <!-- Big Round Monkey Ears -->
+        <circle cx="210" cy="380" r="70" stroke="#1A1A24" stroke-width="14" fill="none" />
+        <circle cx="210" cy="380" r="40" stroke="#1A1A24" stroke-width="10" fill="none" />
+        <circle cx="590" cy="380" r="70" stroke="#1A1A24" stroke-width="14" fill="none" />
+        <circle cx="590" cy="380" r="40" stroke="#1A1A24" stroke-width="10" fill="none" />
+        <!-- Head -->
+        <circle cx="400" cy="380" r="180" stroke="#1A1A24" stroke-width="14" fill="none" />
+        <!-- Heart Face Mask -->
+        <path d="M 400 320 C 340 260 260 280 270 370 C 270 460 350 490 400 500 C 450 490 530 460 530 370 C 540 280 460 260 400 320 Z"
+              stroke="#1A1A24" stroke-width="12" fill="none" />
+        <!-- Big Eyes -->
+        <circle cx="340" cy="350" r="22" fill="#1A1A24" />
+        <circle cx="346" cy="342" r="7" fill="#FFFFFF" />
+        <circle cx="460" cy="350" r="22" fill="#1A1A24" />
+        <circle cx="466" cy="342" r="7" fill="#FFFFFF" />
+        <!-- Nostrils -->
+        <circle cx="385" cy="410" r="7" fill="#1A1A24" />
+        <circle cx="415" cy="410" r="7" fill="#1A1A24" />
+        <!-- Cheeky Big Monkey Smile -->
+        <path d="M 330 435 Q 400 510 470 435" stroke="#1A1A24" stroke-width="11" stroke-linecap="round" fill="none" />
+      </svg>

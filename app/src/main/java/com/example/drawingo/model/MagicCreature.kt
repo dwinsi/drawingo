@@ -4,9 +4,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 
 /**
- * Creature & Nature element types that can magically spawn when toddlers draw or tap.
+ * Creature, Celestial & Animal element types that can magically spawn when toddlers draw or tap.
  */
 enum class CreatureCategory {
+    CELESTIAL,
     SEA_CREATURE,
     WILD_ANIMAL,
     BIRD,
@@ -16,18 +17,31 @@ enum class CreatureCategory {
 }
 
 enum class CreatureType(val category: CreatureCategory) {
-    // Sea animals
+    // Celestial Objects (Preferred)
+    SMILING_SUN(CreatureCategory.CELESTIAL),
+    CRESCENT_MOON(CreatureCategory.CELESTIAL),
+    TWINKLE_STAR(CreatureCategory.CELESTIAL),
+    PLANET_SATURN(CreatureCategory.CELESTIAL),
+    COSMIC_ROCKET(CreatureCategory.CELESTIAL),
+    SHOOTING_COMET(CreatureCategory.CELESTIAL),
+
+    // Sea Animals (Preferred)
     OCTOPUS(CreatureCategory.SEA_CREATURE),
     JELLYFISH(CreatureCategory.SEA_CREATURE),
     CLOWN_FISH(CreatureCategory.SEA_CREATURE),
     STARFISH(CreatureCategory.SEA_CREATURE),
+    BABY_WHALE(CreatureCategory.SEA_CREATURE),
+    SEA_TURTLE(CreatureCategory.SEA_CREATURE),
 
-    // Wild animals
+    // Wild Animals (Preferred)
     LION(CreatureCategory.WILD_ANIMAL),
     BABY_BEAR(CreatureCategory.WILD_ANIMAL),
     ELEPHANT(CreatureCategory.WILD_ANIMAL),
+    PLAYFUL_MONKEY(CreatureCategory.WILD_ANIMAL),
+    CUTE_PANDA(CreatureCategory.WILD_ANIMAL),
+    GIRAFFE(CreatureCategory.WILD_ANIMAL),
 
-    // Birds
+    // Birds & Classic Friends
     LITTLE_BIRD(CreatureCategory.BIRD),
     PENGUIN(CreatureCategory.BIRD),
 

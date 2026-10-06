@@ -136,4 +136,63 @@ object AdcBackendClient {
         }
         return@withContext null
     }
+
+    /**
+     * Fetches the dynamic stock sketches catalog from the backend.
+     */
+    suspend fun getStockSketches(category: String? = null): List<com.example.drawingo.model.StockSketch>? = withContext(Dispatchers.IO) {
+        val query = if (category != null && category.isNotBlank() && category != "ALL") "?category=$category" else ""
+
+        for (baseUrl in getCandidateUrls()) {
+            try {
+                val url = URL("$baseUrl/sketches$query")
+                val connection = url.openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 8000
+                connection.readTimeout = 10000
+
+                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                    val reader = BufferedReader(InputStreamReader(connection.inputStream, Charsets.UTF_8))
+                    val responseStr = reader.readText()
+                    reader.close()
+
+                    val json = JSONObject(responseStr)
+                    val array = json.optJSONArray("sketches") ?: continue
+                    val list = mutableListOf<com.example.drawingo.model.StockSketch>()
+
+                    for (i in 0 until array.length()) {
+                        val item = array.getJSONObject(i)
+                        val tagsList = mutableListOf<String>()
+                        val tagsArray = item.optJSONArray("tags")
+                        if (tagsArray != null) {
+                            for (t in 0 until tagsArray.length()) {
+                                tagsList.add(tagsArray.getString(t))
+                            }
+                        }
+
+                        list.add(
+                            com.example.drawingo.model.StockSketch(
+                                id = item.optString("id", "sketch_$i"),
+                                title = item.optString("title", "Sketch"),
+                                category = com.example.drawingo.model.SketchCategory.fromString(item.optString("category")),
+                                emoji = item.optString("emoji", "🎨"),
+                                difficulty = item.optString("difficulty", "EASY"),
+                                tags = tagsList,
+                                imageUrl = item.optString("imageUrl", ""),
+                                thumbnailUrl = if (item.has("thumbnailUrl") && !item.isNull("thumbnailUrl")) item.getString("thumbnailUrl") else null,
+                                assetPath = if (item.has("assetPath") && !item.isNull("assetPath")) item.getString("assetPath") else null,
+                                createdAt = if (item.has("createdAt") && !item.isNull("createdAt")) item.getString("createdAt") else null
+                            )
+                        )
+                    }
+                    Log.i(TAG, "Successfully fetched ${list.size} sketches from $baseUrl")
+                    return@withContext list
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "Backend URL $baseUrl sketches unreachable: ${e.message}")
+            }
+        }
+        return@withContext null
+    }
 }
+

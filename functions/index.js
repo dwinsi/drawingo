@@ -171,7 +171,44 @@ function parseGeminiResponse(text) {
   return { sceneType, subjectName, rhymeText };
 }
 
+const { getSketches, addSketch } = require('./sketchManager');
+
+/**
+ * Express handler to fetch stock sketches catalog.
+ */
+async function handleGetSketches(req, res) {
+  try {
+    const { category } = req.query;
+    const sketches = await getSketches(category);
+    res.status(200).json({ sketches, total: sketches.length });
+  } catch (err) {
+    console.error('Error fetching sketches:', err);
+    res.status(500).json({ error: 'Failed to fetch sketches', details: err.message });
+  }
+}
+
+/**
+ * Express handler to add a new stock sketch.
+ */
+async function handleAddSketch(req, res) {
+  try {
+    const { title, category, emoji, difficulty, tags, imageBase64, imageUrl } = req.body;
+    if (!title || (!imageBase64 && !imageUrl)) {
+      return res.status(400).json({ error: 'title and either imageBase64 or imageUrl are required.' });
+    }
+
+    const created = await addSketch({ title, category, emoji, difficulty, tags, imageBase64, imageUrl });
+    res.status(201).json(created);
+  } catch (err) {
+    console.error('Error adding sketch:', err);
+    res.status(500).json({ error: 'Failed to add sketch', details: err.message });
+  }
+}
+
 module.exports = {
   handleAnalyzeDrawing,
-  handleSynthesizeSpeech
+  handleSynthesizeSpeech,
+  handleGetSketches,
+  handleAddSketch
 };
+

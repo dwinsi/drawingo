@@ -27,7 +27,9 @@ import com.example.drawingo.model.GooglyEyePair
 import com.example.drawingo.model.MagicCompanion
 import com.example.drawingo.model.NeonPalette
 import com.example.drawingo.model.Particle
+import com.example.drawingo.model.StockSketch
 import com.example.drawingo.net.AdcBackendClient
+import com.example.drawingo.net.SketchRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -144,6 +146,19 @@ class DrawingViewModel : ViewModel() {
     private val _animationProgress = MutableStateFlow(0f)
     val animationProgress: StateFlow<Float> = _animationProgress.asStateFlow()
 
+    // Stock Sketches & Coloring Templates
+    private val _stockSketches = MutableStateFlow<List<StockSketch>>(emptyList())
+    val stockSketches: StateFlow<List<StockSketch>> = _stockSketches.asStateFlow()
+
+    private val _selectedSketch = MutableStateFlow<StockSketch?>(null)
+    val selectedSketch: StateFlow<StockSketch?> = _selectedSketch.asStateFlow()
+
+    private val _activeSketchBitmap = MutableStateFlow<Bitmap?>(null)
+    val activeSketchBitmap: StateFlow<Bitmap?> = _activeSketchBitmap.asStateFlow()
+
+    private val _isSketchesLoading = MutableStateFlow(false)
+    val isSketchesLoading: StateFlow<Boolean> = _isSketchesLoading.asStateFlow()
+
     private var inactivityJob: Job? = null
     private var wipeAnimationJob: Job? = null
     private var animationLoopJob: Job? = null
@@ -155,20 +170,84 @@ class DrawingViewModel : ViewModel() {
         private const val MAX_STORED_COMPANIONS = 35
         private const val MAX_STORED_STROKES = 250
 
-        private val CompanionColorPresets = listOf(
-            Pair(Color(0xFFFF4081), Color(0xFFB026FF)),
-            Pair(Color(0xFF00E5FF), Color(0xFFFF1493)),
-            Pair(Color(0xFFFF6D00), Color(0xFF202124)),
-            Pair(Color(0xFFFFD600), Color(0xFFFF5252)),
-            Pair(Color(0xFFFFD54F), Color(0xFFFF9100)),
-            Pair(Color(0xFFFFF8E1), Color(0xFFFF80AB)),
-            Pair(Color(0xFF80D8FF), Color(0xFFB388FF)),
-            Pair(Color(0xFF00E5FF), Color(0xFFFFD600)),
-            Pair(Color(0xFF1E1B2E), Color(0xFFFF9100)),
-            Pair(Color(0xFFFF007F), Color(0xFF00E5FF)),
-            Pair(Color(0xFFFF1493), Color(0xFFFFD600)),
-            Pair(Color(0xFFFFD600), Color(0xFFFF6D00))
+        // Prioritized sticker stamp cycle: Celestial Objects, Sea Animals, and Wild Animals
+        private val StickerCyclePool = listOf(
+            // Preferred 1: Celestial Objects
+            CreatureType.SMILING_SUN,
+            // Preferred 2: Sea Animals
+            CreatureType.BABY_WHALE,
+            // Preferred 3: Wild Animals
+            CreatureType.LION,
+            // Preferred 1: Celestial Objects
+            CreatureType.CRESCENT_MOON,
+            // Preferred 2: Sea Animals
+            CreatureType.OCTOPUS,
+            // Preferred 3: Wild Animals
+            CreatureType.CUTE_PANDA,
+            // Preferred 1: Celestial Objects
+            CreatureType.TWINKLE_STAR,
+            // Preferred 2: Sea Animals
+            CreatureType.SEA_TURTLE,
+            // Preferred 3: Wild Animals
+            CreatureType.ELEPHANT,
+            // Classic friends (retained for variety and backward compatibility)
+            CreatureType.LITTLE_BIRD,
+            CreatureType.BUTTERFLY,
+            CreatureType.BLOOMING_FLOWER,
+            // Celestial Objects (Batch 2)
+            CreatureType.PLANET_SATURN,
+            // Sea Animals (Batch 2)
+            CreatureType.CLOWN_FISH,
+            // Wild Animals (Batch 2)
+            CreatureType.BABY_BEAR,
+            // Celestial Objects (Batch 3)
+            CreatureType.COSMIC_ROCKET,
+            // Sea Animals (Batch 3)
+            CreatureType.JELLYFISH,
+            // Wild Animals (Batch 3)
+            CreatureType.PLAYFUL_MONKEY,
+            // Celestial Objects (Batch 4)
+            CreatureType.SHOOTING_COMET,
+            // Sea Animals (Batch 4)
+            CreatureType.STARFISH,
+            // Wild Animals (Batch 4)
+            CreatureType.GIRAFFE
         )
+
+        fun getColorsForCreature(type: CreatureType): Pair<Color, Color> {
+            return when (type) {
+                // Celestial Objects
+                CreatureType.SMILING_SUN -> Pair(Color(0xFFFFD600), Color(0xFFFF6D00))
+                CreatureType.CRESCENT_MOON -> Pair(Color(0xFFFFF9C4), Color(0xFFFFD54F))
+                CreatureType.TWINKLE_STAR -> Pair(Color(0xFFFFEA00), Color(0xFFFF9100))
+                CreatureType.PLANET_SATURN -> Pair(Color(0xFF8B5CF6), Color(0xFF00F0FF))
+                CreatureType.COSMIC_ROCKET -> Pair(Color(0xFF00E5FF), Color(0xFFFF1744))
+                CreatureType.SHOOTING_COMET -> Pair(Color(0xFFFF007F), Color(0xFFFFD600))
+
+                // Sea Animals
+                CreatureType.OCTOPUS -> Pair(Color(0xFFFF4081), Color(0xFFB026FF))
+                CreatureType.JELLYFISH -> Pair(Color(0xFF00F0FF), Color(0xFFFF1493))
+                CreatureType.CLOWN_FISH -> Pair(Color(0xFFFF6D00), Color(0xFFFFFFFF))
+                CreatureType.STARFISH -> Pair(Color(0xFFFF5252), Color(0xFFFFD600))
+                CreatureType.BABY_WHALE -> Pair(Color(0xFF0091EA), Color(0xFF80D8FF))
+                CreatureType.SEA_TURTLE -> Pair(Color(0xFF00E676), Color(0xFFAEEA00))
+
+                // Wild Animals
+                CreatureType.LION -> Pair(Color(0xFFFFB300), Color(0xFFE65100))
+                CreatureType.BABY_BEAR -> Pair(Color(0xFF8D6E63), Color(0xFFD7CCC8))
+                CreatureType.ELEPHANT -> Pair(Color(0xFF90CAF9), Color(0xFFF48FB1))
+                CreatureType.PLAYFUL_MONKEY -> Pair(Color(0xFFA1887F), Color(0xFFFFE0B2))
+                CreatureType.CUTE_PANDA -> Pair(Color(0xFFFFFFFF), Color(0xFF1E1B2E))
+                CreatureType.GIRAFFE -> Pair(Color(0xFFFFCA28), Color(0xFF795548))
+
+                // Birds & Classic
+                CreatureType.LITTLE_BIRD -> Pair(Color(0xFF00E5FF), Color(0xFFFFD600))
+                CreatureType.PENGUIN -> Pair(Color(0xFF1E1B2E), Color(0xFFFFFFFF))
+                CreatureType.BUTTERFLY -> Pair(Color(0xFFFF007F), Color(0xFF00E5FF))
+                CreatureType.BLOOMING_FLOWER -> Pair(Color(0xFFFF1493), Color(0xFFFFD600))
+                CreatureType.SUNFLOWER -> Pair(Color(0xFFFFEA00), Color(0xFFFF6D00))
+            }
+        }
     }
 
     init {
@@ -258,6 +337,32 @@ class DrawingViewModel : ViewModel() {
             _magicCompanions.value = emptyList()
             updateUndoRedoStates()
         }
+    }
+
+    fun loadStockSketches(context: Context, forceRefresh: Boolean = false) {
+        viewModelScope.launch {
+            _isSketchesLoading.value = true
+            try {
+                val list = SketchRepository.getSketches(context, forceRefresh)
+                _stockSketches.value = list
+            } catch (_: Exception) {
+            } finally {
+                _isSketchesLoading.value = false
+            }
+        }
+    }
+
+    fun selectSketch(context: Context, sketch: StockSketch) {
+        viewModelScope.launch {
+            _selectedSketch.value = sketch
+            _activeSketchBitmap.value = SketchRepository.loadSketchBitmap(context, sketch)
+            soundManager?.playChimeTwinkle()
+        }
+    }
+
+    fun clearSketch() {
+        _selectedSketch.value = null
+        _activeSketchBitmap.value = null
     }
 
     private fun updateUndoRedoStates() {
@@ -362,23 +467,25 @@ class DrawingViewModel : ViewModel() {
             val height = finalStroke.boundingBox.height
             val isTap = finalStroke.points.size <= 1 || (width < 10f && height < 10f)
 
-            if (isTap) {
-                val tapPos = finalStroke.points.firstOrNull() ?: Offset(finalStroke.boundingBox.left, finalStroke.boundingBox.top)
-                spawnMagicalCompanionAt(tapPos, isDirectTap = true)
+            // In Toddler Magic mode: whether a dot (tap) or a line:
+            // Spawn a clean, vibrant, large magical sticker stamp!
+            val spawnPos = if (isTap) {
+                finalStroke.points.firstOrNull() ?: Offset(finalStroke.boundingBox.left, finalStroke.boundingBox.top)
             } else {
-                val strokeCenter = finalStroke.boundingBox.center
-                spawnMagicalCompanionAt(strokeCenter, isDirectTap = false)
-                spawnGooglyEyes(finalStroke.boundingBox, finalStroke.points)
+                // For lines, place the sticker stamp cleanly at the end of the stroke
+                finalStroke.points.lastOrNull() ?: finalStroke.boundingBox.center
             }
+
+            spawnMagicalCompanionAt(spawnPos, isDirectTap = isTap)
         }
     }
 
     fun spawnMagicalCompanionAt(position: Offset, isDirectTap: Boolean) {
-        val allTypes = CreatureType.values()
-        val type = allTypes[(creatureCycleIndex++) % allTypes.size]
+        val type = StickerCyclePool[(creatureCycleIndex++) % StickerCyclePool.size]
+        val colors = getColorsForCreature(type)
 
-        val colors = CompanionColorPresets[(type.ordinal) % CompanionColorPresets.size]
-        val baseSize = if (isDirectTap) 105f else 92f
+        // Much bigger, tactile, punchy stickers (215f - 240f) as requested!
+        val baseSize = if (isDirectTap) 240f else 215f
 
         val companion = MagicCompanion(
             id = companionIdGenerator.getAndIncrement(),
@@ -398,13 +505,19 @@ class DrawingViewModel : ViewModel() {
         }
 
         when (type.category) {
-            CreatureCategory.BUTTERFLY, CreatureCategory.FLOWER, CreatureCategory.BIRD -> {
+            CreatureCategory.CELESTIAL -> {
                 soundManager?.playChimeTwinkle()
+            }
+            CreatureCategory.SEA_CREATURE -> {
+                soundManager?.playBubblePop()
             }
             CreatureCategory.WILD_ANIMAL -> {
                 soundManager?.playSqueak()
             }
-            CreatureCategory.SEA_CREATURE, CreatureCategory.DOODLE_FACE -> {
+            CreatureCategory.BIRD, CreatureCategory.BUTTERFLY, CreatureCategory.FLOWER -> {
+                soundManager?.playChimeTwinkle()
+            }
+            CreatureCategory.DOODLE_FACE -> {
                 soundManager?.playBubblePop()
             }
         }
