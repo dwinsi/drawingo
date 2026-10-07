@@ -4,7 +4,7 @@
  * GCP Project: project-2154682a-9280-4a32-a72
  */
 
-const { GoogleGenAI } = require('@google/genai');
+const { GoogleGenAI, GenerateVideosOperation } = require('@google/genai');
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'project-2154682a-9280-4a32-a72';
 const LOCATION = process.env.GCP_LOCATION || 'us-central1';
@@ -125,7 +125,9 @@ async function handleVideoStatus(req, res) {
     return res.status(400).json({ error: 'Invalid video operation identifier.' });
   }
   try {
-    const operation = await ai.operations.getVideosOperation({ operation: { name: operationId } });
+    const op = new GenerateVideosOperation();
+    op.name = operationId;
+    const operation = await ai.operations.getVideosOperation({ operation: op });
     if (!operation.done) return res.status(202).json({ status: 'processing' });
     if (operation.error) return res.status(502).json({ error: 'Video generation failed.' });
     const video = operation.response?.generatedVideos?.[0]?.video;
