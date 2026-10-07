@@ -1,5 +1,8 @@
 package com.example.drawingo.ui
 
+import android.net.Uri
+import android.widget.MediaController
+import android.widget.VideoView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.animation.expandVertically
@@ -37,6 +40,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.window.Dialog
@@ -69,6 +73,7 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -110,6 +115,9 @@ fun DrawingCanvas(
     val showGeminiDialog by viewModel.showGeminiDialog.collectAsState()
     val animationStatus by viewModel.animationStatus.collectAsState()
     val animationSubject by viewModel.animationSubject.collectAsState()
+    val isVideoGenerating by viewModel.isVideoGenerating.collectAsState()
+    val generatedVideo by viewModel.generatedVideo.collectAsState()
+    val videoError by viewModel.videoError.collectAsState()
 
     // Animation States
     val isAnimationActive by viewModel.isAnimationActive.collectAsState()
@@ -119,6 +127,8 @@ fun DrawingCanvas(
     val animationProgress by viewModel.animationProgress.collectAsState()
 
     var showAppSettings by remember { mutableStateOf(false) }
+    var showVideoPrompt by remember { mutableStateOf(false) }
+    var videoPrompt by remember { mutableStateOf("Gently bring the main subject to life with calm, flowing movement.") }
 
     var frameTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -127,6 +137,9 @@ fun DrawingCanvas(
                 frameTimeMs = System.currentTimeMillis()
             }
         }
+    }
+    LaunchedEffect(generatedVideo) {
+        if (generatedVideo != null) showVideoPrompt = false
     }
 
     Box(
@@ -214,6 +227,7 @@ fun DrawingCanvas(
                 val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(completedStrokes)
                 viewModel.triggerDrawingAnimation(context, bitmap, AppPreferences.isCloudAiAllowed(context))
             },
+            onGenerateVideoClick = { showVideoPrompt = true },
             onStopAnimationClick = { viewModel.stopAnimation() },
             onSettingsClick = { showAppSettings = true },
             modifier = Modifier
@@ -222,6 +236,92 @@ fun DrawingCanvas(
                 .padding(12.dp)
                 .align(Alignment.TopCenter)
         )
+
+        if (showVideoPrompt) {
+            Dialog(onDismissRequest = { if (!isVideoGenerating) showVideoPrompt = false }) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(0.94f),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(0xFFFFFEFA),
+                    shadowElevation = 8.dp
+                ) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Bring your drawing to life", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            if (AppPreferences.isCloudAiAllowed(context))
+                                "A copy of this drawing and your prompt will be sent to Google Cloud to create a 4-second video. The model may reinterpret the drawing, and each generation may incur a backend charge."
+                            else "Cloud AI is off. Enable it in Settings before sending a drawing to Google Cloud.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF555866)
+                        )
+                        OutlinedTextField(
+                            value = videoPrompt,
+                            onValueChange = { videoPrompt = it.take(800) },
+                            label = { Text("Describe the motion") },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                            maxLines = 4
+                        )
+                        videoError?.let { Text(it, color = Color(0xFFB4234D), style = MaterialTheme.typography.bodySmall) }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.TextButton(onClick = { showVideoPrompt = false }, enabled = !isVideoGenerating) { Text("Cancel") }
+                            Button(
+                                enabled = AppPreferences.isCloudAiAllowed(context) && !isVideoGenerating && completedStrokes.isNotEmpty(),
+                                onClick = {
+                                    val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(completedStrokes)
+                                    viewModel.generateVideo(context, bitmap, videoPrompt)
+                                },
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC53C65))
+                            ) {
+                                if (isVideoGenerating) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                                else Text("Create video")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (generatedVideo != null) {
+            Dialog(onDismissRequest = { viewModel.closeGeneratedVideo() }) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(0.96f),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(0xFFFFFEFA),
+                    shadowElevation = 8.dp
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Your drawing in motion", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
+                        AndroidView(
+                            modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(16.dp)),
+                            factory = { viewContext ->
+                                VideoView(viewContext).apply {
+                                    val controller = MediaController(viewContext)
+                                    controller.setAnchorView(this)
+                                    setMediaController(controller)
+                                    setVideoURI(Uri.fromFile(generatedVideo))
+                                    setOnPreparedListener { it.isLooping = true; start() }
+                                }
+                            },
+                            update = { view -> if (!view.isPlaying) view.start() }
+                        )
+                        Button(onClick = { viewModel.closeGeneratedVideo() }, modifier = Modifier.align(Alignment.End), shape = CircleShape) { Text("Done") }
+                    }
+                }
+            }
+        }
+
+        if (isVideoGenerating) {
+            Box(Modifier.fillMaxSize().background(Color(0x66000000)), contentAlignment = Alignment.Center) {
+                Surface(shape = RoundedCornerShape(24.dp), color = Color.White) {
+                    Row(Modifier.padding(22.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(color = Color(0xFFC53C65))
+                        Text("Creating your video… this can take a few minutes.", color = Color(0xFF343849))
+                    }
+                }
+            }
+        }
 
         if (showGeminiDialog) {
             Dialog(onDismissRequest = { viewModel.closeGeminiDialog() }) {
@@ -312,7 +412,7 @@ fun DrawingCanvas(
             AppSettingsDialog(
                 cloudAiEnabled = AppPreferences.isCloudAiAllowed(context),
                 backendUrl = AppPreferences.getBackendUrl(context),
-                onCloudAiEnabledChanged = { AppPreferences.setCloudAiAllowed(context, it) },
+            onCloudAiEnabledChanged = { AppPreferences.setCloudAiAllowed(context, it) },
                 onBackendUrlSaved = { AppPreferences.setBackendUrl(context, it) },
                 onDismiss = { showAppSettings = false }
             )
@@ -330,6 +430,7 @@ fun TopKeepBar(
     onRedo: () -> Unit,
     onClear: () -> Unit,
     onAnimateDrawingClick: () -> Unit,
+    onGenerateVideoClick: () -> Unit,
     onStopAnimationClick: () -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -348,7 +449,8 @@ fun TopKeepBar(
     ) {
         ModeSelector(
             animeEnabled = hasArtwork && !isAnimationActive,
-            onAnimeClick = onAnimateDrawingClick
+            onAnimeClick = onAnimateDrawingClick,
+            onGenerateVideoClick = onGenerateVideoClick
         )
         Row(horizontalArrangement = Arrangement.spacedBy(1.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactAction("↶", "Undo", enabled = canUndo, size = 40.dp, onClick = onUndo)
@@ -431,7 +533,8 @@ fun TopKeepBar(
 @Composable
 private fun ModeSelector(
     animeEnabled: Boolean,
-    onAnimeClick: () -> Unit
+    onAnimeClick: () -> Unit,
+    onGenerateVideoClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -450,6 +553,17 @@ private fun ModeSelector(
             contentAlignment = Alignment.Center
         ) {
             Text("🌠", fontSize = 24.sp)
+        }
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (animeEnabled) Color(0xFFE4F2F0) else Color(0xFFF2F0EC))
+                .clickable(enabled = animeEnabled, onClick = onGenerateVideoClick)
+                .semantics { contentDescription = "Create AI video from drawing" },
+            contentAlignment = Alignment.Center
+        ) {
+            Text("🎬", fontSize = 24.sp)
         }
     }
 }

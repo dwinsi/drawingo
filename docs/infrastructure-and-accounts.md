@@ -32,6 +32,8 @@ The Drawingo backend runs on **Google Cloud Run** as a fully managed serverless 
 | :--- | :--- | :--- |
 | `/health` | `GET` | Service liveness and ADC status check |
 | `/analyzeDrawing` | `POST` | Classifies a submitted drawing for animation using Gemini |
+| `/generateVideo` | `POST` | Starts an opt-in Veo image-to-video operation; returns 503 unless `ENABLE_VEO_GENERATION=true` |
+| `/videoStatus` | `POST` | Polls an existing Veo operation and returns video bytes when complete; also gated by `ENABLE_VEO_GENERATION=true` |
 
 The Android app no longer uses the former stock-sketch catalog or its Cloud Storage bucket. The bucket, if it still exists in the GCP project, is a legacy resource and is not modified by this code change.
 
@@ -39,6 +41,9 @@ The Android app no longer uses the former stock-sketch catalog or its Cloud Stor
 - **SDK:** Google Gen AI SDK (`@google/genai@2.27.0`)
 - **Primary Model:** `gemini-2.5-flash` (Vertex AI / Enterprise mode)
 - **Fallback Model:** `gemini-2.5-pro`
+- **Video model:** `veo-3.1-lite-generate-001` (4-second, 720p, silent image-to-video; disabled by default)
+
+> Do not enable Veo on the current public Cloud Run service until the service has authentication, per-user rate limits, and spending controls. Veo uses a paid model and public, unauthenticated generation routes can be abused. Configure `ENABLE_VEO_GENERATION=true` only on a secured test backend.
 
 ---
 

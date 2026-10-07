@@ -17,6 +17,6 @@ gcloud run deploy ${SERVICE_NAME} \
   --allow-unauthenticated \
   --memory=512Mi \
   --cpu=1 \
-  --set-env-vars="GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_GENAI_USE_ENTERPRISE=true"
+  --set-env-vars="GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_GENAI_USE_ENTERPRISE=true,ENABLE_VEO_GENERATION=false"
 
 echo "✨ Deployment to Google Cloud Run finished successfully!"

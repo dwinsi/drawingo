@@ -13,6 +13,8 @@ import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.InputStreamReader
+import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
@@ -125,6 +127,102 @@ object AdcBackendClient {
             }
         }
         return@withContext null
+    }
+
+    /** Generates a short Veo clip from the drawing and saves it only in app-private cache. */
+    suspend fun generateVideo(
+        context: Context,
+        bitmap: Bitmap,
+        prompt: String,
+        interactionId: String = UUID.randomUUID().toString()
+    ): File? = withContext(Dispatchers.IO) {
+        val baseUrl = getCandidateUrls().first()
+        val baos = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 82, baos)
+        val imageBytes = baos.toByteArray()
+        if (imageBytes.size > 5 * 1024 * 1024) return@withContext null
+        val request = JSONObject()
+            .put("imageBase64", Base64.encodeToString(imageBytes, Base64.NO_WRAP))
+            .put("mimeType", "image/jpeg")
+            .put("prompt", prompt.take(800))
+        GeminiInteractionLogger.record(context, interactionId, "veo_video_request", JSONObject()
+            .put("url", "$baseUrl/generateVideo")
+            .put("method", "POST")
+            .put("body", request)
+            .put("prompt", prompt.take(800))
+            .put("mimeType", "image/jpeg")
+            .put("imageBytes", imageBytes.size))
+
+        try {
+            val submit = postJson("$baseUrl/generateVideo", request, 60_000)
+            if (submit.first !in 200..299) {
+                GeminiInteractionLogger.record(context, interactionId, "veo_video_submit_error", JSONObject()
+                    .put("httpStatus", submit.first).put("body", submit.second.take(2000)))
+                return@withContext null
+            }
+            val submitResponse = JSONObject(submit.second)
+            val operationId = submitResponse.optString("operationId")
+            GeminiInteractionLogger.record(context, interactionId, "veo_video_submitted", JSONObject()
+                .put("httpStatus", submit.first)
+                .put("operationId", operationId)
+                .put("model", submitResponse.optString("model")))
+            if (operationId.isBlank()) return@withContext null
+
+            val startedAt = System.currentTimeMillis()
+            while (System.currentTimeMillis() - startedAt < 5 * 60_000L) {
+                kotlinx.coroutines.delay(10_000)
+                val status = postJson("$baseUrl/videoStatus", JSONObject().put("operationId", operationId), 90_000)
+                if (status.first == 202) {
+                    GeminiInteractionLogger.record(context, interactionId, "veo_video_poll", JSONObject()
+                        .put("httpStatus", status.first)
+                        .put("body", status.second.take(1000)))
+                    continue
+                }
+                if (status.first !in 200..299) {
+                    GeminiInteractionLogger.record(context, interactionId, "veo_video_response_error", JSONObject()
+                        .put("httpStatus", status.first).put("body", status.second.take(2000)))
+                    return@withContext null
+                }
+                val response = JSONObject(status.second)
+                val videoBase64 = response.getString("videoBase64")
+                if (videoBase64.length > 60 * 1024 * 1024) return@withContext null
+                val videoBytes = Base64.decode(videoBase64, Base64.DEFAULT)
+                if (videoBytes.size > 45 * 1024 * 1024) return@withContext null
+                val model = response.optString("model", "veo-3.1-lite-generate-001")
+                GeminiInteractionLogger.record(context, interactionId, "veo_video_response", JSONObject()
+                    .put("httpStatus", status.first).put("status", response.optString("status"))
+                    .put("model", model).put("mimeType", response.optString("mimeType"))
+                    .put("videoBase64Characters", videoBase64.length))
+                val videoFile = File(context.cacheDir, "drawingo-${UUID.randomUUID()}.mp4")
+                FileOutputStream(videoFile).use { it.write(videoBytes) }
+                GeminiInteractionLogger.record(context, interactionId, "veo_video_complete", JSONObject()
+                    .put("model", model)
+                    .put("videoBytes", videoBytes.size)
+                    .put("cacheFile", videoFile.name))
+                return@withContext videoFile
+            }
+            GeminiInteractionLogger.record(context, interactionId, "veo_video_timeout", JSONObject())
+            null
+        } catch (error: Exception) {
+            GeminiInteractionLogger.record(context, interactionId, "veo_video_error", JSONObject().put("message", error.toString()))
+            null
+        }
+    }
+
+    private fun postJson(urlValue: String, payload: JSONObject, readTimeoutMs: Int): Pair<Int, String> {
+        val connection = URL(urlValue).openConnection() as HttpURLConnection
+        connection.instanceFollowRedirects = false
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+        connection.doOutput = true
+        connection.connectTimeout = 15_000
+        connection.readTimeout = readTimeoutMs
+        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+        val code = connection.responseCode
+        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+        val body = stream?.use { BufferedReader(InputStreamReader(it, Charsets.UTF_8)).readText() }.orEmpty()
+        connection.disconnect()
+        return code to body
     }
 
 }

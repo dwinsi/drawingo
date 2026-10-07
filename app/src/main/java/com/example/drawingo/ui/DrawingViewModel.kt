@@ -17,6 +17,7 @@ import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
 import com.example.drawingo.model.Particle
 import com.example.drawingo.net.AdcBackendClient
+import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -92,6 +93,12 @@ class DrawingViewModel : ViewModel() {
 
     private val _animationSubject = MutableStateFlow("Your drawing")
     val animationSubject: StateFlow<String> = _animationSubject.asStateFlow()
+    private val _isVideoGenerating = MutableStateFlow(false)
+    val isVideoGenerating: StateFlow<Boolean> = _isVideoGenerating.asStateFlow()
+    private val _generatedVideo = MutableStateFlow<File?>(null)
+    val generatedVideo: StateFlow<File?> = _generatedVideo.asStateFlow()
+    private val _videoError = MutableStateFlow<String?>(null)
+    val videoError: StateFlow<String?> = _videoError.asStateFlow()
     private var currentGeminiInteractionId: String = ""
 
     // Drawing-to-Animation Core State
@@ -387,6 +394,27 @@ class DrawingViewModel : ViewModel() {
         _showGeminiDialog.value = false
     }
 
+    fun generateVideo(context: Context, canvasBitmap: Bitmap, prompt: String) {
+        if (_isVideoGenerating.value) return
+        viewModelScope.launch {
+            _isVideoGenerating.value = true
+            _videoError.value = null
+            _generatedVideo.value?.delete()
+            _generatedVideo.value = null
+            val result = AdcBackendClient.generateVideo(context, canvasBitmap, prompt)
+            _generatedVideo.value = result
+            if (result == null) {
+                _videoError.value = "Could not create the video. Check the backend setup and try again."
+            }
+            _isVideoGenerating.value = false
+        }
+    }
+
+    fun closeGeneratedVideo() {
+        _generatedVideo.value?.delete()
+        _generatedVideo.value = null
+    }
+
     fun onPointerCancel(pointerId: Long) {
         _activeStrokes.value = _activeStrokes.value - pointerId
     }
@@ -394,6 +422,8 @@ class DrawingViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         stopAnimation()
+        _generatedVideo.value?.delete()
+        _generatedVideo.value = null
         soundManager?.release()
         soundManager = null
     }

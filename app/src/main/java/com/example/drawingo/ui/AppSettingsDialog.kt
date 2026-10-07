@@ -57,9 +57,9 @@ fun AppSettingsDialog(
                 Text("Settings", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF25283A))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Cloud animation", style = MaterialTheme.typography.titleMedium, color = Color(0xFF25283A))
+                        Text("Cloud AI features", style = MaterialTheme.typography.titleMedium, color = Color(0xFF25283A))
                         Text(
-                            "When enabled, your drawing is sent to Drawingo's server and Google's Gemini to create an animation.",
+                            "When enabled, a drawing you choose to analyze or turn into a video is sent to your configured HTTPS backend and Google Cloud. Video generation is available only when the backend owner enables it.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF656979)
                         )

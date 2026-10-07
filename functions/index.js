@@ -8,6 +8,7 @@ const { GoogleGenAI } = require('@google/genai');
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'project-2154682a-9280-4a32-a72';
 const LOCATION = process.env.GCP_LOCATION || 'us-central1';
+const VEO_MODEL = process.env.VEO_MODEL || 'veo-3.1-lite-generate-001';
 
 // 1. Initialize Google Gen AI client via ADC (Vertex AI / Enterprise mode)
 const ai = new GoogleGenAI({
@@ -63,6 +64,76 @@ async function handleAnalyzeDrawing(req, res) {
       error: 'Gemini drawing analysis failed.',
       debug: { prompt, attempts: err.modelAttempts || generationAttempts, error: err.message }
     });
+  }
+}
+
+/** Starts an image-to-video generation. This endpoint is deliberately disabled by default. */
+async function handleGenerateVideo(req, res) {
+  if (process.env.ENABLE_VEO_GENERATION !== 'true') {
+    return res.status(503).json({ error: 'Video generation is not enabled on this backend.' });
+  }
+  const { imageBase64, mimeType = 'image/png', prompt = '' } = req.body || {};
+  if (typeof imageBase64 !== 'string' || !['image/png', 'image/jpeg'].includes(mimeType)) {
+    return res.status(400).json({ error: 'A PNG or JPEG image is required.' });
+  }
+  const cleanBase64 = imageBase64.replace(/^data:image\/(png|jpeg);base64,/, '');
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(cleanBase64) || cleanBase64.length > 7_000_000) {
+    return res.status(413).json({ error: 'Image is invalid or exceeds the 5 MB limit.' });
+  }
+  if (typeof prompt !== 'string' || prompt.length > 800) {
+    return res.status(400).json({ error: 'Prompt must be 800 characters or fewer.' });
+  }
+  try {
+    const operation = await ai.models.generateVideos({
+      model: VEO_MODEL,
+      source: {
+        prompt: [
+          'Create a calm, visually coherent short animation based on this original artwork.',
+          'Preserve the main subject and hand-drawn character of the artwork.',
+          'No text, logos, frightening imagery, or sudden camera movement.',
+          prompt.trim()
+        ].filter(Boolean).join(' '),
+        image: { imageBytes: cleanBase64, mimeType }
+      },
+      config: {
+        numberOfVideos: 1,
+        durationSeconds: 4,
+        aspectRatio: '16:9',
+        resolution: '720p',
+        generateAudio: false,
+        personGeneration: 'dont_allow',
+        negativePrompt: 'text, captions, logos, frightening imagery, violent actions, abrupt camera movement'
+      }
+    });
+    if (!operation.name) throw new Error('Video operation did not return an identifier.');
+    console.log(JSON.stringify({ event: 'veo_video_submitted', model: VEO_MODEL, operation: operation.name }));
+    return res.status(202).json({ operationId: operation.name, model: VEO_MODEL });
+  } catch (err) {
+    console.error('Error in generateVideo endpoint:', err.message);
+    return res.status(502).json({ error: 'Video generation could not be started.' });
+  }
+}
+
+/** Polls an existing Veo long-running operation and returns the completed MP4 as base64. */
+async function handleVideoStatus(req, res) {
+  if (process.env.ENABLE_VEO_GENERATION !== 'true') {
+    return res.status(503).json({ error: 'Video generation is not enabled on this backend.' });
+  }
+  const { operationId } = req.body || {};
+  const expectedPrefix = `projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${VEO_MODEL}/operations/`;
+  if (typeof operationId !== 'string' || !operationId.startsWith(expectedPrefix) || operationId.length > 512) {
+    return res.status(400).json({ error: 'Invalid video operation identifier.' });
+  }
+  try {
+    const operation = await ai.operations.getVideosOperation({ operation: { name: operationId } });
+    if (!operation.done) return res.status(202).json({ status: 'processing' });
+    if (operation.error) return res.status(502).json({ error: 'Video generation failed.' });
+    const video = operation.response?.generatedVideos?.[0]?.video;
+    if (!video?.videoBytes) return res.status(502).json({ error: 'The video result was unavailable.' });
+    return res.status(200).json({ status: 'complete', model: VEO_MODEL, mimeType: 'video/mp4', videoBase64: video.videoBytes });
+  } catch (err) {
+    console.error('Error polling Veo operation:', err.message);
+    return res.status(502).json({ error: 'Video status could not be retrieved.' });
   }
 }
 
@@ -149,5 +220,7 @@ function parseGeminiResponse(text) {
 }
 
 module.exports = {
-  handleAnalyzeDrawing
+  handleAnalyzeDrawing,
+  handleGenerateVideo,
+  handleVideoStatus
 };
