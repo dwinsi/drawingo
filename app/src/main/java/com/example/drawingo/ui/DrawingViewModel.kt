@@ -401,17 +401,17 @@ class DrawingViewModel : ViewModel() {
         _showGeminiDialog.value = false
     }
 
-    fun generateVideo(context: Context, canvasBitmap: Bitmap, prompt: String) {
+    fun generateVideo(context: Context, canvasBitmap: Bitmap, prompt: String, aspectRatio: String = "16:9") {
         if (_isVideoGenerating.value) return
         viewModelScope.launch {
             _isVideoGenerating.value = true
             _videoError.value = null
             _generatedVideo.value?.delete()
             _generatedVideo.value = null
-            val result = AdcBackendClient.generateVideo(context, canvasBitmap, prompt)
-            _generatedVideo.value = result
-            if (result == null) {
-                _videoError.value = "Could not create the video. Check the backend setup and try again."
+            val result = AdcBackendClient.generateVideo(context, canvasBitmap, prompt, aspectRatio)
+            _generatedVideo.value = result.file
+            if (result.file == null) {
+                _videoError.value = result.errorMessage ?: "Could not create the video. Check the backend setup and try again."
             }
             _isVideoGenerating.value = false
         }

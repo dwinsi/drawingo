@@ -129,36 +129,42 @@ object AdcBackendClient {
         return@withContext null
     }
 
+    data class VideoResult(val file: File? = null, val errorMessage: String? = null)
+
     /** Generates a short Veo clip from the drawing and saves it only in app-private cache. */
     suspend fun generateVideo(
         context: Context,
         bitmap: Bitmap,
         prompt: String,
+        aspectRatio: String = "16:9",
         interactionId: String = UUID.randomUUID().toString()
-    ): File? = withContext(Dispatchers.IO) {
+    ): VideoResult = withContext(Dispatchers.IO) {
         val baseUrl = getCandidateUrls().first()
         val baos = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 82, baos)
         val imageBytes = baos.toByteArray()
-        if (imageBytes.size > 5 * 1024 * 1024) return@withContext null
+        if (imageBytes.size > 5 * 1024 * 1024) return@withContext VideoResult(errorMessage = "Image size exceeds 5 MB limit.")
         val request = JSONObject()
             .put("imageBase64", Base64.encodeToString(imageBytes, Base64.NO_WRAP))
             .put("mimeType", "image/jpeg")
             .put("prompt", prompt.take(800))
+            .put("aspectRatio", aspectRatio)
         GeminiInteractionLogger.record(context, interactionId, "veo_video_request", JSONObject()
             .put("url", "$baseUrl/generateVideo")
             .put("method", "POST")
             .put("body", request)
             .put("prompt", prompt.take(800))
+            .put("aspectRatio", aspectRatio)
             .put("mimeType", "image/jpeg")
             .put("imageBytes", imageBytes.size))
 
         try {
             val submit = postJson("$baseUrl/generateVideo", request, 60_000)
             if (submit.first !in 200..299) {
+                val errorMsg = try { JSONObject(submit.second).optString("error", "Failed to start video generation.") } catch (e: Exception) { "Failed to start video generation." }
                 GeminiInteractionLogger.record(context, interactionId, "veo_video_submit_error", JSONObject()
-                    .put("httpStatus", submit.first).put("body", submit.second.take(2000)))
-                return@withContext null
+                    .put("httpStatus", submit.first).put("body", submit.second.take(2000)).put("error", errorMsg))
+                return@withContext VideoResult(errorMessage = errorMsg)
             }
             val submitResponse = JSONObject(submit.second)
             val operationId = submitResponse.optString("operationId")
@@ -166,7 +172,7 @@ object AdcBackendClient {
                 .put("httpStatus", submit.first)
                 .put("operationId", operationId)
                 .put("model", submitResponse.optString("model")))
-            if (operationId.isBlank()) return@withContext null
+            if (operationId.isBlank()) return@withContext VideoResult(errorMessage = "Backend did not return an operation ID.")
 
             val startedAt = System.currentTimeMillis()
             while (System.currentTimeMillis() - startedAt < 5 * 60_000L) {
@@ -179,15 +185,16 @@ object AdcBackendClient {
                     continue
                 }
                 if (status.first !in 200..299) {
+                    val errorMsg = try { JSONObject(status.second).optString("error", "Video generation failed.") } catch (e: Exception) { "Video generation failed." }
                     GeminiInteractionLogger.record(context, interactionId, "veo_video_response_error", JSONObject()
-                        .put("httpStatus", status.first).put("body", status.second.take(2000)))
-                    return@withContext null
+                        .put("httpStatus", status.first).put("body", status.second.take(2000)).put("error", errorMsg))
+                    return@withContext VideoResult(errorMessage = errorMsg)
                 }
                 val response = JSONObject(status.second)
                 val videoBase64 = response.getString("videoBase64")
-                if (videoBase64.length > 60 * 1024 * 1024) return@withContext null
+                if (videoBase64.length > 60 * 1024 * 1024) return@withContext VideoResult(errorMessage = "Generated video payload too large.")
                 val videoBytes = Base64.decode(videoBase64, Base64.DEFAULT)
-                if (videoBytes.size > 45 * 1024 * 1024) return@withContext null
+                if (videoBytes.size > 45 * 1024 * 1024) return@withContext VideoResult(errorMessage = "Generated video file exceeds 45 MB limit.")
                 val model = response.optString("model", "veo-3.1-lite-generate-001")
                 GeminiInteractionLogger.record(context, interactionId, "veo_video_response", JSONObject()
                     .put("httpStatus", status.first).put("status", response.optString("status"))
@@ -199,13 +206,13 @@ object AdcBackendClient {
                     .put("model", model)
                     .put("videoBytes", videoBytes.size)
                     .put("cacheFile", videoFile.name))
-                return@withContext videoFile
+                return@withContext VideoResult(file = videoFile)
             }
             GeminiInteractionLogger.record(context, interactionId, "veo_video_timeout", JSONObject())
-            null
+            VideoResult(errorMessage = "Video generation timed out after 5 minutes.")
         } catch (error: Exception) {
             GeminiInteractionLogger.record(context, interactionId, "veo_video_error", JSONObject().put("message", error.toString()))
-            null
+            VideoResult(errorMessage = error.localizedMessage ?: "Network error connecting to backend.")
         }
     }
 

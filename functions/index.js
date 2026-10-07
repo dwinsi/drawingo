@@ -72,7 +72,7 @@ async function handleGenerateVideo(req, res) {
   if (process.env.ENABLE_VEO_GENERATION !== 'true') {
     return res.status(503).json({ error: 'Video generation is not enabled on this backend.' });
   }
-  const { imageBase64, mimeType = 'image/png', prompt = '' } = req.body || {};
+  const { imageBase64, mimeType = 'image/png', prompt = '', aspectRatio = '16:9' } = req.body || {};
   if (typeof imageBase64 !== 'string' || !['image/png', 'image/jpeg'].includes(mimeType)) {
     return res.status(400).json({ error: 'A PNG or JPEG image is required.' });
   }
@@ -83,6 +83,7 @@ async function handleGenerateVideo(req, res) {
   if (typeof prompt !== 'string' || prompt.length > 800) {
     return res.status(400).json({ error: 'Prompt must be 800 characters or fewer.' });
   }
+  const validAspectRatio = (aspectRatio === '9:16') ? '9:16' : '16:9';
   try {
     const operation = await ai.models.generateVideos({
       model: VEO_MODEL,
@@ -98,7 +99,7 @@ async function handleGenerateVideo(req, res) {
       config: {
         numberOfVideos: 1,
         durationSeconds: 4,
-        aspectRatio: '16:9',
+        aspectRatio: validAspectRatio,
         resolution: '720p',
         generateAudio: false,
         personGeneration: 'dont_allow',
@@ -130,6 +131,10 @@ async function handleVideoStatus(req, res) {
     const operation = await ai.operations.getVideosOperation({ operation: op });
     if (!operation.done) return res.status(202).json({ status: 'processing' });
     if (operation.error) return res.status(502).json({ error: 'Video generation failed.' });
+    if (operation.response?.raiMediaFilteredCount > 0) {
+      const reason = operation.response?.raiMediaFilteredReasons?.[0] || 'The video was filtered by Vertex AI safety guidelines. Try rephrasing the prompt.';
+      return res.status(422).json({ error: reason });
+    }
     const video = operation.response?.generatedVideos?.[0]?.video;
     if (!video?.videoBytes) return res.status(502).json({ error: 'The video result was unavailable.' });
     return res.status(200).json({ status: 'complete', model: VEO_MODEL, mimeType: 'video/mp4', videoBase64: video.videoBytes });

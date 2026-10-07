@@ -32,4 +32,21 @@ object GeminiInteractionLogger {
     }
 
     fun logFile(context: Context): File = File(context.applicationContext.filesDir, "gemini_logs/$FILE_NAME")
+
+    @Synchronized
+    fun readLogs(context: Context): List<JSONObject> {
+        val file = logFile(context)
+        if (!file.exists()) return emptyList()
+        return try {
+            file.readLines(Charsets.UTF_8).filter { it.isNotBlank() }.map { JSONObject(it) }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    @Synchronized
+    fun clearLogs(context: Context) {
+        val file = logFile(context)
+        if (file.exists()) file.delete()
+    }
 }

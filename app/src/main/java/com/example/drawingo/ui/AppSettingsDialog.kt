@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +16,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,6 +39,7 @@ fun AppSettingsDialog(
     backendUrl: String,
     onCloudAiEnabledChanged: (Boolean) -> Unit,
     onBackendUrlSaved: (String) -> Unit,
+    onOpenApiLogs: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var cloudEnabled by remember { mutableStateOf(cloudAiEnabled) }
@@ -47,7 +50,7 @@ fun AppSettingsDialog(
         Card(
             modifier = Modifier.fillMaxWidth(0.94f).widthIn(max = 560.dp),
             shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = Color.White, contentColor = Color(0xFF25283A)),
             elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
             Column(
@@ -72,10 +75,32 @@ fun AppSettingsDialog(
                     onValueChange = { url = it },
                     placeholder = { Text("https://your-backend.example") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color(0xFF25283A),
+                        unfocusedTextColor = Color(0xFF25283A),
+                        cursorColor = Color(0xFFC53C65),
+                        focusedBorderColor = Color(0xFFC53C65),
+                        unfocusedBorderColor = Color(0xFF8E919C),
+                        focusedPlaceholderColor = Color(0xFF8E919C),
+                        unfocusedPlaceholderColor = Color(0xFF8E919C)
+                    )
                 )
                 if (!validUrl) Text("Use a secure HTTPS server URL.", color = Color(0xFFB4234D), style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = {
+                        onDismiss()
+                        onOpenApiLogs()
+                    }) {
+                        Text("📋 View API & Cloud logs", color = Color(0xFF69489B), style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Button(
@@ -93,3 +118,4 @@ fun AppSettingsDialog(
         }
     }
 }
+

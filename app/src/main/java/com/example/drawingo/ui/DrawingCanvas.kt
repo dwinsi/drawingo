@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +42,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.window.Dialog
@@ -55,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
@@ -132,9 +135,11 @@ fun DrawingCanvas(
     val animationProgress by viewModel.animationProgress.collectAsState()
 
     var showAppSettings by remember { mutableStateOf(false) }
+    var showApiLogsPage by remember { mutableStateOf(false) }
     var showPaperStyleMenu by remember { mutableStateOf(false) }
     var showVideoPrompt by remember { mutableStateOf(false) }
     var videoPrompt by remember { mutableStateOf("Gently bring the main subject to life with calm, flowing movement.") }
+    var videoAspectRatio by remember { mutableStateOf("16:9") }
 
     var frameTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -146,6 +151,9 @@ fun DrawingCanvas(
     }
     LaunchedEffect(generatedVideo) {
         if (generatedVideo != null) showVideoPrompt = false
+    }
+    LaunchedEffect(videoError) {
+        if (videoError != null) showVideoPrompt = true
     }
 
     Box(
@@ -159,7 +167,7 @@ fun DrawingCanvas(
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTransformGestures { _, pan, zoom, _ ->
-                        if (!isAnimationActive && (zoom != 1f || pan != Offset.Zero)) {
+                        if (!isAnimationActive && generatedVideo == null && (zoom != 1f || pan != Offset.Zero)) {
                             viewModel.onPanAndZoom(zoom, pan)
                         }
                     }
@@ -168,6 +176,9 @@ fun DrawingCanvas(
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Main)
+                            if (generatedVideo != null) {
+                                continue
+                            }
                             if (event.changes.size == 1) {
                                 for (change in event.changes) {
                                     val pointerId = change.id.value
@@ -215,27 +226,56 @@ fun DrawingCanvas(
                     // Draw Paper Background Layer First
                     drawPaperStyle(selectedPaperStyle)
 
-                    // Render Standard Static Canvas on top
-                    withTransform({
-                        translate(canvasOffsetX, canvasOffsetY)
-                        scale(canvasScale, canvasScale, pivot = Offset.Zero)
-                    }) {
-                        drawAllCanvasContent(
-                            completedStrokes = completedStrokes,
-                            activeStrokes = activeStrokes.values.toList()
-                        )
+                    // Render Standard Static Canvas on top only when not playing video
+                    if (generatedVideo == null) {
+                        withTransform({
+                            translate(canvasOffsetX, canvasOffsetY)
+                            scale(canvasScale, canvasScale, pivot = Offset.Zero)
+                        }) {
+                            drawAllCanvasContent(
+                                completedStrokes = completedStrokes,
+                                activeStrokes = activeStrokes.values.toList()
+                            )
+                        }
                     }
                 }
 
+            }
+
+            // Canvas-native Video Rendering across full canvas!
+            if (generatedVideo != null) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { viewContext ->
+                            VideoView(viewContext).apply {
+                                setVideoURI(Uri.fromFile(generatedVideo))
+                                setOnPreparedListener { mp ->
+                                    mp.isLooping = true
+                                    start()
+                                }
+                                setOnClickListener {
+                                    if (isPlaying) pause() else start()
+                                }
+                            }
+                        },
+                        update = { view ->
+                            if (!view.isPlaying) view.start()
+                        }
+                    )
+                }
             }
         }
 
         // Top Action Bar
         TopKeepBar(
-            canUndo = canUndo,
-            canRedo = canRedo,
-            hasArtwork = completedStrokes.isNotEmpty(),
-            isAnimationActive = isAnimationActive,
+            canUndo = canUndo && generatedVideo == null,
+            canRedo = canRedo && generatedVideo == null,
+            hasArtwork = completedStrokes.isNotEmpty() && generatedVideo == null,
+            isAnimationActive = isAnimationActive || (generatedVideo != null),
             onUndo = { viewModel.undo() },
             onRedo = { viewModel.redo() },
             onClear = { viewModel.clearCanvas() },
@@ -244,9 +284,13 @@ fun DrawingCanvas(
                 viewModel.triggerDrawingAnimation(context, bitmap, AppPreferences.isCloudAiAllowed(context))
             },
             onGenerateVideoClick = { showVideoPrompt = true },
-            onStopAnimationClick = { viewModel.stopAnimation() },
+            onStopAnimationClick = {
+                if (generatedVideo != null) viewModel.closeGeneratedVideo()
+                else viewModel.stopAnimation()
+            },
             onPaperStyleClick = { showPaperStyleMenu = true },
             onSettingsClick = { showAppSettings = true },
+            onApiLogsClick = { showApiLogsPage = true },
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
@@ -260,10 +304,16 @@ fun DrawingCanvas(
                     modifier = Modifier.fillMaxWidth(0.94f),
                     shape = RoundedCornerShape(24.dp),
                     color = Color(0xFFFFFEFA),
+                    contentColor = Color(0xFF25283A),
                     shadowElevation = 8.dp
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Bring your drawing to life", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            "Bring your drawing to life",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF25283A)
+                        )
                         Text(
                             if (AppPreferences.isCloudAiAllowed(context))
                                 "A copy of this drawing and your prompt will be sent to Google Cloud to create a 4-second video. The model may reinterpret the drawing, and each generation may incur a backend charge."
@@ -277,22 +327,69 @@ fun DrawingCanvas(
                             label = { Text("Describe the motion") },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2,
-                            maxLines = 4
+                            maxLines = 4,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color(0xFF25283A),
+                                unfocusedTextColor = Color(0xFF25283A),
+                                cursorColor = Color(0xFFC53C65),
+                                focusedBorderColor = Color(0xFFC53C65),
+                                unfocusedBorderColor = Color(0xFF8E919C),
+                                focusedLabelColor = Color(0xFFC53C65),
+                                unfocusedLabelColor = Color(0xFF555866),
+                                focusedPlaceholderColor = Color(0xFF8E919C),
+                                unfocusedPlaceholderColor = Color(0xFF8E919C)
+                            )
                         )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Aspect ratio", style = MaterialTheme.typography.labelMedium, color = Color(0xFF555866))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Surface(
+                                    onClick = { videoAspectRatio = "16:9" },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (videoAspectRatio == "16:9") Color(0xFFC53C65) else Color(0xFFF0EAE1),
+                                    contentColor = if (videoAspectRatio == "16:9") Color.White else Color(0xFF25283A)
+                                ) {
+                                    Text(
+                                        "16:9 Landscape",
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Surface(
+                                    onClick = { videoAspectRatio = "9:16" },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (videoAspectRatio == "9:16") Color(0xFFC53C65) else Color(0xFFF0EAE1),
+                                    contentColor = if (videoAspectRatio == "9:16") Color.White else Color(0xFF25283A)
+                                ) {
+                                    Text(
+                                        "9:16 Portrait",
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                         videoError?.let { Text(it, color = Color(0xFFB4234D), style = MaterialTheme.typography.bodySmall) }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                            androidx.compose.material3.TextButton(onClick = { showVideoPrompt = false }, enabled = !isVideoGenerating) { Text("Cancel") }
+                            androidx.compose.material3.TextButton(
+                                onClick = { showVideoPrompt = false },
+                                enabled = !isVideoGenerating,
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF555866))
+                            ) { Text("Cancel") }
                             Button(
                                 enabled = AppPreferences.isCloudAiAllowed(context) && !isVideoGenerating && completedStrokes.isNotEmpty(),
                                 onClick = {
+                                    showVideoPrompt = false
                                     val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(completedStrokes)
-                                    viewModel.generateVideo(context, bitmap, videoPrompt)
+                                    viewModel.generateVideo(context, bitmap, videoPrompt, videoAspectRatio)
                                 },
                                 shape = CircleShape,
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC53C65))
                             ) {
                                 if (isVideoGenerating) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                                else Text("Create video")
+                                else Text("Create video", color = Color.White)
                             }
                         }
                     }
@@ -300,31 +397,30 @@ fun DrawingCanvas(
             }
         }
 
+        // Floating Back to Drawing Pill when video is playing
         if (generatedVideo != null) {
-            Dialog(onDismissRequest = { viewModel.closeGeneratedVideo() }) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(0.96f),
-                    shape = RoundedCornerShape(24.dp),
-                    color = Color(0xFFFFFEFA),
-                    shadowElevation = 8.dp
+            Surface(
+                onClick = { viewModel.closeGeneratedVideo() },
+                shape = CircleShape,
+                color = Color(0xFFD94F79),
+                shadowElevation = 8.dp,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 24.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Your drawing in motion", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
-                        AndroidView(
-                            modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(16.dp)),
-                            factory = { viewContext ->
-                                VideoView(viewContext).apply {
-                                    val controller = MediaController(viewContext)
-                                    controller.setAnchorView(this)
-                                    setMediaController(controller)
-                                    setVideoURI(Uri.fromFile(generatedVideo))
-                                    setOnPreparedListener { it.isLooping = true; start() }
-                                }
-                            },
-                            update = { view -> if (!view.isPlaying) view.start() }
-                        )
-                        Button(onClick = { viewModel.closeGeneratedVideo() }, modifier = Modifier.align(Alignment.End), shape = CircleShape) { Text("Done") }
-                    }
+                    Text("✏️", fontSize = 18.sp)
+                    Text(
+                        "Back to drawing",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
         }
@@ -378,7 +474,7 @@ fun DrawingCanvas(
         }
 
         // Bottom Tool Dock
-        if (!isAnimationActive) {
+        if (!isAnimationActive && generatedVideo == null) {
             BottomDrawingoDock(
                 selectedTool = selectedTool,
                 selectedColor = selectedColor,
@@ -475,9 +571,19 @@ fun DrawingCanvas(
             AppSettingsDialog(
                 cloudAiEnabled = AppPreferences.isCloudAiAllowed(context),
                 backendUrl = AppPreferences.getBackendUrl(context),
-            onCloudAiEnabledChanged = { AppPreferences.setCloudAiAllowed(context, it) },
+                onCloudAiEnabledChanged = { AppPreferences.setCloudAiAllowed(context, it) },
                 onBackendUrlSaved = { AppPreferences.setBackendUrl(context, it) },
+                onOpenApiLogs = {
+                    showAppSettings = false
+                    showApiLogsPage = true
+                },
                 onDismiss = { showAppSettings = false }
+            )
+        }
+
+        if (showApiLogsPage) {
+            ApiLogsScreen(
+                onBack = { showApiLogsPage = false }
             )
         }
     }
@@ -497,6 +603,7 @@ fun TopKeepBar(
     onStopAnimationClick: () -> Unit,
     onPaperStyleClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onApiLogsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var actionsExpanded by remember { mutableStateOf(false) }
@@ -536,6 +643,10 @@ fun TopKeepBar(
                     DropdownMenuItem(
                         text = { Text("⚙️  Settings") },
                         onClick = { actionsExpanded = false; onSettingsClick() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("📋  API & Cloud logs") },
+                        onClick = { actionsExpanded = false; onApiLogsClick() }
                     )
                 }
             }
