@@ -49,7 +49,6 @@ data class AnimatedDrawingEntity(
 data class AnimationSceneResult(
     val sceneType: AnimationSceneType,
     val subjectName: String,
-    val rhymeText: String,
     val voiceStyle: String = "ENERGETIC",
     val musicTempo: String = "FAST",
     val particleDensity: String = "MEDIUM",

@@ -16,7 +16,7 @@ process.env.GOOGLE_CLOUD_LOCATION = process.env.GCP_LOCATION || 'us-central1';
 const express = require('express');
 const cors = require('cors');
 const { exec } = require('child_process');
-const { handleAnalyzeDrawing, handleSynthesizeSpeech, handleGetSketches, handleAddSketch } = require('./index');
+const { handleAnalyzeDrawing } = require('./index');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -25,9 +25,6 @@ app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 
 app.post('/analyzeDrawing', handleAnalyzeDrawing);
-app.post('/synthesizeSpeech', handleSynthesizeSpeech);
-app.get('/sketches', handleGetSketches);
-app.post('/sketches', handleAddSketch);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', project: 'project-2154682a-9280-4a32-a72', auth: 'ADC' });

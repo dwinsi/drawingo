@@ -8,25 +8,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.drawingo.animation.ParticleEngine
-import com.example.drawingo.audio.NaturalAudioPlayer
 import com.example.drawingo.audio.SoundManager
-import com.example.drawingo.audio.TextToSpeechManager
 import com.example.drawingo.model.AnimatedDrawingEntity
 import com.example.drawingo.model.AnimationSceneResult
 import com.example.drawingo.model.AnimationSceneType
-import com.example.drawingo.model.CanvasMode
-import com.example.drawingo.model.CreatureCategory
-import com.example.drawingo.model.CreatureType
 import com.example.drawingo.model.DrawingTool
 import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
-import com.example.drawingo.model.GooglyEyePair
-import com.example.drawingo.model.MagicCompanion
-import com.example.drawingo.model.NeonPalette
 import com.example.drawingo.model.Particle
-import com.example.drawingo.model.StockSketch
 import com.example.drawingo.net.AdcBackendClient
-import com.example.drawingo.net.SketchRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicLong
+import java.util.UUID
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
@@ -42,23 +33,13 @@ import kotlin.random.Random
 /**
  * Lightweight MVVM ViewModel managing Drawingo canvas mode,
  * tool selection, 2-finger Pan/Scroll & Pinch-Zoom, Undo/Redo,
- * Toddler Magic mode, and Gemini AI Drawing-to-Animation with ADC Backend Integration.
+ * drawing tools, canvas gestures, and optional cloud-assisted drawing animation.
  */
 class DrawingViewModel : ViewModel() {
 
     private val strokeIdGenerator = AtomicLong(1L)
-    private val eyeIdGenerator = AtomicLong(1L)
-    private val companionIdGenerator = AtomicLong(1L)
-    private var colorIndex = 0
-    private var creatureCycleIndex = 0
 
     var soundManager: SoundManager? = null
-    var textToSpeechManager: TextToSpeechManager? = null
-    var naturalAudioPlayer: NaturalAudioPlayer? = null
-
-    // Mode: DRAWINGO vs TODDLER_MAGIC
-    private val _canvasMode = MutableStateFlow(CanvasMode.DRAWINGO)
-    val canvasMode: StateFlow<CanvasMode> = _canvasMode.asStateFlow()
 
     // 2-Finger Pan and Zoom State
     private val _canvasScale = MutableStateFlow(1.0f)
@@ -101,14 +82,6 @@ class DrawingViewModel : ViewModel() {
     private val _activeStrokes = MutableStateFlow<Map<Long, DrawnStroke>>(emptyMap())
     val activeStrokes: StateFlow<Map<Long, DrawnStroke>> = _activeStrokes.asStateFlow()
 
-    // Spawned googly eyes
-    private val _googlyEyes = MutableStateFlow<List<GooglyEyePair>>(emptyList())
-    val googlyEyes: StateFlow<List<GooglyEyePair>> = _googlyEyes.asStateFlow()
-
-    // Spawned magical companions
-    private val _magicCompanions = MutableStateFlow<List<MagicCompanion>>(emptyList())
-    val magicCompanions: StateFlow<List<MagicCompanion>> = _magicCompanions.asStateFlow()
-
     // Wipe animation state
     private val _wipeProgress = MutableStateFlow(0f)
     val wipeProgress: StateFlow<Float> = _wipeProgress.asStateFlow()
@@ -116,15 +89,19 @@ class DrawingViewModel : ViewModel() {
     private val _isWiping = MutableStateFlow(false)
     val isWiping: StateFlow<Boolean> = _isWiping.asStateFlow()
 
-    // Gemini AI Magic State
+    // Drawing analysis status
     private val _isGeminiLoading = MutableStateFlow(false)
     val isGeminiLoading: StateFlow<Boolean> = _isGeminiLoading.asStateFlow()
 
-    private val _geminiRhymeText = MutableStateFlow<String?>(null)
-    val geminiRhymeText: StateFlow<String?> = _geminiRhymeText.asStateFlow()
-
     private val _showGeminiDialog = MutableStateFlow(false)
     val showGeminiDialog: StateFlow<Boolean> = _showGeminiDialog.asStateFlow()
+
+    private val _animationStatus = MutableStateFlow<String?>(null)
+    val animationStatus: StateFlow<String?> = _animationStatus.asStateFlow()
+
+    private val _animationSubject = MutableStateFlow("Your drawing")
+    val animationSubject: StateFlow<String> = _animationSubject.asStateFlow()
+    private var currentGeminiInteractionId: String = ""
 
     // Drawing-to-Animation Core State
     private val _isAnimationActive = MutableStateFlow(false)
@@ -142,19 +119,6 @@ class DrawingViewModel : ViewModel() {
     private val _animationProgress = MutableStateFlow(0f)
     val animationProgress: StateFlow<Float> = _animationProgress.asStateFlow()
 
-    // Stock Sketches & Coloring Templates
-    private val _stockSketches = MutableStateFlow<List<StockSketch>>(emptyList())
-    val stockSketches: StateFlow<List<StockSketch>> = _stockSketches.asStateFlow()
-
-    private val _selectedSketch = MutableStateFlow<StockSketch?>(null)
-    val selectedSketch: StateFlow<StockSketch?> = _selectedSketch.asStateFlow()
-
-    private val _activeSketchBitmap = MutableStateFlow<Bitmap?>(null)
-    val activeSketchBitmap: StateFlow<Bitmap?> = _activeSketchBitmap.asStateFlow()
-
-    private val _isSketchesLoading = MutableStateFlow(false)
-    val isSketchesLoading: StateFlow<Boolean> = _isSketchesLoading.asStateFlow()
-
     private var inactivityJob: Job? = null
     private var wipeAnimationJob: Job? = null
     private var animationLoopJob: Job? = null
@@ -162,96 +126,11 @@ class DrawingViewModel : ViewModel() {
     companion object {
         const val INACTIVITY_TIMEOUT_MS = 60_000L
         const val WIPE_DURATION_MS = 1_200L
-        private const val MAX_STORED_EYES = 35
-        private const val MAX_STORED_COMPANIONS = 35
         private const val MAX_STORED_STROKES = 250
-
-        // Prioritized sticker stamp cycle: Celestial Objects, Sea Animals, and Wild Animals
-        private val StickerCyclePool = listOf(
-            // Preferred 1: Celestial Objects
-            CreatureType.SMILING_SUN,
-            // Preferred 2: Sea Animals
-            CreatureType.BABY_WHALE,
-            // Preferred 3: Wild Animals
-            CreatureType.LION,
-            // Preferred 1: Celestial Objects
-            CreatureType.CRESCENT_MOON,
-            // Preferred 2: Sea Animals
-            CreatureType.OCTOPUS,
-            // Preferred 3: Wild Animals
-            CreatureType.CUTE_PANDA,
-            // Preferred 1: Celestial Objects
-            CreatureType.TWINKLE_STAR,
-            // Preferred 2: Sea Animals
-            CreatureType.SEA_TURTLE,
-            // Preferred 3: Wild Animals
-            CreatureType.ELEPHANT,
-            // Classic friends (retained for variety and backward compatibility)
-            CreatureType.LITTLE_BIRD,
-            CreatureType.BUTTERFLY,
-            CreatureType.BLOOMING_FLOWER,
-            // Celestial Objects (Batch 2)
-            CreatureType.PLANET_SATURN,
-            // Sea Animals (Batch 2)
-            CreatureType.CLOWN_FISH,
-            // Wild Animals (Batch 2)
-            CreatureType.BABY_BEAR,
-            // Celestial Objects (Batch 3)
-            CreatureType.COSMIC_ROCKET,
-            // Sea Animals (Batch 3)
-            CreatureType.JELLYFISH,
-            // Wild Animals (Batch 3)
-            CreatureType.PLAYFUL_MONKEY,
-            // Celestial Objects (Batch 4)
-            CreatureType.SHOOTING_COMET,
-            // Sea Animals (Batch 4)
-            CreatureType.STARFISH,
-            // Wild Animals (Batch 4)
-            CreatureType.GIRAFFE
-        )
-
-        fun getColorsForCreature(type: CreatureType): Pair<Color, Color> {
-            return when (type) {
-                // Celestial Objects
-                CreatureType.SMILING_SUN -> Pair(Color(0xFFFFD600), Color(0xFFFF6D00))
-                CreatureType.CRESCENT_MOON -> Pair(Color(0xFFFFF9C4), Color(0xFFFFD54F))
-                CreatureType.TWINKLE_STAR -> Pair(Color(0xFFFFEA00), Color(0xFFFF9100))
-                CreatureType.PLANET_SATURN -> Pair(Color(0xFF8B5CF6), Color(0xFF00F0FF))
-                CreatureType.COSMIC_ROCKET -> Pair(Color(0xFF00E5FF), Color(0xFFFF1744))
-                CreatureType.SHOOTING_COMET -> Pair(Color(0xFFFF007F), Color(0xFFFFD600))
-
-                // Sea Animals
-                CreatureType.OCTOPUS -> Pair(Color(0xFFFF4081), Color(0xFFB026FF))
-                CreatureType.JELLYFISH -> Pair(Color(0xFF00F0FF), Color(0xFFFF1493))
-                CreatureType.CLOWN_FISH -> Pair(Color(0xFFFF6D00), Color(0xFFFFFFFF))
-                CreatureType.STARFISH -> Pair(Color(0xFFFF5252), Color(0xFFFFD600))
-                CreatureType.BABY_WHALE -> Pair(Color(0xFF0091EA), Color(0xFF80D8FF))
-                CreatureType.SEA_TURTLE -> Pair(Color(0xFF00E676), Color(0xFFAEEA00))
-
-                // Wild Animals
-                CreatureType.LION -> Pair(Color(0xFFFFB300), Color(0xFFE65100))
-                CreatureType.BABY_BEAR -> Pair(Color(0xFF8D6E63), Color(0xFFD7CCC8))
-                CreatureType.ELEPHANT -> Pair(Color(0xFF90CAF9), Color(0xFFF48FB1))
-                CreatureType.PLAYFUL_MONKEY -> Pair(Color(0xFFA1887F), Color(0xFFFFE0B2))
-                CreatureType.CUTE_PANDA -> Pair(Color(0xFFFFFFFF), Color(0xFF1E1B2E))
-                CreatureType.GIRAFFE -> Pair(Color(0xFFFFCA28), Color(0xFF795548))
-
-                // Birds & Classic
-                CreatureType.LITTLE_BIRD -> Pair(Color(0xFF00E5FF), Color(0xFFFFD600))
-                CreatureType.PENGUIN -> Pair(Color(0xFF1E1B2E), Color(0xFFFFFFFF))
-                CreatureType.BUTTERFLY -> Pair(Color(0xFFFF007F), Color(0xFF00E5FF))
-                CreatureType.BLOOMING_FLOWER -> Pair(Color(0xFFFF1493), Color(0xFFFFD600))
-                CreatureType.SUNFLOWER -> Pair(Color(0xFFFFEA00), Color(0xFFFF6D00))
-            }
-        }
     }
 
     init {
         resetInactivityTimer()
-    }
-
-    fun setCanvasMode(mode: CanvasMode) {
-        _canvasMode.value = mode
     }
 
     fun setTool(tool: DrawingTool) {
@@ -318,41 +197,13 @@ class DrawingViewModel : ViewModel() {
     }
 
     fun clearCanvas() {
-        if (_completedStrokes.value.isNotEmpty() || _googlyEyes.value.isNotEmpty() || _magicCompanions.value.isNotEmpty()) {
+        if (_completedStrokes.value.isNotEmpty()) {
             stopAnimation()
             _undoStack.value = _undoStack.value + listOf(_completedStrokes.value)
             _redoStack.value = emptyList()
             _completedStrokes.value = emptyList()
-            _googlyEyes.value = emptyList()
-            _magicCompanions.value = emptyList()
             updateUndoRedoStates()
         }
-    }
-
-    fun loadStockSketches(context: Context, forceRefresh: Boolean = false) {
-        viewModelScope.launch {
-            _isSketchesLoading.value = true
-            try {
-                val list = SketchRepository.getSketches(context, forceRefresh)
-                _stockSketches.value = list
-            } catch (_: Exception) {
-            } finally {
-                _isSketchesLoading.value = false
-            }
-        }
-    }
-
-    fun selectSketch(context: Context, sketch: StockSketch) {
-        viewModelScope.launch {
-            _selectedSketch.value = sketch
-            _activeSketchBitmap.value = SketchRepository.loadSketchBitmap(context, sketch)
-            soundManager?.playChimeTwinkle()
-        }
-    }
-
-    fun clearSketch() {
-        _selectedSketch.value = null
-        _activeSketchBitmap.value = null
     }
 
     private fun updateUndoRedoStates() {
@@ -364,48 +215,34 @@ class DrawingViewModel : ViewModel() {
         cancelActiveWipe()
         resetInactivityTimer()
 
-        val mode = _canvasMode.value
         val tool = _selectedTool.value
         val canvasPos = toCanvasCoordinate(screenPosition)
 
-        val newStroke = if (mode == CanvasMode.DRAWINGO) {
-            val strokeColor = when (tool) {
-                DrawingTool.ERASER -> Color.White
-                DrawingTool.PEN, DrawingTool.HIGHLIGHTER, DrawingTool.BRUSH, DrawingTool.LASSO -> _selectedColor.value
-            }
-            val strokeWidth = when (tool) {
-                DrawingTool.PEN -> _selectedStrokeWidth.value
-                DrawingTool.HIGHLIGHTER -> _selectedStrokeWidth.value * 2.2f
-                DrawingTool.BRUSH -> _selectedStrokeWidth.value * 1.8f
-                DrawingTool.ERASER -> _selectedEraserWidth.value
-                DrawingTool.LASSO -> 4f
-            }
-            val alpha = when (tool) {
-                DrawingTool.PEN -> 1.0f
-                DrawingTool.HIGHLIGHTER -> 0.38f
-                DrawingTool.BRUSH -> 0.85f
-                DrawingTool.ERASER, DrawingTool.LASSO -> 1.0f
-            }
-
-            DrawnStroke(
-                id = strokeIdGenerator.getAndIncrement(),
-                color = strokeColor,
-                strokeWidth = strokeWidth,
-                alpha = alpha,
-                tool = tool,
-                points = listOf(canvasPos)
-            )
-        } else {
-            val nextColor = NeonPalette.getColor(colorIndex++)
-            DrawnStroke(
-                id = strokeIdGenerator.getAndIncrement(),
-                color = nextColor,
-                strokeWidth = 32f,
-                alpha = 1.0f,
-                tool = DrawingTool.PEN,
-                points = listOf(canvasPos)
-            )
+        val strokeColor = when (tool) {
+            DrawingTool.ERASER -> Color.White
+            DrawingTool.PEN, DrawingTool.HIGHLIGHTER, DrawingTool.BRUSH, DrawingTool.LASSO -> _selectedColor.value
         }
+        val strokeWidth = when (tool) {
+            DrawingTool.PEN -> _selectedStrokeWidth.value
+            DrawingTool.HIGHLIGHTER -> _selectedStrokeWidth.value * 2.2f
+            DrawingTool.BRUSH -> _selectedStrokeWidth.value * 1.8f
+            DrawingTool.ERASER -> _selectedEraserWidth.value
+            DrawingTool.LASSO -> 4f
+        }
+        val alpha = when (tool) {
+            DrawingTool.PEN -> 1.0f
+            DrawingTool.HIGHLIGHTER -> 0.38f
+            DrawingTool.BRUSH -> 0.85f
+            DrawingTool.ERASER, DrawingTool.LASSO -> 1.0f
+        }
+        val newStroke = DrawnStroke(
+            id = strokeIdGenerator.getAndIncrement(),
+            color = strokeColor,
+            strokeWidth = strokeWidth,
+            alpha = alpha,
+            tool = tool,
+            points = listOf(canvasPos)
+        )
 
         _activeStrokes.value = _activeStrokes.value + (pointerId to newStroke)
     }
@@ -441,142 +278,15 @@ class DrawingViewModel : ViewModel() {
             boundingBox = DrawnStroke.calculateBounds(stroke.points)
         )
 
-        if (_canvasMode.value == CanvasMode.DRAWINGO) {
-            _undoStack.value = _undoStack.value + listOf(_completedStrokes.value)
-            _redoStack.value = emptyList()
-
-            val currentList = _completedStrokes.value
-            _completedStrokes.value = if (currentList.size >= MAX_STORED_STROKES) {
-                currentList.drop(currentList.size - MAX_STORED_STROKES + 1) + finalStroke
-            } else {
-                currentList + finalStroke
-            }
-            updateUndoRedoStates()
+        _undoStack.value = _undoStack.value + listOf(_completedStrokes.value)
+        _redoStack.value = emptyList()
+        val currentList = _completedStrokes.value
+        _completedStrokes.value = if (currentList.size >= MAX_STORED_STROKES) {
+            currentList.drop(currentList.size - MAX_STORED_STROKES + 1) + finalStroke
         } else {
-            val width = finalStroke.boundingBox.width
-            val height = finalStroke.boundingBox.height
-            val isTap = finalStroke.points.size <= 1 || (width < 10f && height < 10f)
-
-            // In Toddler Magic mode: whether a dot (tap) or a line:
-            // Spawn a clean, vibrant, large magical sticker stamp!
-            val spawnPos = if (isTap) {
-                finalStroke.points.firstOrNull() ?: Offset(finalStroke.boundingBox.left, finalStroke.boundingBox.top)
-            } else {
-                // For lines, place the sticker stamp cleanly at the end of the stroke
-                finalStroke.points.lastOrNull() ?: finalStroke.boundingBox.center
-            }
-
-            spawnMagicalCompanionAt(spawnPos, isDirectTap = isTap)
+            currentList + finalStroke
         }
-    }
-
-    fun spawnMagicalCompanionAt(position: Offset, isDirectTap: Boolean) {
-        val type = StickerCyclePool[(creatureCycleIndex++) % StickerCyclePool.size]
-        val colors = getColorsForCreature(type)
-
-        // Much bigger, tactile, punchy stickers (215f - 240f) as requested!
-        val baseSize = if (isDirectTap) 240f else 215f
-
-        val companion = MagicCompanion(
-            id = companionIdGenerator.getAndIncrement(),
-            type = type,
-            position = position,
-            size = baseSize,
-            primaryColor = colors.first,
-            secondaryColor = colors.second,
-            spawnTimestamp = System.currentTimeMillis()
-        )
-
-        val currentCompanions = _magicCompanions.value
-        _magicCompanions.value = if (currentCompanions.size >= MAX_STORED_COMPANIONS) {
-            currentCompanions.drop(currentCompanions.size - MAX_STORED_COMPANIONS + 1) + companion
-        } else {
-            currentCompanions + companion
-        }
-
-        when (type.category) {
-            CreatureCategory.CELESTIAL -> {
-                soundManager?.playChimeTwinkle()
-            }
-            CreatureCategory.SEA_CREATURE -> {
-                soundManager?.playBubblePop()
-            }
-            CreatureCategory.WILD_ANIMAL -> {
-                soundManager?.playSqueak()
-            }
-            CreatureCategory.BIRD, CreatureCategory.BUTTERFLY, CreatureCategory.FLOWER -> {
-                soundManager?.playChimeTwinkle()
-            }
-            CreatureCategory.DOODLE_FACE -> {
-                soundManager?.playBubblePop()
-            }
-        }
-    }
-
-    private fun spawnGooglyEyes(bounds: Rect, points: List<Offset>) {
-        val width = bounds.width
-        val height = bounds.height
-
-        val eyeRadius: Float
-        val leftCenter: Offset
-        val rightCenter: Offset
-
-        if (width < 30f && height < 30f) {
-            val center = points.firstOrNull() ?: Offset(bounds.left, bounds.top)
-            eyeRadius = 32f
-            val spacing = eyeRadius * 2.1f
-            leftCenter = Offset(center.x - spacing / 2f, center.y - 10f)
-            rightCenter = Offset(center.x + spacing / 2f, center.y - 10f)
-        } else {
-            val baseDim = min(width, height)
-            eyeRadius = (baseDim * 0.22f).coerceIn(28f, 72f)
-            val spacing = eyeRadius * 2.2f
-
-            val cx = bounds.left + width / 2f
-            val cy = if (height > eyeRadius * 2.5f) {
-                bounds.top + height * 0.35f
-            } else {
-                bounds.top + height * 0.5f
-            }
-
-            leftCenter = Offset(cx - spacing / 2f, cy)
-            rightCenter = Offset(cx + spacing / 2f, cy)
-        }
-
-        val pupilRadius = eyeRadius * 0.44f
-        val maxOffset = eyeRadius * 0.38f
-
-        val mode = Random.nextInt(4)
-        val (leftPupilOffset, rightPupilOffset) = when (mode) {
-            0 -> Pair(Offset(maxOffset * 0.7f, maxOffset * 0.5f), Offset(-maxOffset * 0.7f, maxOffset * 0.5f))
-            1 -> {
-                val angle = Random.nextFloat() * 6.28f
-                val dist = maxOffset * (0.4f + Random.nextFloat() * 0.6f)
-                val offset = Offset(cos(angle) * dist, sin(angle) * dist)
-                Pair(offset, offset)
-            }
-            2 -> Pair(Offset(-maxOffset * 0.7f, 0f), Offset(maxOffset * 0.7f, 0f))
-            else -> Pair(Offset(0f, maxOffset * 0.8f), Offset(0f, maxOffset * 0.8f))
-        }
-
-        val eyePair = GooglyEyePair(
-            id = eyeIdGenerator.getAndIncrement(),
-            leftCenter = leftCenter,
-            rightCenter = rightCenter,
-            radius = eyeRadius,
-            pupilRadius = pupilRadius,
-            leftPupilOffset = leftPupilOffset,
-            rightPupilOffset = rightPupilOffset,
-            hasSmile = true,
-            spawnTimestamp = System.currentTimeMillis()
-        )
-
-        val currentEyes = _googlyEyes.value
-        _googlyEyes.value = if (currentEyes.size >= MAX_STORED_EYES) {
-            currentEyes.drop(currentEyes.size - MAX_STORED_EYES + 1) + eyePair
-        } else {
-            currentEyes + eyePair
-        }
+        updateUndoRedoStates()
     }
 
     /**
@@ -588,24 +298,31 @@ class DrawingViewModel : ViewModel() {
 
         viewModelScope.launch {
             _isGeminiLoading.value = true
+            _animationStatus.value = null
+            currentGeminiInteractionId = UUID.randomUUID().toString()
             soundManager?.playChimeTwinkle()
 
-            // Child artwork stays on-device unless a parent explicitly opted into cloud analysis.
             val sceneResult = if (allowCloudAi) {
-                AdcBackendClient.analyzeDrawing(canvasBitmap) ?: offlineAnimationScene()
-            } else {
-                offlineAnimationScene()
-            }
+                AdcBackendClient.analyzeDrawing(context, canvasBitmap, currentGeminiInteractionId)
+            } else null
 
             _isGeminiLoading.value = false
-            _geminiRhymeText.value = sceneResult.rhymeText
+            if (sceneResult == null) {
+                _animationStatus.value = if (allowCloudAi) {
+                    "Cloud analysis could not connect. Showing a local animation preview."
+                } else {
+                    "Cloud animation is off. Enable it in Settings to analyze this drawing."
+                }
+            }
+            val activeScene = sceneResult ?: AnimationSceneResult(AnimationSceneType.MAGIC_DANCE, "Your drawing")
+            _animationSubject.value = sceneResult?.subjectName ?: "Your drawing"
             _showGeminiDialog.value = true
-            _activeAnimationScene.value = sceneResult.sceneType
+            _activeAnimationScene.value = activeScene.sceneType
 
-            var minX = Float.MAX_VALUE
-            var minY = Float.MAX_VALUE
-            var maxX = Float.MIN_VALUE
-            var maxY = Float.MIN_VALUE
+            var minX = Float.POSITIVE_INFINITY
+            var minY = Float.POSITIVE_INFINITY
+            var maxX = Float.NEGATIVE_INFINITY
+            var maxY = Float.NEGATIVE_INFINITY
             for (s in strokes) {
                 for (p in s.points) {
                     if (p.x < minX) minX = p.x
@@ -618,19 +335,6 @@ class DrawingViewModel : ViewModel() {
             _animatedEntity.value = AnimatedDrawingEntity(strokes = strokes, bounds = bounds)
 
             startAnimationLoop()
-            speakNaturalVoiceRhyme(context, sceneResult.rhymeText, allowCloudAi)
-        }
-    }
-
-    private suspend fun speakNaturalVoiceRhyme(context: Context, text: String, allowCloudAi: Boolean) {
-        val naturalAudioFile = if (allowCloudAi) AdcBackendClient.synthesizeSpeech(context, text) else null
-
-        if (naturalAudioFile != null && naturalAudioFile.exists()) {
-            textToSpeechManager?.stop()
-            naturalAudioPlayer?.playAudioFile(naturalAudioFile)
-        } else {
-            naturalAudioPlayer?.stop()
-            textToSpeechManager?.speakRhyme(text)
         }
     }
 
@@ -693,38 +397,10 @@ class DrawingViewModel : ViewModel() {
         _animatedEntity.value = null
         _particles.value = emptyList()
         animationLoopJob?.cancel()
-        naturalAudioPlayer?.stop()
-        textToSpeechManager?.stop()
-    }
-
-    fun replayGeminiSpeech(context: Context, allowCloudAi: Boolean) {
-        val text = _geminiRhymeText.value
-        if (!text.isNullOrBlank()) {
-            if (naturalAudioPlayer?.isPlaying() == false) {
-                naturalAudioPlayer?.replay()
-            } else {
-                viewModelScope.launch {
-                    speakNaturalVoiceRhyme(context, text, allowCloudAi)
-                }
-            }
-        }
-    }
-
-    private fun offlineAnimationScene(): AnimationSceneResult {
-        val scenes = listOf(
-            AnimationSceneResult(AnimationSceneType.OCEAN_LEAP, "Little Fish", "Splish splash, little fish, swim around!\nShimmering bubbles dance without a sound!"),
-            AnimationSceneResult(AnimationSceneType.SKY_FLIGHT, "Little Bird", "Flap, flap, little bird, up in the sky!\nWave to the clouds as you flutter by!"),
-            AnimationSceneResult(AnimationSceneType.SPACE_LAUNCH, "Rocket", "Zoom, zoom, rocket, up to the stars!\nWave to the moon as you fly past Mars!"),
-            AnimationSceneResult(AnimationSceneType.LAND_SAFARI, "Happy Lion", "A happy lion dances around!\nMaking soft pawprints upon the ground!"),
-            AnimationSceneResult(AnimationSceneType.MAGIC_DANCE, "Magic Doodle", "Twirl and sparkle, colors so bright!\nYour lovely doodle is dancing tonight!")
-        )
-        return scenes[Random.nextInt(scenes.size)]
     }
 
     fun closeGeminiDialog() {
         _showGeminiDialog.value = false
-        naturalAudioPlayer?.stop()
-        textToSpeechManager?.stop()
     }
 
     fun onPointerCancel(pointerId: Long) {
@@ -736,8 +412,7 @@ class DrawingViewModel : ViewModel() {
         inactivityJob?.cancel()
         inactivityJob = viewModelScope.launch {
             delay(INACTIVITY_TIMEOUT_MS)
-            if (_completedStrokes.value.isNotEmpty() || _googlyEyes.value.isNotEmpty() ||
-                _activeStrokes.value.isNotEmpty() || _magicCompanions.value.isNotEmpty()) {
+            if (_completedStrokes.value.isNotEmpty() || _activeStrokes.value.isNotEmpty()) {
                 triggerWipeAndClear()
             }
         }
@@ -757,8 +432,6 @@ class DrawingViewModel : ViewModel() {
 
             _completedStrokes.value = emptyList()
             _activeStrokes.value = emptyMap()
-            _googlyEyes.value = emptyList()
-            _magicCompanions.value = emptyList()
             _wipeProgress.value = 0f
             _isWiping.value = false
         }
@@ -779,9 +452,5 @@ class DrawingViewModel : ViewModel() {
         wipeAnimationJob?.cancel()
         soundManager?.release()
         soundManager = null
-        textToSpeechManager?.release()
-        textToSpeechManager = null
-        naturalAudioPlayer?.release()
-        naturalAudioPlayer = null
     }
 }

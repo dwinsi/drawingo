@@ -16,7 +16,6 @@ import com.example.drawingo.model.AnimationSceneType
 import com.example.drawingo.model.Particle
 import com.example.drawingo.model.ParticleType
 import kotlin.math.PI
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -301,60 +300,51 @@ object CanvasAnimationRenderer {
         val targetDim = (minOf(w, h) * 0.35f).coerceAtLeast(120f)
         val baseScale = targetDim / maxOf(drawnWidth, drawnHeight)
 
+        val phase = progress * 2f * PI.toFloat()
+        val drift = sin(phase).toFloat()
+        val bounce = kotlin.math.abs(sin(phase * 2f)).toFloat()
         val posX: Float
         val posY: Float
-        val rotAngle: Float
         var scaleX = baseScale
         var scaleY = baseScale
 
         when (sceneType) {
             AnimationSceneType.OCEAN_LEAP -> {
-                val waterY = h * 0.65f
-                val startX = w * 0.12f
-                val endX = w * 0.88f
-                val jumpHeight = h * 0.38f
-
-                val p = progress.coerceIn(0f, 1f)
-                posX = startX + p * (endX - startX)
-                posY = waterY - sin(p * PI).toFloat() * jumpHeight
-
-                val dx = endX - startX
-                val dy = -cos(p * PI).toFloat() * jumpHeight * PI.toFloat()
-                rotAngle = (atan2(dy, dx) * 180f / PI.toFloat()).coerceIn(-65f, 65f)
-            }
-            AnimationSceneType.SKY_FLIGHT -> {
-                val p = progress.coerceIn(0f, 1f)
-                posX = -drawnWidth + p * (w + drawnWidth * 2f)
-                posY = h * 0.35f + sin(p * 4 * PI).toFloat() * h * 0.12f
-                rotAngle = sin(p * 4 * PI).toFloat() * 15f
-            }
-            AnimationSceneType.SPACE_LAUNCH -> {
-                val p = progress.coerceIn(0f, 1f)
-                posX = w * 0.15f + p * (w * 0.75f)
-                posY = h * 0.80f - p * (h * 0.65f)
-                rotAngle = -35f
-            }
-            AnimationSceneType.LAND_SAFARI -> {
-                val p = progress.coerceIn(0f, 1f)
-                posX = -drawnWidth + p * (w + drawnWidth * 2f)
-                val bounceY = kotlin.math.abs(sin(p * 8 * PI).toFloat()) * 35f
-                posY = h * 0.72f - bounceY
-
-                val squash = sin(p * 8 * PI).toFloat() * 0.12f
+                posX = w * 0.5f + drift * w * 0.16f
+                posY = h * 0.53f - bounce * h * 0.12f
+                val squash = bounce * 0.06f
                 scaleX = baseScale * (1f + squash)
                 scaleY = baseScale * (1f - squash)
-                rotAngle = 0f
+            }
+            AnimationSceneType.SKY_FLIGHT -> {
+                posX = w * 0.5f + drift * w * 0.18f
+                posY = h * 0.37f + sin(phase * 2f).toFloat() * h * 0.07f
+            }
+            AnimationSceneType.SPACE_LAUNCH -> {
+                posX = w * 0.5f + drift * w * 0.12f
+                posY = h * 0.54f - (0.5f + 0.5f * sin(phase - PI.toFloat() / 2f)) * h * 0.12f
+                val pulse = sin(phase).toFloat() * 0.035f
+                scaleX = baseScale * (1f + pulse)
+                scaleY = baseScale * (1f + pulse)
+            }
+            AnimationSceneType.LAND_SAFARI -> {
+                posX = w * 0.5f + drift * w * 0.12f
+                posY = h * 0.58f - bounce * h * 0.055f
+                val squash = bounce * 0.1f
+                scaleX = baseScale * (1f + squash)
+                scaleY = baseScale * (1f - squash)
             }
             AnimationSceneType.MAGIC_DANCE -> {
-                posX = w * 0.5f + cos(progress * 2 * PI).toFloat() * w * 0.25f
-                posY = h * 0.5f + sin(progress * 2 * PI).toFloat() * h * 0.18f
-                rotAngle = sin(timeMs * 0.005f).toFloat() * 20f
+                posX = w * 0.5f + cos(phase).toFloat() * w * 0.1f
+                posY = h * 0.5f + sin(phase).toFloat() * h * 0.08f
+                val pulse = sin(timeMs * 0.002f).toFloat() * 0.035f
+                scaleX = baseScale * (1f + pulse)
+                scaleY = baseScale * (1f + pulse)
             }
         }
 
         drawScope.withTransform({
             translate(posX, posY)
-            rotate(rotAngle, pivot = Offset.Zero)
             scale(scaleX, scaleY, pivot = Offset.Zero)
             translate(-drawnCenterX, -drawnCenterY)
         }) {

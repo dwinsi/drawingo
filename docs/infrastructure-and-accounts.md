@@ -31,22 +31,14 @@ The Drawingo backend runs on **Google Cloud Run** as a fully managed serverless 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
 | `/health` | `GET` | Service liveness and ADC status check |
-| `/analyzeDrawing` | `POST` | Toddler drawing classification + nursery rhyme generation via Gemini 2.5 Flash |
-| `/synthesizeSpeech` | `POST` | High-quality text-to-speech audio synthesis (hi-IN & en-US) |
-| `/sketches` | `GET` | Returns stock sketches catalog with categories (Celestial, Sea, Wild Animals) |
-| `/sketches` | `POST` | Upload and register new stock sketches to Cloud Storage & catalog database |
+| `/analyzeDrawing` | `POST` | Classifies a submitted drawing for animation using Gemini |
 
-### Cloud Storage (Sketches Database)
-- **Bucket:** `gs://drawingo-sketches-project-2154682a-9280-4a32-a72`
-- **Public CDN URL:** `https://storage.googleapis.com/drawingo-sketches-project-2154682a-9280-4a32-a72/`
-- **Catalog File:** `gs://drawingo-sketches-project-2154682a-9280-4a32-a72/catalog.json`
-- **CLI Ingestion Tool:** `functions/scripts/add-sketch.js` (add sketches anytime with 1 command)
+The Android app no longer uses the former stock-sketch catalog or its Cloud Storage bucket. The bucket, if it still exists in the GCP project, is a legacy resource and is not modified by this code change.
 
 ### AI Models & SDK
 - **SDK:** Google Gen AI SDK (`@google/genai@2.27.0`)
 - **Primary Model:** `gemini-2.5-flash` (Vertex AI / Enterprise mode)
 - **Fallback Model:** `gemini-2.5-pro`
-- **Voice Synthesis:** Google Cloud Text-to-Speech (`hi-IN-Neural2-A`, `en-US-Journey-F`)
 
 ---
 
@@ -152,14 +144,14 @@ curl -s -X POST https://drawingo-backend-357002186662.us-central1.run.app/analyz
 
 The Android app communicates with the Cloud Run backend automatically via `AdcBackendClient.kt`:
 
-1. **Parent-Controlled Cloud Processing:**
-   - Cloud drawing analysis is disabled until a parent enables it in Parent Settings. The app then tries a parent-configured HTTPS backend URL followed by the Cloud Run production endpoint.
-   - If cloud analysis is disabled or unavailable, the app uses a curated on-device animation and Android text-to-speech. There is no direct Gemini SDK or API key in the Android app.
-   - When cloud analysis is enabled, the drawing is sent to the backend and forwarded to Gemini. Generated rhyme text may be sent to the backend for Cloud Text-to-Speech.
+1. **Optional Cloud Processing:**
+   - Cloud drawing analysis is disabled by default and can be enabled in app Settings. The app uses a configured HTTPS backend URL, or the production Cloud Run endpoint when no custom URL is set.
+   - If cloud analysis is disabled or unavailable, the app uses a local animation preview. There is no direct Gemini SDK or API key in the Android app.
+   - When cloud analysis is enabled, the drawing is sent to the backend and forwarded to Gemini for scene classification and a short subject label.
 
 2. **Network Security & Timeouts:**
-   - Backend requests are sent over HTTPS (`android.permission.INTERNET`); manifest cleartext traffic is disabled. Parent-configured backend URLs are validated as HTTPS.
+   - Backend requests are sent over HTTPS (`android.permission.INTERNET`); manifest cleartext traffic is disabled. Configured backend URLs are validated as HTTPS.
    - Timeouts are set to **10s connect / 15s read** to gracefully handle serverless container cold starts and multimodal AI inference.
 
-3. **Parent Gate Override:**
-   - Parents can open the Parent Gate settings in the app to inspect or override the backend URL if testing a local dev environment.
+3. **Backend URL:**
+   - The app's Settings screen allows an HTTPS backend URL override for development or deployment configuration.

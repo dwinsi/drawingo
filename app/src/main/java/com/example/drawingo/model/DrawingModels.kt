@@ -12,11 +12,6 @@ enum class DrawingTool {
     BRUSH
 }
 
-enum class CanvasMode {
-    DRAWINGO,
-    TODDLER_MAGIC
-}
-
 enum class CanvasPaperStyle {
     PURE_WHITE,
     BLUE_GRID,
@@ -75,31 +70,8 @@ object DrawingoPalette {
         )
     )
 
-    // Sized for tactile kid usability (6px up to 92px)
+    // Stroke width presets for the drawing tools.
     val strokeSizes = listOf(6f, 12f, 20f, 32f, 48f, 68f, 92f)
-}
-
-/**
- * Rich, high-chroma electric neon colors tailored specifically for toddlers
- * to produce maximum visual delight against a canvas.
- */
-object NeonPalette {
-    val colors = listOf(
-        Color(0xFF00F0FF), // Electric Cyan
-        Color(0xFF39FF14), // Acid Lime
-        Color(0xFFFF007F), // Hot Magenta
-        Color(0xFFFFD600), // Sunshine Gold
-        Color(0xFFFF5722), // Sizzling Orange
-        Color(0xFFB026FF), // Neon Violet
-        Color(0xFF00FFCC), // Cyber Mint
-        Color(0xFFFF1744), // Radiant Red
-        Color(0xFF64DD17), // Vivid Apple Green
-        Color(0xFFFF9100)  // Fluorescent Amber
-    )
-
-    fun getColor(index: Int): Color {
-        return colors[(index % colors.size + colors.size) % colors.size]
-    }
 }
 
 /**
@@ -132,18 +104,3 @@ data class DrawnStroke(
         }
     }
 }
-
-/**
- * Represents animated "Googly Eyes" placed on or near a stroke's bounding box.
- */
-data class GooglyEyePair(
-    val id: Long,
-    val leftCenter: Offset,
-    val rightCenter: Offset,
-    val radius: Float,
-    val pupilRadius: Float,
-    val leftPupilOffset: Offset,
-    val rightPupilOffset: Offset,
-    val hasSmile: Boolean = true,
-    val spawnTimestamp: Long = System.currentTimeMillis()
-)

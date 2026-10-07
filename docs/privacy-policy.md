@@ -8,57 +8,55 @@ permalink: /
 
 **Last updated: October 7, 2026**
 
-Drawingo is a drawing and coloring app designed for children. This policy explains what the Android app and its optional online services process, how they use it, and what parents can do.
+Drawingo is being developed as a creative drawing and animation app intended for adults aged 18 and older. The app does not verify a user's age. This policy describes information handled by the current Android app and its optional cloud animation feature.
 
 ## Information Drawingo processes
 
-### Drawing and app data on the device
+### Drawings and local diagnostics
 
-Drawing strokes and the selected coloring page are held in the app while drawing. The app does not currently provide a personal drawing gallery or upload drawings automatically. Parent settings and cached sketch catalogue data are stored in app-private storage. Generated speech audio and downloaded sketch images may be kept in the app cache.
+Drawings are held in app memory while you use the canvas. The current app does not provide a drawing gallery or save your drawings as account content. Android backup is disabled.
 
-The app also writes private diagnostic logs for cloud AI interactions. These logs can include the complete request and response, including a base64 copy of a drawing sent for analysis, generated story text, and selected story choices. They remain in the app's private files until the app's data is cleared or the app is uninstalled. The app has no account or log-export feature. Device backup is disabled for the app.
+When cloud animation is enabled and you request drawing analysis, the app sends a PNG image of the canvas to the configured HTTPS backend. The backend forwards the image and analysis prompt to Google Cloud Vertex AI's Gemini service and returns a scene type and short subject label.
 
-### Optional cloud drawing and story features
+The app stores detailed Gemini interaction logs in app-private files. These logs can include the complete request and response, including the drawing image encoded in the request. They remain on the device until you clear app data or uninstall the app. The app does not provide log export.
 
-Cloud drawing analysis is off unless enabled in Parent Settings. When enabled, and when someone uses the animation feature, Drawingo sends a PNG of the current canvas to the configured HTTPS Drawingo backend. The backend sends the drawing to Google Cloud Vertex AI's Gemini service to identify a broad subject and generate a short rhyme. If a story choice is submitted, the choice and short story context are also sent to the backend for a continuation. Generated text may be sent to Google Cloud Text-to-Speech to create audio. If cloud analysis is off or unavailable, the app uses its on-device animation and Android text-to-speech instead.
+### Optional cloud animation
 
-The backend does not intentionally save drawing images or story text as an app history. It writes operational logs, such as interaction IDs, model names, and errors. Google Cloud Run may also create request and service logs, including network and diagnostic metadata. The production project's log buckets currently have 30-day and 400-day retention settings for their respective log categories.
+Cloud analysis is off by default and can be enabled in the app's Settings. If it is off or unavailable, the app displays a local animation preview without sending the drawing to the backend. When enabled, the backend URL must use HTTPS. A custom backend URL is used as the sole backend host.
 
-Google Cloud processes data under its own terms and policies. Google states that Vertex AI may keep in-memory prompt/response caches for up to 24 hours and may log prompts for abuse monitoring in certain cases. Google's current [Service Specific Terms](https://cloud.google.com/terms/service-terms) prohibit use of its Generative AI Services in applications directed to or likely to be accessed by people under 18. Drawingo is designed for children, so its current Gemini integration is not appropriate for the intended audience under those published terms. **The app operator must not make cloud AI available to children unless Google provides written authorization or the integration is replaced with a service whose terms permit this use.** A Parent Settings toggle does not override provider terms.
+The backend does not intentionally save drawing images or maintain a drawing history. It may emit operational diagnostics. Google Cloud Run may also create service and request logs. The project's log buckets have configured retention periods of 30 days and 400 days for their respective categories. Google Cloud's handling of submitted data is subject to the applicable Google Cloud agreement and [Vertex AI data governance information](https://cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention). Google describes in-memory caching for some Gemini models and prompt logging for abuse monitoring in that documentation.
 
-### Voice
+Google Cloud's current [Service Specific Terms](https://cloud.google.com/terms/service-terms) restrict using a Generative AI Service in an app or online service directed to or likely to be accessed by people under 18. Drawingo's product direction is adults 18+, but the app does not enforce an age check. The operator must ensure the service is not directed to or likely to be accessed by under-18 users before enabling cloud AI.
 
-The current app does not request microphone permission and does not record, upload, or transcribe a child's voice. Speech is generated from text using Android's on-device text-to-speech, or—if cloud speech is used—from Google Cloud Text-to-Speech. If a voice recording or transcription feature is added later, this policy must be updated before that feature is made available.
+### Other data and permissions
 
-### Sketch catalogue and this policy website
+The current app has no account, advertising, analytics, social sharing, camera, microphone, contacts, or location feature. It does not record or transcribe voice. Internet access is used for optional cloud animation. Network calls use HTTPS.
 
-The app may contact the Drawingo backend to refresh the stock sketch catalogue and downloads stock images from Google Cloud Storage. These requests do not include the child's drawing. The privacy policy is hosted on GitHub Pages. GitHub may process technical information about visits to this site under [GitHub's Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement). This site does not use advertising or analytics cookies.
+This policy is hosted on GitHub Pages. GitHub may process technical information about visits under [GitHub's Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement). The policy site does not use advertising or analytics cookies.
 
 ## How information is used and shared
 
-Drawingo uses the information described above to provide drawing, coloring, optional AI animation and speech, refresh stock sketches, and diagnose failures. The app operator does not sell children's personal information, serve ads, or use an analytics SDK. There are no user accounts, social sharing features, or public child profiles.
+Drawing data is used locally to render your canvas and animation. If you enable and use cloud animation, the drawing image is shared with the configured backend and Google Cloud Vertex AI to identify a broad subject and select an animation scene. The app operator does not sell personal information or use an analytics SDK.
 
-When the optional cloud features are used, the drawing or story text is shared with Google Cloud services as described above to produce the requested result. Google may process network and service data as part of providing and protecting those services. Review [Google Cloud's data governance information for Vertex AI](https://cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention) and [Google Cloud's Privacy Notice](https://cloud.google.com/terms/cloud-privacy-notice) for Google's practices.
+Google may process submitted data and service information under the terms and policies applicable to the Google Cloud account. Review [Google Cloud's Privacy Notice](https://cloud.google.com/terms/cloud-privacy-notice) and the Vertex AI data governance link above.
 
-## Parent choices and deletion
+## Your choices and deletion
 
-- A parent can leave cloud drawing analysis turned off in Parent Settings. Stock sketch catalogue refreshes are separate from this setting.
-- A parent can clear the app's storage or uninstall it to remove local settings, cached files, and local Gemini interaction logs.
-- Drawingo has no account-based child profile or server-side drawing history to delete. Google Cloud may retain service or abuse-monitoring data under its own terms and retention practices; clearing the app does not delete Google's records.
-- Parents may contact us to request access to, correction of, or deletion of information handled by Drawingo. We will respond to requests for data within our control. Please do not email a child's drawing, voice recording, or other sensitive details.
-
-The multiplication question protecting Parent Settings is a child-resistant UI gate. It is not a verifiable parental consent process. If applicable law requires verifiable parental consent for a feature, that feature should remain disabled until the required consent process is in place.
+- Leave cloud animation disabled in Settings to keep drawing analysis on-device.
+- Clear the app's storage or uninstall the app to remove local settings and private interaction logs.
+- Drawingo has no account-based drawing history or server-side gallery to delete. Clearing the app does not delete Google Cloud service or abuse-monitoring records.
+- For privacy questions or requests about data handled by Drawingo, contact us at [winsimash@gmail.com](mailto:winsimash@gmail.com). Please do not email drawings or other sensitive information.
 
 ## Security and retention
 
-Network requests use HTTPS. The app does not request camera, microphone, location, contacts, or external-storage permissions. Local drawings are not kept as a personal gallery; the current drawing exists in app state, while cloud interaction logs and cached content follow the local retention described above. Backend operational logs follow the configured Google Cloud log retention. Google Cloud's service-level processing is governed by Google's terms and retention practices.
+Custom backend addresses are restricted to HTTPS. Local interaction logs and app settings are stored in app-private storage and are removed when app data is cleared or the app is uninstalled. Backend and Google Cloud data are subject to their configured service and log retention practices described above.
 
-No method of electronic storage or transmission is completely secure. We limit the app's permissions and use encrypted network connections, but do not claim that this eliminates all risk.
+No electronic storage or transmission method is completely secure. We limit app permissions and use encrypted network connections, but cannot guarantee that this eliminates all risk.
 
 ## Changes to this policy
 
-We will update this page when the app's data practices change. The date at the top shows when it was last revised. Parents should review it before enabling optional cloud features.
+We will update this page when the app's data practices change. The date above shows when it was last revised.
 
 ## Contact
 
-For privacy questions or requests, contact the Drawingo app operator at [winsimash@gmail.com](mailto:winsimash@gmail.com). We use the parent's email and message to respond and resolve the request, then delete them when no longer needed unless a legal obligation requires retention.
+For privacy questions or requests, contact the Drawingo app operator at [winsimash@gmail.com](mailto:winsimash@gmail.com). We use your email and message to respond and resolve the request, then delete them when no longer needed unless a legal obligation requires retention.

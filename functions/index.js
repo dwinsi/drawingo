@@ -1,11 +1,10 @@
 /**
  * Drawingo Premium Google Cloud Backend powered by Application Default Credentials (ADC).
- * Uses @google/genai (Google Gen AI SDK) and @google-cloud/text-to-speech via ADC.
+ * Uses @google/genai (Google Gen AI SDK) via ADC.
  * GCP Project: project-2154682a-9280-4a32-a72
  */
 
 const { GoogleGenAI } = require('@google/genai');
-const textToSpeech = require('@google-cloud/text-to-speech');
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'project-2154682a-9280-4a32-a72';
 const LOCATION = process.env.GCP_LOCATION || 'us-central1';
@@ -17,29 +16,27 @@ const ai = new GoogleGenAI({
   location: LOCATION
 });
 
-// 2. Initialize Cloud Text-To-Speech Client via ADC
-const ttsClient = new textToSpeech.TextToSpeechClient();
-
 /**
- * Express handler for analyzing child's drawing and classifying animation scene.
+ * Express handler for classifying a drawing into an animation scene.
  */
 async function handleAnalyzeDrawing(req, res) {
+  let prompt = '';
+  let generationAttempts = [];
   try {
-    const { imageBase64, mimeType = 'image/png' } = req.body;
+    const { imageBase64, mimeType = 'image/png', interactionId = 'unknown' } = req.body;
     if (!imageBase64) {
       return res.status(400).json({ error: 'imageBase64 parameter is required.' });
     }
 
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
 
-    const prompt = `
-      You are a warm, magical AI friend for kids aged 1 to 8 years (fans of Like Nastya, Peppa Pig, ChuChu TV, Cocomelon).
-      Look at this child's drawing or scribbles and analyze what it is!
+    prompt = `
+      Analyze this drawing for an adult creative drawing app. Treat the drawing as ambiguous; choose a broad subject if uncertain.
+      Do not infer personal attributes about the artist or describe anything outside the image.
 
       Respond in EXACTLY this format:
       SCENE: [OCEAN_LEAP or SKY_FLIGHT or SPACE_LAUNCH or LAND_SAFARI or MAGIC_DANCE]
-      SUBJECT: [Short 1-3 word name, e.g., Dolphin, Bird, Rocket, Car, Lion, Flower, Doodle]
-      RHYME: [2 to 4 line super catchy, rhythmic nursery rhyme in a mix of Hindi and English with sound effects and emojis!]
+      SUBJECT: [Short neutral 1-3 word description, or Doodle if uncertain]
 
       SCENE GUIDELINES:
       - Use OCEAN_LEAP for dolphins, fish, sea turtles, octopuses, boats, water creatures.
@@ -49,17 +46,22 @@ async function handleAnalyzeDrawing(req, res) {
       - Use MAGIC_DANCE for general doodles, scribbles, flowers, shapes, suns.
     `;
 
-    const { responseText, modelName } = await generateGenAiContent(cleanBase64, mimeType, prompt);
+    const { responseText, modelName, attempts } = await generateGenAiContent(cleanBase64, mimeType, prompt);
+    generationAttempts = attempts;
 
     const parsed = parseGeminiResponse(responseText);
-    console.log(`Drawing analyzed via Google Gen AI ADC (model: ${modelName}).`);
-    res.status(200).json(parsed);
+    console.log(JSON.stringify({ event: 'gemini_drawing_complete', interactionId, modelName }));
+    res.status(200).json({
+      ...parsed,
+      interactionId,
+      debug: { model: modelName, prompt, responseText, attempts }
+    });
   } catch (err) {
     console.error('Error in analyzeDrawing endpoint:', err);
     res.status(500).json({
-      sceneType: 'MAGIC_DANCE',
-      subjectName: 'Magic Drawing',
-      rhymeText: '✨ Chanda mama door ke, naye dost aaye door ke!\nYour magic drawing is sparkling with joy! 🎨'
+      interactionId: req.body?.interactionId || 'unknown',
+      error: 'Gemini drawing analysis failed.',
+      debug: { prompt, attempts: err.modelAttempts || generationAttempts, error: err.message }
     });
   }
 }
@@ -71,16 +73,26 @@ async function generateGenAiContent(cleanBase64, mimeType, prompt) {
   ];
 
   let lastError = null;
+  const attempts = [];
 
   for (const modelName of modelsToTry) {
     try {
       const response = await ai.models.generateContent({
         model: modelName,
+        config: {
+          maxOutputTokens: 300,
+          safetySettings: [
+            'HARM_CATEGORY_HARASSMENT',
+            'HARM_CATEGORY_HATE_SPEECH',
+            'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            'HARM_CATEGORY_DANGEROUS_CONTENT'
+          ].map((category) => ({ category, threshold: 'BLOCK_LOW_AND_ABOVE' }))
+        },
         contents: [
           {
             role: 'user',
             parts: [
-              { inlineData: { mimeType, data: cleanBase64 } },
+              ...(cleanBase64 ? [{ inlineData: { mimeType, data: cleanBase64 } }] : []),
               { text: prompt }
             ]
           }
@@ -88,61 +100,36 @@ async function generateGenAiContent(cleanBase64, mimeType, prompt) {
       });
 
       const responseText = response.text;
-      return { responseText, modelName };
+      attempts.push({
+        model: modelName,
+        outcome: 'success',
+        request: { prompt, mimeType: mimeType || null, includesImage: Boolean(cleanBase64) },
+        responseText
+      });
+      return { responseText, modelName, attempts };
     } catch (err) {
       lastError = err;
+      attempts.push({
+        model: modelName,
+        outcome: 'error',
+        request: { prompt, mimeType: mimeType || null, includesImage: Boolean(cleanBase64) },
+        error: err.message
+      });
       console.warn(`Gemini model ${modelName} notice: ${err.message}, trying next model...`);
       continue;
     }
   }
 
-  throw lastError || new Error('No available Gemini model found.');
-}
-
-/**
- * Express handler for synthesizing natural human voice audio via Cloud TTS ADC.
- */
-async function handleSynthesizeSpeech(req, res) {
-  try {
-    const { text } = req.body;
-    if (!text) {
-      return res.status(400).json({ error: 'text parameter is required.' });
-    }
-
-    const cleanText = text.replace(/[\uD83C-\uDBFF\uDC00-\uDFFF\u2600-\u27FF]/g, '').trim();
-
-    // Prefer Hindi/English bilingual voice by default
-    const languageCode = 'hi-IN';
-    const voiceName = 'hi-IN-Neural2-A';
-
-    const ttsRequest = {
-      input: { text: cleanText },
-      voice: { languageCode: languageCode, name: voiceName },
-      audioConfig: { audioEncoding: 'MP3', speakingRate: 0.92 }
-    };
-
-    const [ttsResponse] = await ttsClient.synthesizeSpeech(ttsRequest);
-    const audioBase64 = ttsResponse.audioContent.toString('base64');
-
-    console.log(`🔊 Natural voice synthesized via Cloud TTS ADC (${languageCode} / ${voiceName})`);
-    res.status(200).json({
-      audioBase64,
-      languageCode: languageCode,
-      mimeType: 'audio/mp3'
-    });
-  } catch (err) {
-    console.error('Error in synthesizeSpeech endpoint:', err);
-    res.status(500).json({ error: err.message });
-  }
+  const finalError = lastError || new Error('No available Gemini model found.');
+  finalError.modelAttempts = attempts;
+  throw finalError;
 }
 
 function parseGeminiResponse(text) {
   let sceneType = 'MAGIC_DANCE';
   let subjectName = 'Magic Drawing';
-  let rhymeText = text;
 
   const lines = text.split('\n');
-  const rhymeLines = [];
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -155,57 +142,12 @@ function parseGeminiResponse(text) {
       else sceneType = 'MAGIC_DANCE';
     } else if (/^SUBJECT:/i.test(trimmed)) {
       subjectName = trimmed.split(':')[1].trim();
-    } else if (/^RHYME:/i.test(trimmed)) {
-      rhymeLines.push(trimmed.split(':')[1].trim());
-    } else if (trimmed.length > 0 && !/^SCENE:/i.test(trimmed) && !/^SUBJECT:/i.test(trimmed)) {
-      rhymeLines.push(trimmed);
     }
   }
 
-  if (rhymeLines.length > 0) {
-    rhymeText = rhymeLines.join('\n');
-  }
-
-  return { sceneType, subjectName, rhymeText };
-}
-
-const { getSketches, addSketch } = require('./sketchManager');
-
-/**
- * Express handler to fetch stock sketches catalog.
- */
-async function handleGetSketches(req, res) {
-  try {
-    const { category } = req.query;
-    const sketches = await getSketches(category);
-    res.status(200).json({ sketches, total: sketches.length });
-  } catch (err) {
-    console.error('Error fetching sketches:', err);
-    res.status(500).json({ error: 'Failed to fetch sketches', details: err.message });
-  }
-}
-
-/**
- * Express handler to add a new stock sketch.
- */
-async function handleAddSketch(req, res) {
-  try {
-    const { title, category, emoji, difficulty, tags, imageBase64, imageUrl } = req.body;
-    if (!title || (!imageBase64 && !imageUrl)) {
-      return res.status(400).json({ error: 'title and either imageBase64 or imageUrl are required.' });
-    }
-
-    const created = await addSketch({ title, category, emoji, difficulty, tags, imageBase64, imageUrl });
-    res.status(201).json(created);
-  } catch (err) {
-    console.error('Error adding sketch:', err);
-    res.status(500).json({ error: 'Failed to add sketch', details: err.message });
-  }
+  return { sceneType, subjectName };
 }
 
 module.exports = {
-  handleAnalyzeDrawing,
-  handleSynthesizeSpeech,
-  handleGetSketches,
-  handleAddSketch
+  handleAnalyzeDrawing
 };

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,16 +31,17 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -83,14 +85,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.drawingo.R
 import com.example.drawingo.animation.CanvasAnimationRenderer
-import com.example.drawingo.device.KioskManager
-import com.example.drawingo.model.CanvasMode
+import com.example.drawingo.AppPreferences
 import com.example.drawingo.model.DrawingTool
 import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
-import com.example.drawingo.model.GooglyEyePair
-import com.example.drawingo.model.MagicCompanion
-import com.example.drawingo.model.StockSketch
 import com.example.drawingo.theme.ElectricCyan
 import com.example.drawingo.util.CanvasBitmapUtils
 
@@ -102,15 +100,9 @@ val DockShadow = Color(0x33000000)
 @Composable
 fun DrawingCanvas(
     viewModel: DrawingViewModel,
-    exitHoldProgress: Float = 0f,
-    exitTouchCentroid: Offset? = null,
-    remainingScreenTimeMs: Long = Long.MAX_VALUE,
-    onScreenTimeLimitChanged: () -> Unit = {},
-    onKioskToggled: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val canvasMode by viewModel.canvasMode.collectAsState()
     val selectedTool by viewModel.selectedTool.collectAsState()
     val selectedColor by viewModel.selectedColor.collectAsState()
     val selectedStrokeWidth by viewModel.selectedStrokeWidth.collectAsState()
@@ -124,14 +116,13 @@ fun DrawingCanvas(
 
     val completedStrokes by viewModel.completedStrokes.collectAsState()
     val activeStrokes by viewModel.activeStrokes.collectAsState()
-    val googlyEyes by viewModel.googlyEyes.collectAsState()
-    val magicCompanions by viewModel.magicCompanions.collectAsState()
     val wipeProgress by viewModel.wipeProgress.collectAsState()
     val isWiping by viewModel.isWiping.collectAsState()
 
     val isGeminiLoading by viewModel.isGeminiLoading.collectAsState()
-    val geminiRhymeText by viewModel.geminiRhymeText.collectAsState()
     val showGeminiDialog by viewModel.showGeminiDialog.collectAsState()
+    val animationStatus by viewModel.animationStatus.collectAsState()
+    val animationSubject by viewModel.animationSubject.collectAsState()
 
     // Animation States
     val isAnimationActive by viewModel.isAnimationActive.collectAsState()
@@ -140,18 +131,7 @@ fun DrawingCanvas(
     val particles by viewModel.particles.collectAsState()
     val animationProgress by viewModel.animationProgress.collectAsState()
 
-    var showParentSettings by remember { mutableStateOf(false) }
-
-    // Stock Sketches & Coloring Templates State
-    val stockSketches by viewModel.stockSketches.collectAsState()
-    val selectedSketch by viewModel.selectedSketch.collectAsState()
-    val activeSketchBitmap by viewModel.activeSketchBitmap.collectAsState()
-    val isSketchesLoading by viewModel.isSketchesLoading.collectAsState()
-    var showSketchPicker by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        viewModel.loadStockSketches(context)
-    }
+    var showAppSettings by remember { mutableStateOf(false) }
 
     var frameTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -241,18 +221,8 @@ fun DrawingCanvas(
                                 drawAllCanvasContent(
                                     completedStrokes = completedStrokes,
                                     activeStrokes = activeStrokes.values.toList(),
-                                    currentTimeMs = frameTimeMs,
-                                    googlyEyes = googlyEyes,
-                                    magicCompanions = magicCompanions
+                                    currentTimeMs = frameTimeMs
                                 )
-                                activeSketchBitmap?.let { bmp ->
-                                    drawStockSketchTemplate(
-                                        drawScope = this,
-                                        bitmap = bmp,
-                                        canvasWidth = canvasWidth,
-                                        canvasHeight = canvasHeight
-                                    )
-                                }
                             }
 
                             val waveHeight = 60f
@@ -276,53 +246,30 @@ fun DrawingCanvas(
                             drawAllCanvasContent(
                                 completedStrokes = completedStrokes,
                                 activeStrokes = activeStrokes.values.toList(),
-                                currentTimeMs = frameTimeMs,
-                                googlyEyes = googlyEyes,
-                                magicCompanions = magicCompanions
+                                currentTimeMs = frameTimeMs
                             )
-                            activeSketchBitmap?.let { bmp ->
-                                drawStockSketchTemplate(
-                                    drawScope = this,
-                                    bitmap = bmp,
-                                    canvasWidth = canvasWidth,
-                                    canvasHeight = canvasHeight
-                                )
-                            }
                         }
                     }
                 }
 
-                if (exitHoldProgress > 0f && exitTouchCentroid != null) {
-                    drawExitRing(
-                        centroid = exitTouchCentroid,
-                        progress = exitHoldProgress
-                    )
-                }
             }
         }
 
         // Top Action Bar
         TopKeepBar(
-            canvasMode = canvasMode,
             canUndo = canUndo,
             canRedo = canRedo,
-            hasArtwork = completedStrokes.isNotEmpty() || magicCompanions.isNotEmpty(),
+            hasArtwork = completedStrokes.isNotEmpty(),
             isAnimationActive = isAnimationActive,
-            onModeChanged = { viewModel.setCanvasMode(it) },
             onUndo = { viewModel.undo() },
             onRedo = { viewModel.redo() },
             onClear = { viewModel.clearCanvas() },
             onAnimateDrawingClick = {
                 val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(completedStrokes)
-                viewModel.triggerDrawingAnimation(context, bitmap, KioskManager.isCloudAiAllowed(context))
+                viewModel.triggerDrawingAnimation(context, bitmap, AppPreferences.isCloudAiAllowed(context))
             },
             onStopAnimationClick = { viewModel.stopAnimation() },
-            onReplayVoiceClick = {
-                viewModel.replayGeminiSpeech(context, KioskManager.isCloudAiAllowed(context))
-            },
-            onSettingsClick = { showParentSettings = true },
-            selectedSketch = selectedSketch,
-            onSketchesClick = { showSketchPicker = true },
+            onSettingsClick = { showAppSettings = true },
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
@@ -330,10 +277,46 @@ fun DrawingCanvas(
                 .align(Alignment.TopCenter)
         )
 
+        if (showGeminiDialog) {
+            Dialog(onDismissRequest = { viewModel.closeGeminiDialog() }) {
+                Surface(
+                    modifier = Modifier.width(340.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(0xFFFFFEFA),
+                    shadowElevation = 8.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            "Animation preview",
+                            color = Color(0xFF343849),
+                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Text(
+                            if (animationStatus == null) "Subject: $animationSubject" else animationStatus.orEmpty(),
+                            color = Color(0xFF555866),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Button(
+                            onClick = { viewModel.closeGeminiDialog() },
+                            modifier = Modifier.align(Alignment.End),
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFD94F79),
+                                contentColor = Color.White
+                            )
+                        ) { Text("Done", fontWeight = FontWeight.Bold) }
+                    }
+                }
+            }
+        }
+
         // Bottom Tool Dock
         if (!isAnimationActive) {
             BottomDrawingoDock(
-                canvasMode = canvasMode,
                 selectedTool = selectedTool,
                 selectedColor = selectedColor,
                 selectedStrokeWidth = if (selectedTool == DrawingTool.ERASER) selectedEraserWidth else selectedStrokeWidth,
@@ -354,7 +337,7 @@ fun DrawingCanvas(
             )
         }
 
-        // Loading Overlay during Gemini processing (100% Kid Friendly - Icon/Sparkle only)
+        // Loading overlay while cloud drawing analysis runs.
         if (isGeminiLoading) {
             Box(
                 modifier = Modifier
@@ -379,98 +362,30 @@ fun DrawingCanvas(
             }
         }
 
-        // Parent Settings Dialog
-        if (showParentSettings) {
-            ParentGateDialog(
-                isKioskEnabled = KioskManager.isKioskModeEnabled(context),
-                isCloudAiAllowed = KioskManager.isCloudAiAllowed(context),
-                currentBackendUrl = KioskManager.getBackendUrl(context),
-                currentScreenTimeLimit = KioskManager.getScreenTimeLimit(context),
-                onKioskToggled = { enabled ->
-                    KioskManager.setKioskModeEnabled(context, enabled)
-                    onKioskToggled(enabled)
-                },
-                onCloudAiAllowedChanged = { allowed ->
-                    KioskManager.setCloudAiAllowed(context, allowed)
-                },
-                onBackendUrlSaved = { url ->
-                    KioskManager.setBackendUrl(context, url)
-                },
-                onScreenTimeSaved = { limitMins ->
-                    KioskManager.setScreenTimeLimit(context, limitMins)
-                    onScreenTimeLimitChanged()
-                },
-                onDismiss = { showParentSettings = false }
+        if (showAppSettings) {
+            AppSettingsDialog(
+                cloudAiEnabled = AppPreferences.isCloudAiAllowed(context),
+                backendUrl = AppPreferences.getBackendUrl(context),
+                onCloudAiEnabledChanged = { AppPreferences.setCloudAiAllowed(context, it) },
+                onBackendUrlSaved = { AppPreferences.setBackendUrl(context, it) },
+                onDismiss = { showAppSettings = false }
             )
-        }
-
-        // Stock Sketch Picker Dialog
-        if (showSketchPicker) {
-            SketchPickerDialog(
-                sketches = stockSketches,
-                selectedSketch = selectedSketch,
-                isLoading = isSketchesLoading,
-                onSketchSelected = { sketch ->
-                    viewModel.selectSketch(context, sketch)
-                },
-                onClearTemplate = {
-                    viewModel.clearSketch()
-                },
-                onRefresh = {
-                    viewModel.loadStockSketches(context, forceRefresh = true)
-                },
-                onDismiss = { showSketchPicker = false }
-            )
-        }
-
-        if (remainingScreenTimeMs <= 0L) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xF51E2333))
-                    .clickable(onClick = {}),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(32.dp)
-                ) {
-                    Text("🌙", fontSize = 64.sp)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Drawing time is finished for today!",
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Button(onClick = { showParentSettings = true }) {
-                        Text("Ask a grown-up")
-                    }
-                }
-            }
         }
     }
 }
 
 @Composable
 fun TopKeepBar(
-    canvasMode: CanvasMode,
     canUndo: Boolean,
     canRedo: Boolean,
     hasArtwork: Boolean,
     isAnimationActive: Boolean,
-    onModeChanged: (CanvasMode) -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onClear: () -> Unit,
     onAnimateDrawingClick: () -> Unit,
     onStopAnimationClick: () -> Unit,
-    onReplayVoiceClick: () -> Unit = {},
     onSettingsClick: () -> Unit,
-    selectedSketch: StockSketch? = null,
-    onSketchesClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var actionsExpanded by remember { mutableStateOf(false) }
@@ -486,8 +401,6 @@ fun TopKeepBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         ModeSelector(
-            canvasMode = canvasMode,
-            onModeChanged = onModeChanged,
             animeEnabled = hasArtwork && !isAnimationActive,
             onAnimeClick = onAnimateDrawingClick
         )
@@ -500,20 +413,12 @@ fun TopKeepBar(
                 DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
                     if (isAnimationActive) {
                         DropdownMenuItem(
-                            text = { Text("🔊  Hear it again") },
-                            onClick = { actionsExpanded = false; onReplayVoiceClick() }
-                        )
-                        DropdownMenuItem(
                             text = { Text("⏹  Stop animation") },
                             onClick = { actionsExpanded = false; onStopAnimationClick() }
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("📚  ${selectedSketch?.title ?: "Coloring pages"}") },
-                        onClick = { actionsExpanded = false; onSketchesClick() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("🔒  Parent settings") },
+                        text = { Text("⚙️  Settings") },
                         onClick = { actionsExpanded = false; onSettingsClick() }
                     )
                 }
@@ -522,28 +427,63 @@ fun TopKeepBar(
     }
 
     if (showClearConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showClearConfirmation = false },
-            title = { Text("Start a fresh picture?", fontWeight = FontWeight.ExtraBold) },
-            text = { Text("Your drawing will be cleared from the canvas.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showClearConfirmation = false
-                    onClear()
-                }) { Text("Clear drawing") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearConfirmation = false }) { Text("Keep drawing") }
-            },
-            containerColor = Color(0xFFFFFEFA)
-        )
+        Dialog(onDismissRequest = { showClearConfirmation = false }) {
+            Surface(
+                modifier = Modifier.width(320.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFFFFFEFA),
+                shadowElevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Start a fresh picture?",
+                        color = Color(0xFF343849),
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        "Your drawing will be cleared from the canvas.",
+                        color = Color(0xFF555866),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = { showClearConfirmation = false },
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFEAE6F0),
+                                contentColor = Color(0xFF343849)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) { Text("Keep drawing", fontWeight = FontWeight.Bold) }
+                        Button(
+                            onClick = {
+                                showClearConfirmation = false
+                                onClear()
+                            },
+                            shape = CircleShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFD94F79),
+                                contentColor = Color.White
+                            ),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) { Text("Clear drawing", fontWeight = FontWeight.Bold) }
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
 private fun ModeSelector(
-    canvasMode: CanvasMode,
-    onModeChanged: (CanvasMode) -> Unit,
     animeEnabled: Boolean,
     onAnimeClick: () -> Unit
 ) {
@@ -554,8 +494,6 @@ private fun ModeSelector(
             .padding(3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ModeOption("🎨", "Draw", canvasMode == CanvasMode.DRAWINGO) { onModeChanged(CanvasMode.DRAWINGO) }
-        ModeOption("✨", "Magic", canvasMode == CanvasMode.TODDLER_MAGIC) { onModeChanged(CanvasMode.TODDLER_MAGIC) }
         Box(
             modifier = Modifier
                 .size(44.dp)
@@ -567,21 +505,6 @@ private fun ModeSelector(
         ) {
             Text("🌠", fontSize = 24.sp)
         }
-    }
-}
-
-@Composable
-private fun ModeOption(icon: String, label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (selected) ActiveToolHighlight else Color.Transparent)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = "$label mode" },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(icon, fontSize = 24.sp)
     }
 }
 
@@ -614,7 +537,6 @@ private fun CompactAction(
 
 @Composable
 fun BottomDrawingoDock(
-    canvasMode: CanvasMode,
     selectedTool: DrawingTool,
     selectedColor: Color,
     selectedStrokeWidth: Float,
@@ -634,17 +556,8 @@ fun BottomDrawingoDock(
             .background(ToolDockBackgroundColor)
             .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
-        if (canvasMode == CanvasMode.TODDLER_MAGIC) {
-            Text(
-                "✨  Tap or draw to meet a new friend!",
-                color = Color(0xFF343849),
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp)
-            )
-        } else {
-            DrawerHandle(drawerExpanded) { drawerExpanded = it }
-            PrimaryColorRow(selectedColor, onColorSelected)
+        DrawerHandle(drawerExpanded) { drawerExpanded = it }
+        PrimaryColorRow(selectedColor, onColorSelected)
 
             AnimatedVisibility(
                 visible = drawerExpanded,
@@ -709,7 +622,6 @@ fun BottomDrawingoDock(
                 }
             }
 
-        }
     }
 }
 
@@ -872,21 +784,13 @@ private fun StrokeSizeRow(selectedStrokeWidth: Float, onWidthSelected: (Float) -
 private fun DrawScope.drawAllCanvasContent(
     completedStrokes: List<DrawnStroke>,
     activeStrokes: List<DrawnStroke>,
-    currentTimeMs: Long,
-    googlyEyes: List<GooglyEyePair>,
-    magicCompanions: List<MagicCompanion>
+    currentTimeMs: Long
 ) {
     for (stroke in completedStrokes) {
         drawSingleStroke(stroke)
     }
     for (stroke in activeStrokes) {
         drawSingleStroke(stroke)
-    }
-    for (eyePair in googlyEyes) {
-        GooglyEyeRenderer.drawGooglyEyePair(this, eyePair, currentTimeMs)
-    }
-    for (companion in magicCompanions) {
-        MagicCreatureRenderer.drawCompanion(this, companion, currentTimeMs)
     }
 }
 
@@ -905,60 +809,5 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
             cap = StrokeCap.Round,
             join = StrokeJoin.Round
         )
-    )
-}
-
-private fun DrawScope.drawExitRing(centroid: Offset, progress: Float) {
-    val radius = 120f
-    drawCircle(
-        color = Color(0x3300F0FF),
-        radius = radius,
-        center = centroid
-    )
-    drawCircle(
-        color = ElectricCyan,
-        radius = radius,
-        center = centroid,
-        style = Stroke(width = 8f)
-    )
-    drawArc(
-        color = Color(0xFFFF007F),
-        startAngle = -90f,
-        sweepAngle = progress * 360f,
-        useCenter = false,
-        topLeft = Offset(centroid.x - radius, centroid.y - radius),
-        size = Size(radius * 2, radius * 2),
-        style = Stroke(width = 12f, cap = StrokeCap.Round)
-    )
-}
-
-private fun drawStockSketchTemplate(
-    drawScope: DrawScope,
-    bitmap: Bitmap,
-    canvasWidth: Float,
-    canvasHeight: Float
-) {
-    val bmpAspect = bitmap.width.toFloat() / bitmap.height.toFloat()
-    val margin = 80f
-    val availW = (canvasWidth - margin * 2).coerceAtLeast(100f)
-    val availH = (canvasHeight - margin * 2).coerceAtLeast(100f)
-
-    val targetWidth: Float
-    val targetHeight: Float
-    if (availW / availH > bmpAspect) {
-        targetHeight = availH
-        targetWidth = availH * bmpAspect
-    } else {
-        targetWidth = availW
-        targetHeight = availW / bmpAspect
-    }
-
-    val left = (canvasWidth - targetWidth) / 2f
-    val top = (canvasHeight - targetHeight) / 2f
-
-    drawScope.drawImage(
-        image = bitmap.asImageBitmap(),
-        dstOffset = IntOffset(left.toInt(), top.toInt()),
-        dstSize = IntSize(targetWidth.toInt(), targetHeight.toInt())
     )
 }
