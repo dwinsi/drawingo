@@ -11,7 +11,7 @@ enum class AnimationSceneType {
     SKY_FLIGHT,   // Bird, Butterfly, Bee, Airplane, Feather
     SPACE_LAUNCH, // Rocket, Car, Spaceship, Star, Comet
     LAND_SAFARI,  // Lion, Elephant, Bear, Dinosaur, Cat, Dog, Animal
-    MAGIC_DANCE   // Generic Doodle, Flower, Scribbles, Rainbow
+    ABSTRACT_FLOW // Generic sketches and abstract forms
 }
 
 enum class ParticleType {
@@ -48,9 +48,5 @@ data class AnimatedDrawingEntity(
 
 data class AnimationSceneResult(
     val sceneType: AnimationSceneType,
-    val subjectName: String,
-    val voiceStyle: String = "ENERGETIC",
-    val musicTempo: String = "FAST",
-    val particleDensity: String = "MEDIUM",
-    val magicColorHex: String = "#FFFFFF"
+    val subjectName: String
 )

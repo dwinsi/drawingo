@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 import java.time.Instant
 
-/** Stores complete Gemini HTTP exchanges in app-private storage for parent diagnostics. */
+/** Stores complete Gemini HTTP exchanges in app-private storage for local diagnostics. */
 object GeminiInteractionLogger {
     private const val TAG = "GeminiInteractionLog"
     private const val FILE_NAME = "interactions.ndjson"

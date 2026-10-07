@@ -21,8 +21,8 @@ import kotlin.math.sin
 
 /**
  * Pure Compose Canvas Animation Renderer for Drawingo.
- * Animates the child's actual drawn artwork across 5 dynamic interactive environments:
- * Ocean Leap, Sky Flight, Space Launch, Land Safari, and Magic Dance.
+ * Animates the user's actual drawn artwork across five dynamic environments:
+ * Ocean Leap, Sky Flight, Space Launch, Land Safari, and Abstract Flow.
  */
 object CanvasAnimationRenderer {
 
@@ -58,7 +58,7 @@ object CanvasAnimationRenderer {
             AnimationSceneType.SKY_FLIGHT -> drawSkyBackground(drawScope, width, height, currentTimeMs)
             AnimationSceneType.SPACE_LAUNCH -> drawSpaceBackground(drawScope, width, height, currentTimeMs)
             AnimationSceneType.LAND_SAFARI -> drawLandBackground(drawScope, width, height)
-            AnimationSceneType.MAGIC_DANCE -> drawMagicBackground(drawScope, width, height, currentTimeMs)
+            AnimationSceneType.ABSTRACT_FLOW -> drawAbstractBackground(drawScope, width, height, currentTimeMs)
         }
 
         // 2. Render particle physics
@@ -195,14 +195,13 @@ object CanvasAnimationRenderer {
         drawScope.drawPath(path = hillFront, color = HillColorFront)
     }
 
-    private fun drawMagicBackground(drawScope: DrawScope, w: Float, h: Float, timeMs: Long) {
-        // Vibrant, kid-friendly colorful gradient
-        val magicGrad = Brush.linearGradient(
+    private fun drawAbstractBackground(drawScope: DrawScope, w: Float, h: Float, timeMs: Long) {
+        val abstractGradient = Brush.linearGradient(
             colors = listOf(Color(0xFFFF9A9E), Color(0xFFFECFEF), Color(0xFFFDEB71), Color(0xFFBAFFC9), Color(0xFFBAE1FF)),
             start = Offset(0f, 0f),
             end = Offset(w, h)
         )
-        drawScope.drawRect(brush = magicGrad, size = Size(w, h))
+        drawScope.drawRect(brush = abstractGradient, size = Size(w, h))
 
         // Draw animated floating shapes (Triangles, Circles, Squares, Stars)
         val shapeCount = 20
@@ -334,7 +333,7 @@ object CanvasAnimationRenderer {
                 scaleX = baseScale * (1f + squash)
                 scaleY = baseScale * (1f - squash)
             }
-            AnimationSceneType.MAGIC_DANCE -> {
+            AnimationSceneType.ABSTRACT_FLOW -> {
                 posX = w * 0.5f + cos(phase).toFloat() * w * 0.1f
                 posY = h * 0.5f + sin(phase).toFloat() * h * 0.08f
                 val pulse = sin(timeMs * 0.002f).toFloat() * 0.035f

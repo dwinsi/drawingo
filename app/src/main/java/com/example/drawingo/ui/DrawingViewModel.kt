@@ -25,13 +25,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicLong
 import java.util.UUID
-import kotlin.math.cos
-import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * Lightweight MVVM ViewModel managing Drawingo canvas mode,
+ * Lightweight MVVM ViewModel managing the Drawingo canvas,
  * tool selection, 2-finger Pan/Scroll & Pinch-Zoom, Undo/Redo,
  * drawing tools, canvas gestures, and optional cloud-assisted drawing animation.
  */
@@ -82,13 +80,6 @@ class DrawingViewModel : ViewModel() {
     private val _activeStrokes = MutableStateFlow<Map<Long, DrawnStroke>>(emptyMap())
     val activeStrokes: StateFlow<Map<Long, DrawnStroke>> = _activeStrokes.asStateFlow()
 
-    // Wipe animation state
-    private val _wipeProgress = MutableStateFlow(0f)
-    val wipeProgress: StateFlow<Float> = _wipeProgress.asStateFlow()
-
-    private val _isWiping = MutableStateFlow(false)
-    val isWiping: StateFlow<Boolean> = _isWiping.asStateFlow()
-
     // Drawing analysis status
     private val _isGeminiLoading = MutableStateFlow(false)
     val isGeminiLoading: StateFlow<Boolean> = _isGeminiLoading.asStateFlow()
@@ -119,18 +110,10 @@ class DrawingViewModel : ViewModel() {
     private val _animationProgress = MutableStateFlow(0f)
     val animationProgress: StateFlow<Float> = _animationProgress.asStateFlow()
 
-    private var inactivityJob: Job? = null
-    private var wipeAnimationJob: Job? = null
     private var animationLoopJob: Job? = null
 
     companion object {
-        const val INACTIVITY_TIMEOUT_MS = 60_000L
-        const val WIPE_DURATION_MS = 1_200L
         private const val MAX_STORED_STROKES = 250
-    }
-
-    init {
-        resetInactivityTimer()
     }
 
     fun setTool(tool: DrawingTool) {
@@ -212,8 +195,6 @@ class DrawingViewModel : ViewModel() {
     }
 
     fun onPointerDown(pointerId: Long, screenPosition: Offset) {
-        cancelActiveWipe()
-        resetInactivityTimer()
 
         val tool = _selectedTool.value
         val canvasPos = toCanvasCoordinate(screenPosition)
@@ -248,7 +229,6 @@ class DrawingViewModel : ViewModel() {
     }
 
     fun onPointerMove(pointerId: Long, screenPosition: Offset) {
-        resetInactivityTimer()
 
         val currentStroke = _activeStrokes.value[pointerId] ?: return
         val canvasPos = toCanvasCoordinate(screenPosition)
@@ -267,7 +247,6 @@ class DrawingViewModel : ViewModel() {
     }
 
     fun onPointerUp(pointerId: Long) {
-        resetInactivityTimer()
 
         val stroke = _activeStrokes.value[pointerId] ?: return
         _activeStrokes.value = _activeStrokes.value - pointerId
@@ -314,7 +293,7 @@ class DrawingViewModel : ViewModel() {
                     "Cloud animation is off. Enable it in Settings to analyze this drawing."
                 }
             }
-            val activeScene = sceneResult ?: AnimationSceneResult(AnimationSceneType.MAGIC_DANCE, "Your drawing")
+            val activeScene = sceneResult ?: AnimationSceneResult(AnimationSceneType.ABSTRACT_FLOW, "Your drawing")
             _animationSubject.value = sceneResult?.subjectName ?: "Your drawing"
             _showGeminiDialog.value = true
             _activeAnimationScene.value = activeScene.sceneType
@@ -377,7 +356,7 @@ class DrawingViewModel : ViewModel() {
                             newParticles.addAll(ParticleEngine.createSmokePuffs(x = 300f + progress * 400f, y = 600f - progress * 400f, count = 2))
                         }
                     }
-                    AnimationSceneType.SKY_FLIGHT, AnimationSceneType.MAGIC_DANCE -> {
+                    AnimationSceneType.SKY_FLIGHT, AnimationSceneType.ABSTRACT_FLOW -> {
                         if (Random.nextFloat() < 0.25f) {
                             newParticles.addAll(ParticleEngine.createStarDust(x = 200f + progress * 600f, y = 300f + sin(progress * 10f) * 100f, count = 3))
                         }
@@ -405,51 +384,11 @@ class DrawingViewModel : ViewModel() {
 
     fun onPointerCancel(pointerId: Long) {
         _activeStrokes.value = _activeStrokes.value - pointerId
-        resetInactivityTimer()
-    }
-
-    fun resetInactivityTimer() {
-        inactivityJob?.cancel()
-        inactivityJob = viewModelScope.launch {
-            delay(INACTIVITY_TIMEOUT_MS)
-            if (_completedStrokes.value.isNotEmpty() || _activeStrokes.value.isNotEmpty()) {
-                triggerWipeAndClear()
-            }
-        }
-    }
-
-    fun triggerWipeAndClear() {
-        stopAnimation()
-        wipeAnimationJob?.cancel()
-        wipeAnimationJob = viewModelScope.launch {
-            _isWiping.value = true
-            val totalSteps = (WIPE_DURATION_MS / 16L).toInt().coerceAtLeast(1)
-
-            for (step in 1..totalSteps) {
-                delay(16L)
-                _wipeProgress.value = (step.toFloat() / totalSteps).coerceIn(0f, 1f)
-            }
-
-            _completedStrokes.value = emptyList()
-            _activeStrokes.value = emptyMap()
-            _wipeProgress.value = 0f
-            _isWiping.value = false
-        }
-    }
-
-    private fun cancelActiveWipe() {
-        if (_isWiping.value) {
-            wipeAnimationJob?.cancel()
-            _isWiping.value = false
-            _wipeProgress.value = 0f
-        }
     }
 
     override fun onCleared() {
         super.onCleared()
         stopAnimation()
-        inactivityJob?.cancel()
-        wipeAnimationJob?.cancel()
         soundManager?.release()
         soundManager = null
     }

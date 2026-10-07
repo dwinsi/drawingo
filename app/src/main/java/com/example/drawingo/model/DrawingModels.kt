@@ -13,10 +13,7 @@ enum class DrawingTool {
 }
 
 enum class CanvasPaperStyle {
-    PURE_WHITE,
-    BLUE_GRID,
-    COSMIC_NIGHT,
-    WARM_CREAM
+    PURE_WHITE
 }
 
 /**

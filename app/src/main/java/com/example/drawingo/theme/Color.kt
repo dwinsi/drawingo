@@ -3,8 +3,7 @@ package com.example.drawingo.theme
 import androidx.compose.ui.graphics.Color
 
 // ==========================================
-// DRAWINGO VIBRANT CANDY COLOR TOKENS
-// Kid-Centric, Playful, Bubbly & Bright
+// Drawingo palette tokens
 // ==========================================
 
 // Primary Bubbly Colors
@@ -27,6 +26,6 @@ val CosmicSlate = Color(0xFF141722)
 val NeonRose = Color(0xFFFF007F)
 
 // Aliases for Material Theme
-val PrimaryKid = Color(0xFF176B86)
-val SecondaryKid = BubblegumPink
-val TertiaryKid = SunnyYellow
+val PrimaryDrawingo = Color(0xFF176B86)
+val SecondaryDrawingo = BubblegumPink
+val TertiaryDrawingo = SunnyYellow

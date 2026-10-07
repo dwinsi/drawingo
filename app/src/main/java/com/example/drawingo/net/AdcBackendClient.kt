@@ -29,7 +29,7 @@ object AdcBackendClient {
 
     private fun getCandidateUrls(): List<String> {
         if (isSecureBackendUrl(customBackendUrl)) {
-            // A parent's explicit server choice must not silently fall through to another host.
+            // An explicit server choice must not silently fall through to another host.
             return listOf(customBackendUrl.trimEnd('/'))
         }
         return listOf(CLOUD_RUN_URL)
@@ -100,15 +100,15 @@ object AdcBackendClient {
 
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     val json = JSONObject(responseStr)
-                    val sceneStr = json.optString("sceneType", "MAGIC_DANCE")
+                    val sceneStr = json.optString("sceneType", "ABSTRACT_FLOW")
                     val sceneType = when (sceneStr.uppercase()) {
                         "OCEAN_LEAP" -> AnimationSceneType.OCEAN_LEAP
                         "SKY_FLIGHT" -> AnimationSceneType.SKY_FLIGHT
                         "SPACE_LAUNCH" -> AnimationSceneType.SPACE_LAUNCH
                         "LAND_SAFARI" -> AnimationSceneType.LAND_SAFARI
-                        else -> AnimationSceneType.MAGIC_DANCE
+                        else -> AnimationSceneType.ABSTRACT_FLOW
                     }
-                    val subjectName = json.optString("subjectName", "Magic Drawing")
+                    val subjectName = json.optString("subjectName", "Doodle")
                     return@withContext AnimationSceneResult(
                         sceneType = sceneType,
                         subjectName = subjectName

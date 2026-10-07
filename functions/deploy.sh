@@ -17,6 +17,6 @@ gcloud run deploy ${SERVICE_NAME} \
   --allow-unauthenticated \
   --memory=512Mi \
   --cpu=1 \
-  --set-env-vars="GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_GENAI_USE_ENTERPRISE=true,SKETCHES_BUCKET=drawingo-sketches-project-2154682a-9280-4a32-a72"
+  --set-env-vars="GCP_PROJECT_ID=${PROJECT_ID},GCP_LOCATION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_GENAI_USE_ENTERPRISE=true"
 
 echo "✨ Deployment to Google Cloud Run finished successfully!"

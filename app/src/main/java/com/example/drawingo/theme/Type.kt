@@ -7,8 +7,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * Kid-Centric Material 3 Expressive Typography Scale (Ages 1-8).
- * Features bold weights, boosted size hierarchy, and generous letter-spacing.
+ * Material 3 typography for the Drawingo interface.
  */
 val Typography =
     Typography(

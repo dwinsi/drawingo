@@ -35,7 +35,7 @@ async function handleAnalyzeDrawing(req, res) {
       Do not infer personal attributes about the artist or describe anything outside the image.
 
       Respond in EXACTLY this format:
-      SCENE: [OCEAN_LEAP or SKY_FLIGHT or SPACE_LAUNCH or LAND_SAFARI or MAGIC_DANCE]
+      SCENE: [OCEAN_LEAP or SKY_FLIGHT or SPACE_LAUNCH or LAND_SAFARI or ABSTRACT_FLOW]
       SUBJECT: [Short neutral 1-3 word description, or Doodle if uncertain]
 
       SCENE GUIDELINES:
@@ -43,7 +43,7 @@ async function handleAnalyzeDrawing(req, res) {
       - Use SKY_FLIGHT for birds, butterflies, bees, airplanes, clouds, flying creatures.
       - Use SPACE_LAUNCH for rockets, cars, spaceships, stars, comets, fast vehicles.
       - Use LAND_SAFARI for lions, bears, elephants, dinosaurs, dogs, cats, land animals.
-      - Use MAGIC_DANCE for general doodles, scribbles, flowers, shapes, suns.
+      - Use ABSTRACT_FLOW for general doodles, scribbles, flowers, shapes, and other ambiguous sketches.
     `;
 
     const { responseText, modelName, attempts } = await generateGenAiContent(cleanBase64, mimeType, prompt);
@@ -126,8 +126,8 @@ async function generateGenAiContent(cleanBase64, mimeType, prompt) {
 }
 
 function parseGeminiResponse(text) {
-  let sceneType = 'MAGIC_DANCE';
-  let subjectName = 'Magic Drawing';
+  let sceneType = 'ABSTRACT_FLOW';
+  let subjectName = 'Doodle';
 
   const lines = text.split('\n');
 
@@ -139,7 +139,7 @@ function parseGeminiResponse(text) {
       else if (val.includes('SKY') || val.includes('BIRD') || val.includes('FLIGHT')) sceneType = 'SKY_FLIGHT';
       else if (val.includes('SPACE') || val.includes('ROCKET') || val.includes('CAR')) sceneType = 'SPACE_LAUNCH';
       else if (val.includes('LAND') || val.includes('SAFARI') || val.includes('ANIMAL')) sceneType = 'LAND_SAFARI';
-      else sceneType = 'MAGIC_DANCE';
+      else sceneType = 'ABSTRACT_FLOW';
     } else if (/^SUBJECT:/i.test(trimmed)) {
       subjectName = trimmed.split(':')[1].trim();
     }

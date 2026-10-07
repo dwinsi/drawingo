@@ -11,16 +11,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-private val KidLightColorScheme = lightColorScheme(
-    primary = PrimaryKid,
+private val DrawingoLightColorScheme = lightColorScheme(
+    primary = PrimaryDrawingo,
     onPrimary = Color.White,
     primaryContainer = Color(0xFFDDF4FA),
     onPrimaryContainer = DarkNavy,
-    secondary = SecondaryKid,
+    secondary = SecondaryDrawingo,
     onSecondary = DarkNavy,
     secondaryContainer = Color(0xFFFFD8E4),
     onSecondaryContainer = DarkNavy,
-    tertiary = TertiaryKid,
+    tertiary = TertiaryDrawingo,
     onTertiary = DarkNavy,
     tertiaryContainer = SunnyYellow,
     onTertiaryContainer = DarkNavy,
@@ -32,16 +32,16 @@ private val KidLightColorScheme = lightColorScheme(
     onSurfaceVariant = DarkNavy
 )
 
-private val KidDarkColorScheme = darkColorScheme(
-    primary = PrimaryKid,
+private val DrawingoDarkColorScheme = darkColorScheme(
+    primary = PrimaryDrawingo,
     onPrimary = DarkNavy,
     primaryContainer = SkyBlue.copy(alpha = 0.5f),
     onPrimaryContainer = Color.White,
-    secondary = SecondaryKid,
+    secondary = SecondaryDrawingo,
     onSecondary = DarkNavy,
     secondaryContainer = BubblegumPink.copy(alpha = 0.5f),
     onSecondaryContainer = Color.White,
-    tertiary = TertiaryKid,
+    tertiary = TertiaryDrawingo,
     onTertiary = DarkNavy,
     tertiaryContainer = SunnyYellow.copy(alpha = 0.5f),
     onTertiaryContainer = Color.White,
@@ -56,7 +56,7 @@ private val KidDarkColorScheme = darkColorScheme(
 @Composable
 fun DrawingoTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Disable dynamic color to enforce our kid-friendly vibrant theme
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colorScheme =
@@ -65,8 +65,8 @@ fun DrawingoTheme(
                 val context = LocalContext.current
                 if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
             }
-            darkTheme -> KidDarkColorScheme
-            else -> KidLightColorScheme
+            darkTheme -> DrawingoDarkColorScheme
+            else -> DrawingoLightColorScheme
         }
 
     MaterialTheme(

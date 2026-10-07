@@ -1,12 +1,10 @@
 package com.example.drawingo.ui
 
-import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -54,22 +52,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToDown
@@ -77,12 +68,9 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.example.drawingo.R
 import com.example.drawingo.animation.CanvasAnimationRenderer
 import com.example.drawingo.AppPreferences
@@ -116,8 +104,6 @@ fun DrawingCanvas(
 
     val completedStrokes by viewModel.completedStrokes.collectAsState()
     val activeStrokes by viewModel.activeStrokes.collectAsState()
-    val wipeProgress by viewModel.wipeProgress.collectAsState()
-    val isWiping by viewModel.isWiping.collectAsState()
 
     val isGeminiLoading by viewModel.isGeminiLoading.collectAsState()
     val showGeminiDialog by viewModel.showGeminiDialog.collectAsState()
@@ -188,9 +174,6 @@ fun DrawingCanvas(
                 }
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val canvasWidth = size.width
-                val canvasHeight = size.height
-
                 if (isAnimationActive && activeAnimationScene != null) {
                     // Render Active Drawing-to-Animation Scene!
                     CanvasAnimationRenderer.renderScene(
@@ -207,48 +190,10 @@ fun DrawingCanvas(
                         translate(canvasOffsetX, canvasOffsetY)
                         scale(canvasScale, canvasScale, pivot = Offset.Zero)
                     }) {
-                        if (isWiping && wipeProgress > 0f) {
-                            val wipeY = canvasHeight * wipeProgress
-                            val remainingTop = wipeY
-
-                            clipRect(
-                                left = 0f,
-                                top = remainingTop,
-                                right = canvasWidth,
-                                bottom = canvasHeight,
-                                clipOp = ClipOp.Intersect
-                            ) {
-                                drawAllCanvasContent(
-                                    completedStrokes = completedStrokes,
-                                    activeStrokes = activeStrokes.values.toList(),
-                                    currentTimeMs = frameTimeMs
-                                )
-                            }
-
-                            val waveHeight = 60f
-                            val waveBrush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color(0x8000F5FF),
-                                    Color(0xFF39FF14),
-                                    Color(0xFFFF1493),
-                                    Color.Transparent
-                                ),
-                                startY = (wipeY - waveHeight).coerceAtLeast(0f),
-                                endY = (wipeY + waveHeight).coerceAtMost(canvasHeight)
-                            )
-                            drawRect(
-                                brush = waveBrush,
-                                topLeft = Offset(0f, (wipeY - waveHeight).coerceAtLeast(0f)),
-                                size = Size(canvasWidth, waveHeight * 2)
-                            )
-                        } else {
-                            drawAllCanvasContent(
-                                completedStrokes = completedStrokes,
-                                activeStrokes = activeStrokes.values.toList(),
-                                currentTimeMs = frameTimeMs
-                            )
-                        }
+                        drawAllCanvasContent(
+                            completedStrokes = completedStrokes,
+                            activeStrokes = activeStrokes.values.toList()
+                        )
                     }
                 }
 
@@ -559,21 +504,21 @@ fun BottomDrawingoDock(
         DrawerHandle(drawerExpanded) { drawerExpanded = it }
         PrimaryColorRow(selectedColor, onColorSelected)
 
-            AnimatedVisibility(
-                visible = drawerExpanded,
-                enter = expandVertically(expandFrom = Alignment.Bottom),
-                exit = shrinkVertically(shrinkTowards = Alignment.Bottom)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DrawingoPalette.grid.drop(1).forEachIndexed { index, colors ->
-                        ColorSwatchRow(colors, selectedColor, onColorSelected, firstColorIndex = index * 8 + 8)
-                    }
+        AnimatedVisibility(
+            visible = drawerExpanded,
+            enter = expandVertically(expandFrom = Alignment.Bottom),
+            exit = shrinkVertically(shrinkTowards = Alignment.Bottom)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                DrawingoPalette.grid.drop(1).forEachIndexed { index, colors ->
+                    ColorSwatchRow(colors, selectedColor, onColorSelected, firstColorIndex = index * 8 + 8)
+                }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                         val tools = listOf(
                             Triple(DrawingTool.PEN, "✏️", "Pen"),
                             Triple(DrawingTool.HIGHLIGHTER, "🖍️", "Marker"),
@@ -618,11 +563,10 @@ fun BottomDrawingoDock(
                                 }
                             }
                         }
-                    }
                 }
-            }
-
+        }
     }
+}
 }
 
 @Composable
@@ -783,8 +727,7 @@ private fun StrokeSizeRow(selectedStrokeWidth: Float, onWidthSelected: (Float) -
 
 private fun DrawScope.drawAllCanvasContent(
     completedStrokes: List<DrawnStroke>,
-    activeStrokes: List<DrawnStroke>,
-    currentTimeMs: Long
+    activeStrokes: List<DrawnStroke>
 ) {
     for (stroke in completedStrokes) {
         drawSingleStroke(stroke)
