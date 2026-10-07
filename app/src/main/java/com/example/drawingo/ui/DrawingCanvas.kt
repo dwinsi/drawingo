@@ -59,8 +59,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import com.example.drawingo.model.CanvasPaperStyle
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -101,6 +105,7 @@ fun DrawingCanvas(
     val selectedColor by viewModel.selectedColor.collectAsState()
     val selectedStrokeWidth by viewModel.selectedStrokeWidth.collectAsState()
     val selectedEraserWidth by viewModel.selectedEraserWidth.collectAsState()
+    val selectedPaperStyle by viewModel.selectedPaperStyle.collectAsState()
     val canUndo by viewModel.canUndo.collectAsState()
     val canRedo by viewModel.canRedo.collectAsState()
 
@@ -127,6 +132,7 @@ fun DrawingCanvas(
     val animationProgress by viewModel.animationProgress.collectAsState()
 
     var showAppSettings by remember { mutableStateOf(false) }
+    var showPaperStyleMenu by remember { mutableStateOf(false) }
     var showVideoPrompt by remember { mutableStateOf(false) }
     var videoPrompt by remember { mutableStateOf("Gently bring the main subject to life with calm, flowing movement.") }
 
@@ -187,7 +193,14 @@ fun DrawingCanvas(
                     }
                 }
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        // Needed for BlendMode.Clear to work properly without clearing the window background
+                        compositingStrategy = CompositingStrategy.Offscreen
+                    }
+            ) {
                 if (isAnimationActive && activeAnimationScene != null) {
                     // Render Active Drawing-to-Animation Scene!
                     CanvasAnimationRenderer.renderScene(
@@ -199,7 +212,10 @@ fun DrawingCanvas(
                         currentTimeMs = frameTimeMs
                     )
                 } else {
-                    // Render Standard Static Canvas
+                    // Draw Paper Background Layer First
+                    drawPaperStyle(selectedPaperStyle)
+
+                    // Render Standard Static Canvas on top
                     withTransform({
                         translate(canvasOffsetX, canvasOffsetY)
                         scale(canvasScale, canvasScale, pivot = Offset.Zero)
@@ -229,6 +245,7 @@ fun DrawingCanvas(
             },
             onGenerateVideoClick = { showVideoPrompt = true },
             onStopAnimationClick = { viewModel.stopAnimation() },
+            onPaperStyleClick = { showPaperStyleMenu = true },
             onSettingsClick = { showAppSettings = true },
             modifier = Modifier
                 .fillMaxWidth()
@@ -408,6 +425,52 @@ fun DrawingCanvas(
             }
         }
 
+        if (showPaperStyleMenu) {
+            Dialog(onDismissRequest = { showPaperStyleMenu = false }) {
+                Surface(
+                    modifier = Modifier.width(320.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(0xFFFFFEFA),
+                    shadowElevation = 8.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            "Paper Style",
+                            color = Color(0xFF343849),
+                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CanvasPaperStyle.entries.forEach { style ->
+                                val name = style.name.lowercase().replace("_", " ").replaceFirstChar { it.uppercase() }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (style == selectedPaperStyle) Color(0xFFE9E2F0) else Color.Transparent)
+                                        .clickable {
+                                            viewModel.setPaperStyle(style)
+                                            showPaperStyleMenu = false
+                                        }
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        name,
+                                        fontWeight = if (style == selectedPaperStyle) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (style == selectedPaperStyle) Color(0xFF69489B) else Color(0xFF343849)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (showAppSettings) {
             AppSettingsDialog(
                 cloudAiEnabled = AppPreferences.isCloudAiAllowed(context),
@@ -432,6 +495,7 @@ fun TopKeepBar(
     onAnimateDrawingClick: () -> Unit,
     onGenerateVideoClick: () -> Unit,
     onStopAnimationClick: () -> Unit,
+    onPaperStyleClick: () -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -465,6 +529,10 @@ fun TopKeepBar(
                             onClick = { actionsExpanded = false; onStopAnimationClick() }
                         )
                     }
+                    DropdownMenuItem(
+                        text = { Text("📄  Paper style") },
+                        onClick = { actionsExpanded = false; onPaperStyleClick() }
+                    )
                     DropdownMenuItem(
                         text = { Text("⚙️  Settings") },
                         onClick = { actionsExpanded = false; onSettingsClick() }
@@ -859,6 +927,73 @@ private fun StrokeSizeRow(selectedStrokeWidth: Float, onWidthSelected: (Float) -
     }
 }
 
+private fun DrawScope.drawPaperStyle(style: CanvasPaperStyle) {
+    when (style) {
+        CanvasPaperStyle.PURE_WHITE -> {
+            drawRect(color = Color.White)
+        }
+        CanvasPaperStyle.GRID -> {
+            drawRect(color = Color(0xFFF8F9FA))
+            val gridSize = 40.dp.toPx()
+            for (x in 0..size.width.toInt() step gridSize.toInt()) {
+                drawLine(
+                    color = Color(0xFFDEE2E6),
+                    start = Offset(x.toFloat(), 0f),
+                    end = Offset(x.toFloat(), size.height),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+            for (y in 0..size.height.toInt() step gridSize.toInt()) {
+                drawLine(
+                    color = Color(0xFFDEE2E6),
+                    start = Offset(0f, y.toFloat()),
+                    end = Offset(size.width, y.toFloat()),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+        }
+        CanvasPaperStyle.RULED -> {
+            drawRect(color = Color(0xFFFDFBF7))
+            val spacing = 48.dp.toPx()
+            
+            // Draw margin line
+            drawLine(
+                color = Color(0xFFFFCDD2).copy(alpha = 0.6f),
+                start = Offset(64.dp.toPx(), 0f),
+                end = Offset(64.dp.toPx(), size.height),
+                strokeWidth = 2.dp.toPx()
+            )
+            
+            for (y in 0..size.height.toInt() step spacing.toInt()) {
+                if (y == 0) continue
+                drawLine(
+                    color = Color(0xFF90CAF9).copy(alpha = 0.5f),
+                    start = Offset(0f, y.toFloat()),
+                    end = Offset(size.width, y.toFloat()),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+        }
+        CanvasPaperStyle.KRAFT -> {
+            drawRect(color = Color(0xFFD4B594))
+            // simple texture dots
+            val stride = 12.dp.toPx().toInt()
+            for (x in 0..size.width.toInt() step stride) {
+                for (y in 0..size.height.toInt() step stride) {
+                    val noise = (x * y * 31 % 100) / 100f
+                    if (noise > 0.5f) {
+                        drawCircle(
+                            color = Color(0xFF8B5A2B).copy(alpha = 0.1f + (noise * 0.1f)),
+                            radius = 2f,
+                            center = Offset(x.toFloat() + (noise * 5f), y.toFloat() + (noise * 5f))
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun DrawScope.drawAllCanvasContent(
     completedStrokes: List<DrawnStroke>,
     activeStrokes: List<DrawnStroke>
@@ -898,6 +1033,14 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
             // A broken core plus high-contrast paper flecks exposes the canvas through wax.
             drawPath(path, stroke.color.copy(alpha = stroke.alpha * 0.76f), style = Stroke(stroke.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
             drawCrayonTexture(stroke)
+        }
+        DrawingTool.ERASER -> {
+            drawPath(
+                path = path,
+                color = Color.Black,
+                style = Stroke(width = stroke.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                blendMode = BlendMode.Clear
+            )
         }
         else -> drawPath(
             path = path,

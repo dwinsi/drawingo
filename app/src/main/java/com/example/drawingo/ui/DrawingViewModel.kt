@@ -63,6 +63,9 @@ class DrawingViewModel : ViewModel() {
     private val _selectedEraserWidth = MutableStateFlow(32f)
     val selectedEraserWidth: StateFlow<Float> = _selectedEraserWidth.asStateFlow()
 
+    private val _selectedPaperStyle = MutableStateFlow(com.example.drawingo.model.CanvasPaperStyle.PURE_WHITE)
+    val selectedPaperStyle: StateFlow<com.example.drawingo.model.CanvasPaperStyle> = _selectedPaperStyle.asStateFlow()
+
     // Undo and Redo Stacks
     private val _undoStack = MutableStateFlow<List<List<DrawnStroke>>>(emptyList())
     private val _redoStack = MutableStateFlow<List<List<DrawnStroke>>>(emptyList())
@@ -137,6 +140,10 @@ class DrawingViewModel : ViewModel() {
 
     fun setEraserWidth(width: Float) {
         _selectedEraserWidth.value = width
+    }
+
+    fun setPaperStyle(style: com.example.drawingo.model.CanvasPaperStyle) {
+        _selectedPaperStyle.value = style
     }
 
     fun onPanAndZoom(zoomChange: Float, panChange: Offset) {
