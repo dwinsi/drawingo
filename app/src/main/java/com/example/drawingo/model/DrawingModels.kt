@@ -9,7 +9,9 @@ enum class DrawingTool {
     ERASER,
     PEN,
     HIGHLIGHTER,
-    BRUSH
+    BRUSH,
+    WATERCOLOR,
+    CRAYON
 }
 
 enum class CanvasPaperStyle {

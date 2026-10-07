@@ -201,7 +201,8 @@ class DrawingViewModel : ViewModel() {
 
         val strokeColor = when (tool) {
             DrawingTool.ERASER -> Color.White
-            DrawingTool.PEN, DrawingTool.HIGHLIGHTER, DrawingTool.BRUSH, DrawingTool.LASSO -> _selectedColor.value
+            DrawingTool.PEN, DrawingTool.HIGHLIGHTER, DrawingTool.BRUSH,
+            DrawingTool.WATERCOLOR, DrawingTool.CRAYON, DrawingTool.LASSO -> _selectedColor.value
         }
         val strokeWidth = when (tool) {
             DrawingTool.PEN -> _selectedStrokeWidth.value
@@ -209,11 +210,15 @@ class DrawingViewModel : ViewModel() {
             DrawingTool.BRUSH -> _selectedStrokeWidth.value * 1.8f
             DrawingTool.ERASER -> _selectedEraserWidth.value
             DrawingTool.LASSO -> 4f
+            DrawingTool.WATERCOLOR -> _selectedStrokeWidth.value * 2.2f
+            DrawingTool.CRAYON -> _selectedStrokeWidth.value * 1.25f
         }
         val alpha = when (tool) {
             DrawingTool.PEN -> 1.0f
             DrawingTool.HIGHLIGHTER -> 0.38f
             DrawingTool.BRUSH -> 0.85f
+            DrawingTool.WATERCOLOR -> 0.68f
+            DrawingTool.CRAYON -> 0.95f
             DrawingTool.ERASER, DrawingTool.LASSO -> 1.0f
         }
         val newStroke = DrawnStroke(

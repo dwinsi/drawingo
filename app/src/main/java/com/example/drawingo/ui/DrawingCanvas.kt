@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -523,6 +524,8 @@ fun BottomDrawingoDock(
                             Triple(DrawingTool.PEN, "✏️", "Pen"),
                             Triple(DrawingTool.HIGHLIGHTER, "🖍️", "Marker"),
                             Triple(DrawingTool.BRUSH, "🖌️", "Brush"),
+                            Triple(DrawingTool.WATERCOLOR, "💧", "Watercolor"),
+                            Triple(DrawingTool.CRAYON, "🖍", "Crayon"),
                             Triple(DrawingTool.ERASER, "🧹", "Eraser"),
                             Triple(DrawingTool.LASSO, "🪄", "Wand")
                         )
@@ -539,6 +542,23 @@ fun BottomDrawingoDock(
                                 verticalArrangement = Arrangement.spacedBy(0.dp)
                             ) {
                                 Text(icon, fontSize = 24.sp, lineHeight = 28.sp)
+                                if (tool == DrawingTool.WATERCOLOR || tool == DrawingTool.CRAYON) {
+                                    Canvas(Modifier.width(42.dp).height(12.dp)) {
+                                        val previewPath = Path().apply {
+                                            moveTo(3.dp.toPx(), size.height * 0.62f)
+                                            cubicTo(size.width * 0.3f, -size.height, size.width * 0.65f, size.height * 1.8f, size.width - 3.dp.toPx(), size.height * 0.38f)
+                                        }
+                                        if (tool == DrawingTool.WATERCOLOR) {
+                                            drawPath(previewPath, Color(0xFF4388A4).copy(alpha = 0.38f), style = Stroke(8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+                                            drawCircle(Color(0xFF4388A4).copy(alpha = 0.3f), radius = 3.dp.toPx(), center = Offset(size.width * 0.52f, size.height * 0.56f))
+                                        } else {
+                                            drawPath(previewPath, Color(0xFF4388A4), style = Stroke(5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+                                            listOf(0.25f, 0.48f, 0.7f).forEach { fraction ->
+                                                drawCircle(Color.White, radius = 1.dp.toPx(), center = Offset(size.width * fraction, size.height * 0.52f))
+                                            }
+                                        }
+                                    }
+                                }
                                 Text(label, color = if (isSelected) Color.White else Color(0xFF4F5260), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
@@ -740,17 +760,151 @@ private fun DrawScope.drawAllCanvasContent(
 private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
     if (stroke.points.size < 2) return
     val path = Path()
-    path.moveTo(stroke.points[0].x, stroke.points[0].y)
+    var previousX = stroke.points[0].x
+    var previousY = stroke.points[0].y
+    path.moveTo(previousX, previousY)
     for (i in 1 until stroke.points.size) {
-        path.lineTo(stroke.points[i].x, stroke.points[i].y)
+        val currentX = stroke.points[i].x
+        val currentY = stroke.points[i].y
+        val midX = (previousX + currentX) / 2f
+        val midY = (previousY + currentY) / 2f
+        path.quadraticTo(previousX, previousY, midX, midY)
+        previousX = currentX
+        previousY = currentY
     }
-    drawPath(
-        path = path,
-        color = stroke.color.copy(alpha = stroke.alpha),
-        style = Stroke(
-            width = stroke.strokeWidth,
-            cap = StrokeCap.Round,
-            join = StrokeJoin.Round
+    path.lineTo(previousX, previousY)
+    when (stroke.tool) {
+        DrawingTool.WATERCOLOR -> {
+            // A broad translucent wash with irregular pigment blooms reads as a wet medium.
+            drawPath(path, stroke.color.copy(alpha = stroke.alpha * 0.24f), style = Stroke(stroke.strokeWidth * 1.7f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(path, stroke.color.copy(alpha = stroke.alpha * 0.32f), style = Stroke(stroke.strokeWidth * 1.12f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawWatercolorBlooms(stroke)
+        }
+        DrawingTool.CRAYON -> {
+            // A broken core plus high-contrast paper flecks exposes the canvas through wax.
+            drawPath(path, stroke.color.copy(alpha = stroke.alpha * 0.76f), style = Stroke(stroke.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawCrayonTexture(stroke)
+        }
+        else -> drawPath(
+            path = path,
+            color = stroke.color.copy(alpha = stroke.alpha),
+            style = Stroke(width = stroke.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
-    )
+    }
+}
+
+private fun DrawScope.drawWatercolorBlooms(stroke: DrawnStroke) {
+    val stride = (stroke.points.size / 32).coerceAtLeast(1)
+    stroke.points.indices.step(stride).forEach { index ->
+        val point = stroke.points[index]
+        val seed = stroke.id xor (index.toLong() * 31L)
+        
+        val randRadiusMult = 0.4f + ((seed ushr 12 and 15).toFloat() / 15f) * 1.8f
+        val offset = (((seed ushr 8) and 15).toFloat() - 7.5f) * stroke.strokeWidth * 0.12f
+        val baseRadius = stroke.strokeWidth * (0.22f + ((seed and 7).toFloat() * 0.025f))
+        val radius = (baseRadius * randRadiusMult).coerceAtLeast(1f)
+        
+        val randAlphaMult = 0.5f + ((seed ushr 16 and 15).toFloat() / 15f) * 1.0f
+        val alpha = (stroke.alpha * 0.24f * randAlphaMult).coerceIn(0f, 1f)
+        
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(stroke.color.copy(alpha = alpha), stroke.color.copy(alpha = 0f)),
+                center = Offset(point.x + offset, point.y - offset),
+                radius = radius
+            ),
+            radius = radius,
+            center = Offset(point.x + offset, point.y - offset)
+        )
+        
+        // Random stray droplets for more realistic liquid spatter
+        if ((seed and 3L) == 0L) {
+            val dropRadiusMult = 0.2f + ((seed ushr 20 and 7).toFloat() / 7f) * 1.5f
+            val dropOffset = (((seed ushr 24) and 15).toFloat() - 7.5f) * stroke.strokeWidth * 0.35f
+            val dropRadius = (stroke.strokeWidth * 0.06f * dropRadiusMult).coerceAtLeast(0.5f)
+            val dropAlpha = (stroke.alpha * 0.35f).coerceIn(0f, 1f)
+            
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(stroke.color.copy(alpha = dropAlpha), stroke.color.copy(alpha = 0f)),
+                    center = Offset(point.x - dropOffset, point.y + dropOffset),
+                    radius = dropRadius
+                ),
+                radius = dropRadius,
+                center = Offset(point.x - dropOffset, point.y + dropOffset)
+            )
+        }
+    }
+}
+
+private fun DrawScope.drawCrayonTexture(stroke: DrawnStroke) {
+    val stride = (stroke.points.size / 72).coerceAtLeast(1)
+    stroke.points.indices.step(stride).forEach { index ->
+        val point = stroke.points[index]
+        val seed = stroke.id xor (index.toLong() * 0x45D9F3BL)
+        val side = if ((seed and 1L) == 0L) -1f else 1f
+        val across = side * stroke.strokeWidth * (0.2f + ((seed ushr 4 and 7).toFloat() * 0.045f))
+        
+        // Randomize base sizes
+        val randRadiusMult = 0.4f + ((seed ushr 7 and 15).toFloat() / 15f) * 1.6f
+        val randLengthMult = 1.5f + ((seed ushr 11 and 15).toFloat() / 15f) * 4.5f
+        
+        val baseRadius = (stroke.strokeWidth * 0.055f).coerceAtLeast(0.8f)
+        val radius = baseRadius * randRadiusMult
+        
+        val drawLines = (seed and 3L) == 0L
+
+        if (drawLines && index > 0) {
+            val prevPoint = stroke.points[index - 1]
+            val dirX = point.x - prevPoint.x
+            val dirY = point.y - prevPoint.y
+            val len = kotlin.math.hypot(dirX.toDouble(), dirY.toDouble()).toFloat()
+            val dx = if (len > 0) dirX / len else 1f
+            val dy = if (len > 0) dirY / len else 0f
+            val lineLength = radius * randLengthMult
+            
+            drawLine(
+                color = Color.White.copy(alpha = 0.58f),
+                start = Offset(point.x + across, point.y + side * radius),
+                end = Offset(point.x + across + dx * lineLength, point.y + side * radius + dy * lineLength),
+                strokeWidth = radius,
+                cap = StrokeCap.Round
+            )
+        } else {
+            drawCircle(
+                color = Color.White.copy(alpha = 0.68f),
+                radius = radius,
+                center = Offset(point.x + across, point.y + side * radius)
+            )
+        }
+        
+        if (index % 3 == 0) {
+            val randColorRadiusMult = 0.4f + ((seed ushr 15 and 15).toFloat() / 15f) * 1.6f
+            val colorRadius = baseRadius * randColorRadiusMult * 0.85f
+            
+            if (drawLines && index < stroke.points.size - 1) {
+                val nextPoint = stroke.points[index + 1]
+                val dirX = nextPoint.x - point.x
+                val dirY = nextPoint.y - point.y
+                val len = kotlin.math.hypot(dirX.toDouble(), dirY.toDouble()).toFloat()
+                val dx = if (len > 0) dirX / len else 1f
+                val dy = if (len > 0) dirY / len else 0f
+                val lineLength = colorRadius * randLengthMult
+
+                drawLine(
+                    color = stroke.color.copy(alpha = stroke.alpha * 0.72f),
+                    start = Offset(point.x - across * 0.55f, point.y - side * colorRadius),
+                    end = Offset(point.x - across * 0.55f + dx * lineLength, point.y - side * colorRadius + dy * lineLength),
+                    strokeWidth = colorRadius,
+                    cap = StrokeCap.Round
+                )
+            } else {
+                drawCircle(
+                    color = stroke.color.copy(alpha = stroke.alpha * 0.82f),
+                    radius = colorRadius,
+                    center = Offset(point.x - across * 0.55f, point.y - side * colorRadius)
+                )
+            }
+        }
+    }
 }
