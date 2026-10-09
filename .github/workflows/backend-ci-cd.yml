@@ -84,7 +84,7 @@ jobs:
             --allow-unauthenticated \
             --memory=512Mi \
             --cpu=1 \
-            --set-env-vars="GCP_PROJECT_ID=${{ env.PROJECT_ID }},GCP_LOCATION=${{ env.REGION }},GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_GENAI_USE_ENTERPRISE=true"
+            --set-env-vars="GCP_PROJECT_ID=${{ env.PROJECT_ID }},GCP_LOCATION=${{ env.REGION }},GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_GENAI_USE_ENTERPRISE=true,ENABLE_VEO_GENERATION=true"
 
       - name: Verify Live Service Health
         run: |
