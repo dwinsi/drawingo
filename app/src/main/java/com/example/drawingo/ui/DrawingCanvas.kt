@@ -101,6 +101,7 @@ val DockShadow = Color(0x33000000)
 @Composable
 fun DrawingCanvas(
     viewModel: DrawingViewModel,
+    onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -204,6 +205,13 @@ fun DrawingCanvas(
                     }
                 }
         ) {
+            // Render Paper Background Layer First (NOT offscreen composited)
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                if (!isAnimationActive || activeAnimationScene == null) {
+                    drawPaperStyle(selectedPaperStyle)
+                }
+            }
+            
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
@@ -223,9 +231,6 @@ fun DrawingCanvas(
                         currentTimeMs = frameTimeMs
                     )
                 } else {
-                    // Draw Paper Background Layer First
-                    drawPaperStyle(selectedPaperStyle)
-
                     // Render Standard Static Canvas on top only when not playing video
                     if (generatedVideo == null) {
                         withTransform({
@@ -239,7 +244,6 @@ fun DrawingCanvas(
                         }
                     }
                 }
-
             }
 
             // Canvas-native Video Rendering across full canvas!
@@ -276,6 +280,7 @@ fun DrawingCanvas(
             canRedo = canRedo && generatedVideo == null,
             hasArtwork = completedStrokes.isNotEmpty() && generatedVideo == null,
             isAnimationActive = isAnimationActive || (generatedVideo != null),
+            hasVideo = generatedVideo != null,
             onUndo = { viewModel.undo() },
             onRedo = { viewModel.redo() },
             onClear = { viewModel.clearCanvas() },
@@ -289,6 +294,16 @@ fun DrawingCanvas(
                 else viewModel.stopAnimation()
             },
             onPaperStyleClick = { showPaperStyleMenu = true },
+            onExportClick = { format -> 
+                val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(completedStrokes)
+                com.example.drawingo.util.ExportUtils.saveBitmapToGallery(context, bitmap, "Drawingo_${System.currentTimeMillis()}", format == "PNG")
+            },
+            onSaveVideoClick = {
+                generatedVideo?.let {
+                    com.example.drawingo.util.ExportUtils.saveVideoToGallery(context, it, "Drawingo_${System.currentTimeMillis()}")
+                }
+            },
+            onGalleryClick = onNavigateBack,
             onSettingsClick = { showAppSettings = true },
             onApiLogsClick = { showApiLogsPage = true },
             modifier = Modifier
@@ -595,6 +610,7 @@ fun TopKeepBar(
     canRedo: Boolean,
     hasArtwork: Boolean,
     isAnimationActive: Boolean,
+    hasVideo: Boolean = false,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onClear: () -> Unit,
@@ -602,6 +618,9 @@ fun TopKeepBar(
     onGenerateVideoClick: () -> Unit,
     onStopAnimationClick: () -> Unit,
     onPaperStyleClick: () -> Unit,
+    onExportClick: (String) -> Unit,
+    onSaveVideoClick: () -> Unit = {},
+    onGalleryClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onApiLogsClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -618,11 +637,18 @@ fun TopKeepBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ModeSelector(
-            animeEnabled = hasArtwork && !isAnimationActive,
-            onAnimeClick = onAnimateDrawingClick,
-            onGenerateVideoClick = onGenerateVideoClick
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (isAnimationActive) {
+                CompactAction("⬅️", "Back to Drawing", size = 44.dp, onClick = onStopAnimationClick)
+            } else {
+                CompactAction("🖼️", "Gallery", size = 44.dp, onClick = onGalleryClick)
+            }
+            ModeSelector(
+                animeEnabled = hasArtwork && !isAnimationActive,
+                onAnimeClick = onAnimateDrawingClick,
+                onGenerateVideoClick = onGenerateVideoClick
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(1.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactAction("↶", "Undo", enabled = canUndo, size = 40.dp, onClick = onUndo)
             CompactAction("↷", "Redo", enabled = canRedo, size = 40.dp, onClick = onRedo)
@@ -630,16 +656,32 @@ fun TopKeepBar(
             Box {
                 CompactAction("⋯", "More actions", size = 40.dp, onClick = { actionsExpanded = true })
                 DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
-                    if (isAnimationActive) {
+                    if (isAnimationActive && !hasVideo) {
                         DropdownMenuItem(
                             text = { Text("⏹  Stop animation") },
                             onClick = { actionsExpanded = false; onStopAnimationClick() }
+                        )
+                    }
+                    if (hasVideo) {
+                        DropdownMenuItem(
+                            text = { Text("💾  Save Video") },
+                            onClick = { actionsExpanded = false; onSaveVideoClick() }
                         )
                     }
                     DropdownMenuItem(
                         text = { Text("📄  Paper style") },
                         onClick = { actionsExpanded = false; onPaperStyleClick() }
                     )
+                    if (!hasVideo) {
+                        DropdownMenuItem(
+                            text = { Text("💾  Save as PNG") },
+                            onClick = { actionsExpanded = false; onExportClick("PNG") }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("💾  Save as JPEG") },
+                            onClick = { actionsExpanded = false; onExportClick("JPEG") }
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("⚙️  Settings") },
                         onClick = { actionsExpanded = false; onSettingsClick() }

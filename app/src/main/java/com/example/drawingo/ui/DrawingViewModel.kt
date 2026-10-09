@@ -29,12 +29,74 @@ import java.util.UUID
 import kotlin.math.sin
 import kotlin.random.Random
 
+import com.example.drawingo.data.DrawingDao
+import com.example.drawingo.data.DrawingProject
+import com.example.drawingo.util.StrokeMapper
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+
 /**
  * Lightweight MVVM ViewModel managing the Drawingo canvas,
  * tool selection, 2-finger Pan/Scroll & Pinch-Zoom, Undo/Redo,
  * drawing tools, canvas gestures, and optional cloud-assisted drawing animation.
  */
-class DrawingViewModel : ViewModel() {
+class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
+
+    val allProjects = drawingDao.getAllProjects().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        emptyList()
+    )
+
+    private val _currentProjectId = MutableStateFlow<Long?>(null)
+    val currentProjectId: StateFlow<Long?> = _currentProjectId.asStateFlow()
+
+    fun createNewProject() {
+        _currentProjectId.value = null
+        _completedStrokes.value = emptyList()
+        _activeStrokes.value = emptyMap()
+        _undoStack.value = emptyList()
+        _redoStack.value = emptyList()
+        updateUndoRedoStates()
+    }
+
+    fun loadProject(projectId: Long) {
+        viewModelScope.launch {
+            _currentProjectId.value = projectId
+            val strokes = drawingDao.getStrokesForProject(projectId)
+            val drawnStrokes = strokes.mapIndexed { index, entity ->
+                StrokeMapper.fromEntity(entity, strokeIdGenerator.getAndIncrement())
+            }
+            _completedStrokes.value = drawnStrokes
+            _activeStrokes.value = emptyMap()
+            _undoStack.value = emptyList()
+            _redoStack.value = emptyList()
+            updateUndoRedoStates()
+        }
+    }
+
+    fun saveCurrentProject(name: String) {
+        viewModelScope.launch {
+            val projectId = _currentProjectId.value
+            val newId = if (projectId == null) {
+                // Insert new project
+                val project = DrawingProject(name = name)
+                drawingDao.insertProject(project)
+            } else {
+                val project = drawingDao.getProjectById(projectId) ?: return@launch
+                drawingDao.updateProject(project.copy(name = name, updatedAt = System.currentTimeMillis()))
+                projectId
+            }
+            _currentProjectId.value = newId
+            
+            // Delete old strokes and insert new ones
+            drawingDao.deleteStrokesForProject(newId)
+            val strokeEntities = _completedStrokes.value.mapIndexed { index, stroke ->
+                StrokeMapper.toEntity(stroke, newId, index)
+            }
+            drawingDao.insertStrokes(strokeEntities)
+        }
+    }
 
     private val strokeIdGenerator = AtomicLong(1L)
 
