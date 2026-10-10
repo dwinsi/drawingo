@@ -67,6 +67,9 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.layout.onSizeChanged
+import com.example.drawingo.animation.QuickMagicRenderer.processMagicStroke
+import com.example.drawingo.model.DrawingFrame
 import com.example.drawingo.model.CanvasPaperStyle
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -110,6 +113,7 @@ fun DrawingCanvas(
     val selectedStrokeWidth by viewModel.selectedStrokeWidth.collectAsState()
     val selectedEraserWidth by viewModel.selectedEraserWidth.collectAsState()
     val selectedPaperStyle by viewModel.selectedPaperStyle.collectAsState()
+    val symmetryMode by viewModel.symmetryMode.collectAsState()
     val canUndo by viewModel.canUndo.collectAsState()
     val canRedo by viewModel.canRedo.collectAsState()
 
@@ -119,6 +123,12 @@ fun DrawingCanvas(
 
     val completedStrokes by viewModel.completedStrokes.collectAsState()
     val activeStrokes by viewModel.activeStrokes.collectAsState()
+    
+    val layers by viewModel.layers.collectAsState()
+    val selectedLayerId by viewModel.selectedLayerId.collectAsState()
+    
+    val selectedStrokes by viewModel.selectedStrokes.collectAsState()
+    val lassoTransform by viewModel.lassoTransform.collectAsState()
 
     val isGeminiLoading by viewModel.isGeminiLoading.collectAsState()
     val showGeminiDialog by viewModel.showGeminiDialog.collectAsState()
@@ -138,7 +148,15 @@ fun DrawingCanvas(
     var showAppSettings by remember { mutableStateOf(false) }
     var showApiLogsPage by remember { mutableStateOf(false) }
     var showPaperStyleMenu by remember { mutableStateOf(false) }
+    var showLayersMenu by remember { mutableStateOf(false) }
     var showVideoPrompt by remember { mutableStateOf(false) }
+    var showAnimationDock by remember { mutableStateOf(false) }
+    
+    // Animation States
+    val currentFrameIndex by viewModel.currentFrameIndex.collectAsState()
+    val isPlayingLocalAnimation by viewModel.isPlayingLocalAnimation.collectAsState()
+    val onionSkinEnabled by viewModel.onionSkinEnabled.collectAsState()
+    val activePreset by viewModel.activePreset.collectAsState()
     var videoPrompt by remember { mutableStateOf("Gently bring the main subject to life with calm, flowing movement.") }
     var videoAspectRatio by remember { mutableStateOf("16:9") }
 
@@ -166,6 +184,10 @@ fun DrawingCanvas(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .onSizeChanged { size ->
+                    viewModel.screenWidth = size.width.toFloat()
+                    viewModel.screenHeight = size.height.toFloat()
+                }
                 .pointerInput(Unit) {
                     detectTransformGestures { _, pan, zoom, _ ->
                         if (!isAnimationActive && generatedVideo == null && (zoom != 1f || pan != Offset.Zero)) {
@@ -184,12 +206,13 @@ fun DrawingCanvas(
                                 for (change in event.changes) {
                                     val pointerId = change.id.value
                                     val position = change.position
+                                    val pressure = change.pressure
 
                                     if (change.changedToDown()) {
-                                        viewModel.onPointerDown(pointerId, position)
+                                        viewModel.onPointerDown(pointerId, position, pressure)
                                         change.consume()
                                     } else if (change.pressed && change.positionChanged()) {
-                                        viewModel.onPointerMove(pointerId, position)
+                                        viewModel.onPointerMove(pointerId, position, pressure)
                                         change.consume()
                                     } else if (change.changedToUp()) {
                                         viewModel.onPointerUp(pointerId)
@@ -220,6 +243,20 @@ fun DrawingCanvas(
                         compositingStrategy = CompositingStrategy.Offscreen
                     }
             ) {
+                if (symmetryMode != com.example.drawingo.model.SymmetryMode.NONE) {
+                    val midX = size.width / 2f
+                    val midY = size.height / 2f
+                    val dashPathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                    val lineColor = Color.Gray.copy(alpha = 0.5f)
+                    
+                    if (symmetryMode == com.example.drawingo.model.SymmetryMode.VERTICAL || symmetryMode == com.example.drawingo.model.SymmetryMode.QUAD) {
+                        drawLine(color = lineColor, start = Offset(midX, 0f), end = Offset(midX, size.height), strokeWidth = 2f, pathEffect = dashPathEffect)
+                    }
+                    if (symmetryMode == com.example.drawingo.model.SymmetryMode.HORIZONTAL || symmetryMode == com.example.drawingo.model.SymmetryMode.QUAD) {
+                        drawLine(color = lineColor, start = Offset(0f, midY), end = Offset(size.width, midY), strokeWidth = 2f, pathEffect = dashPathEffect)
+                    }
+                }
+
                 if (isAnimationActive && activeAnimationScene != null) {
                     // Render Active Drawing-to-Animation Scene!
                     CanvasAnimationRenderer.renderScene(
@@ -238,8 +275,15 @@ fun DrawingCanvas(
                             scale(canvasScale, canvasScale, pivot = Offset.Zero)
                         }) {
                             drawAllCanvasContent(
-                                completedStrokes = completedStrokes,
-                                activeStrokes = activeStrokes.values.toList()
+                                layers = layers,
+                                activeStrokes = activeStrokes.values.toList(),
+                                activeLayerId = selectedLayerId,
+                                currentFrameIndex = currentFrameIndex,
+                                onionSkinEnabled = onionSkinEnabled && !isPlayingLocalAnimation,
+                                activePreset = activePreset,
+                                selectedStrokeIds = selectedStrokes,
+                                lassoTransform = lassoTransform,
+                                timeMs = frameTimeMs
                             )
                         }
                     }
@@ -278,24 +322,25 @@ fun DrawingCanvas(
         TopKeepBar(
             canUndo = canUndo && generatedVideo == null,
             canRedo = canRedo && generatedVideo == null,
-            hasArtwork = completedStrokes.isNotEmpty() && generatedVideo == null,
+            hasArtwork = layers.any { layer -> layer.frames.any { it.strokes.isNotEmpty() } } && generatedVideo == null,
             isAnimationActive = isAnimationActive || (generatedVideo != null),
             hasVideo = generatedVideo != null,
             onUndo = { viewModel.undo() },
             onRedo = { viewModel.redo() },
             onClear = { viewModel.clearCanvas() },
             onAnimateDrawingClick = {
-                val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(completedStrokes)
-                viewModel.triggerDrawingAnimation(context, bitmap, AppPreferences.isCloudAiAllowed(context))
+                showAnimationDock = !showAnimationDock
             },
             onGenerateVideoClick = { showVideoPrompt = true },
             onStopAnimationClick = {
                 if (generatedVideo != null) viewModel.closeGeneratedVideo()
                 else viewModel.stopAnimation()
             },
+            onLayersClick = { showLayersMenu = true },
             onPaperStyleClick = { showPaperStyleMenu = true },
             onExportClick = { format -> 
-                val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(completedStrokes)
+                val flatStrokes = layers.flatMap { layer -> layer.frames.getOrNull(currentFrameIndex)?.strokes ?: emptyList() }
+                val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(flatStrokes)
                 com.example.drawingo.util.ExportUtils.saveBitmapToGallery(context, bitmap, "Drawingo_${System.currentTimeMillis()}", format == "PNG")
             },
             onSaveVideoClick = {
@@ -306,6 +351,7 @@ fun DrawingCanvas(
             onGalleryClick = onNavigateBack,
             onSettingsClick = { showAppSettings = true },
             onApiLogsClick = { showApiLogsPage = true },
+            viewModel = viewModel,
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
@@ -488,8 +534,26 @@ fun DrawingCanvas(
             }
         }
 
-        // Bottom Tool Dock
-        if (!isAnimationActive && generatedVideo == null) {
+        if (showAnimationDock && generatedVideo == null) {
+            AnimationBottomDock(
+                currentFrameIndex = currentFrameIndex,
+                frameCount = layers.maxOfOrNull { it.frames.size } ?: 1,
+                isPlaying = isPlayingLocalAnimation,
+                onionSkinEnabled = onionSkinEnabled,
+                activePreset = activePreset,
+                onFrameSelect = { viewModel.selectFrame(it) },
+                onAddFrame = { viewModel.addFrame() },
+                onDuplicateFrame = { viewModel.duplicateFrame() },
+                onDeleteFrame = { viewModel.deleteFrame(it) },
+                onTogglePlayback = { viewModel.toggleLocalPlayback() },
+                onToggleOnionSkin = { viewModel.toggleOnionSkin() },
+                onSelectPreset = { viewModel.setQuickMagicPreset(it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .align(Alignment.BottomCenter)
+            )
+        } else if (!isAnimationActive && generatedVideo == null) {
             BottomDrawingoDock(
                 selectedTool = selectedTool,
                 selectedColor = selectedColor,
@@ -582,6 +646,19 @@ fun DrawingCanvas(
             }
         }
 
+        if (showLayersMenu) {
+            LayersBottomSheet(
+                layers = layers,
+                selectedLayerId = selectedLayerId,
+                onDismiss = { showLayersMenu = false },
+                onAddLayer = { viewModel.addLayer() },
+                onSelectLayer = { viewModel.selectLayer(it) },
+                onToggleVisibility = { viewModel.toggleLayerVisibility(it) },
+                onDeleteLayer = { viewModel.deleteLayer(it) },
+                onOpacityChange = { id, opacity -> viewModel.setLayerOpacity(id, opacity) }
+            )
+        }
+
         if (showAppSettings) {
             AppSettingsDialog(
                 cloudAiEnabled = AppPreferences.isCloudAiAllowed(context),
@@ -617,16 +694,19 @@ fun TopKeepBar(
     onAnimateDrawingClick: () -> Unit,
     onGenerateVideoClick: () -> Unit,
     onStopAnimationClick: () -> Unit,
+    onLayersClick: () -> Unit,
     onPaperStyleClick: () -> Unit,
     onExportClick: (String) -> Unit,
     onSaveVideoClick: () -> Unit = {},
     onGalleryClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onApiLogsClick: () -> Unit,
+    viewModel: DrawingViewModel,
     modifier: Modifier = Modifier
 ) {
     var actionsExpanded by remember { mutableStateOf(false) }
     var showClearConfirmation by remember { mutableStateOf(false) }
+    val symmetryMode by viewModel.symmetryMode.collectAsState()
 
     Row(
         modifier = modifier
@@ -644,14 +724,22 @@ fun TopKeepBar(
                 CompactAction("🖼️", "Gallery", size = 44.dp, onClick = onGalleryClick)
             }
             ModeSelector(
-                animeEnabled = hasArtwork && !isAnimationActive,
+                animeEnabled = hasArtwork,
                 onAnimeClick = onAnimateDrawingClick,
                 onGenerateVideoClick = onGenerateVideoClick
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(1.dp), verticalAlignment = Alignment.CenterVertically) {
+            CompactAction("📑", "Layers", size = 40.dp, onClick = onLayersClick)
             CompactAction("↶", "Undo", enabled = canUndo, size = 40.dp, onClick = onUndo)
             CompactAction("↷", "Redo", enabled = canRedo, size = 40.dp, onClick = onRedo)
+            CompactAction(
+                icon = "🦋", 
+                label = "Symmetry", 
+                selected = symmetryMode != com.example.drawingo.model.SymmetryMode.NONE,
+                size = 40.dp, 
+                onClick = { viewModel.toggleSymmetryMode() }
+            )
             CompactAction("🗑", "Clear drawing", size = 40.dp, onClick = { showClearConfirmation = true })
             Box {
                 CompactAction("⋯", "More actions", size = 40.dp, onClick = { actionsExpanded = true })
@@ -828,6 +916,18 @@ fun BottomDrawingoDock(
 ) {
     var drawerExpanded by remember { mutableStateOf(false) }
     var sizesExpanded by remember { mutableStateOf(false) }
+    var showColorMixer by remember { mutableStateOf(false) }
+
+    if (showColorMixer) {
+        ColorMixerDialog(
+            initialColor = selectedColor,
+            onColorMixed = { color ->
+                onColorSelected(color)
+                showColorMixer = false
+            },
+            onDismiss = { showColorMixer = false }
+        )
+    }
 
     Column(
         modifier = modifier
@@ -850,6 +950,21 @@ fun BottomDrawingoDock(
                     ColorSwatchRow(colors, selectedColor, onColorSelected, firstColorIndex = index * 8 + 8)
                 }
 
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(DockIconBackground)
+                            .clickable { showColorMixer = true }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("🎛️", fontSize = 18.sp)
+                        Text("Mix Custom Color", fontWeight = FontWeight.Bold, color = Color(0xFF343849))
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -857,7 +972,6 @@ fun BottomDrawingoDock(
                 ) {
                         val tools = listOf(
                             Triple(DrawingTool.PEN, "✏️", "Pen"),
-                            Triple(DrawingTool.HIGHLIGHTER, "🖍️", "Marker"),
                             Triple(DrawingTool.BRUSH, "🖌️", "Brush"),
                             Triple(DrawingTool.WATERCOLOR, "💧", "Watercolor"),
                             Triple(DrawingTool.CRAYON, "🖍", "Crayon"),
@@ -1148,26 +1262,127 @@ private fun DrawScope.drawPaperStyle(style: CanvasPaperStyle) {
 }
 
 private fun DrawScope.drawAllCanvasContent(
-    completedStrokes: List<DrawnStroke>,
-    activeStrokes: List<DrawnStroke>
+    layers: List<com.example.drawingo.model.DrawingLayer>,
+    activeStrokes: List<DrawnStroke>,
+    activeLayerId: Long?,
+    currentFrameIndex: Int,
+    onionSkinEnabled: Boolean,
+    activePreset: DrawingViewModel.QuickMagicPreset,
+    selectedStrokeIds: Set<Long> = emptySet(),
+    lassoTransform: Offset = Offset.Zero,
+    timeMs: Long
 ) {
-    for (stroke in completedStrokes) {
-        drawSingleStroke(stroke)
-    }
-    for (stroke in activeStrokes) {
-        drawSingleStroke(stroke)
+    for (layer in layers) {
+        if (!layer.isVisible) continue
+        
+        val layerAlpha = layer.opacity
+        if (layerAlpha <= 0f) continue
+        
+        // Draw onion skin (previous frame)
+        if (onionSkinEnabled && currentFrameIndex > 0) {
+            val prevFrame = layer.frames.getOrNull(currentFrameIndex - 1)
+            prevFrame?.strokes?.forEach { stroke ->
+                val ghostStroke = stroke.copy(alpha = stroke.alpha * layerAlpha * 0.3f)
+                drawSingleStroke(ghostStroke)
+            }
+        }
+        
+        // Draw current frame
+        val currentFrame = layer.frames.getOrNull(currentFrameIndex)
+        currentFrame?.strokes?.forEach { stroke ->
+            var finalStroke = stroke
+            
+            // Apply visual transform if this stroke is currently selected by the lasso
+            if (stroke.id in selectedStrokeIds) {
+                val shiftedPoints = stroke.points.map { Offset(it.x + lassoTransform.x, it.y + lassoTransform.y) }
+                finalStroke = stroke.copy(points = shiftedPoints)
+            }
+            
+            val strokeWithAlpha = finalStroke.copy(alpha = finalStroke.alpha * layerAlpha)
+            
+            if (activePreset != DrawingViewModel.QuickMagicPreset.NONE) {
+                val magicStroke = processMagicStroke(strokeWithAlpha, activePreset, timeMs)
+                if (magicStroke != null) drawSingleStroke(magicStroke)
+            } else {
+                drawSingleStroke(strokeWithAlpha)
+            }
+            
+            // Draw selection highlight bounding box
+            if (stroke.id in selectedStrokeIds) {
+                val bounds = DrawnStroke.calculateBounds(finalStroke.points)
+                drawRect(
+                    color = Color(0xFFC53C65).copy(alpha = 0.3f),
+                    topLeft = Offset(bounds.left, bounds.top),
+                    size = androidx.compose.ui.geometry.Size(bounds.width, bounds.height),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f))
+                )
+            }
+        }
+        
+        // Draw the active in-flight strokes if this is the active layer
+        if (layer.id == activeLayerId) {
+            for (stroke in activeStrokes) {
+                // If it's a lasso drag stroke (-1L), we don't draw it here, we already transformed the selected strokes visually
+                if (stroke.id == -1L && stroke.tool == DrawingTool.LASSO) continue
+                drawSingleStroke(stroke.copy(alpha = stroke.alpha * layerAlpha))
+            }
+        }
     }
 }
 
 private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
-    if (stroke.points.size < 2) return
+    if (stroke.points.isEmpty()) return
+    
+    // Normalize single point strokes into a tiny segment so cap=Round draws a perfect circle
+    val s = if (stroke.points.size == 1) {
+        val p = stroke.points[0]
+        stroke.copy(
+            points = listOf(p, Offset(p.x + 0.1f, p.y)),
+            pressures = if (stroke.pressures.size == 1) listOf(stroke.pressures[0], stroke.pressures[0]) else stroke.pressures
+        )
+    } else {
+        stroke
+    }
+    
+    // If the stroke supports pressure and we have pressure data, draw variable width
+    if ((s.tool == DrawingTool.PEN || s.tool == DrawingTool.BRUSH) && s.pressures.size == s.points.size) {
+        var previousX = s.points[0].x
+        var previousY = s.points[0].y
+        var previousPressure = s.pressures[0]
+        
+        for (i in 1 until s.points.size) {
+            val currentX = s.points[i].x
+            val currentY = s.points[i].y
+            val currentPressure = s.pressures[i]
+            
+            // Map pressure (typically 0.0 to 1.0) to a width multiplier
+            val p1Width = s.strokeWidth * (0.2f + (previousPressure * 1.5f))
+            val p2Width = s.strokeWidth * (0.2f + (currentPressure * 1.5f))
+            val avgWidth = (p1Width + p2Width) / 2f
+            
+            drawLine(
+                color = s.color.copy(alpha = s.alpha),
+                start = Offset(previousX, previousY),
+                end = Offset(currentX, currentY),
+                strokeWidth = avgWidth,
+                cap = StrokeCap.Round
+            )
+            
+            previousX = currentX
+            previousY = currentY
+            previousPressure = currentPressure
+        }
+        return
+    }
+
+    // Standard uniform path drawing (fallback or for non-pressure tools)
     val path = Path()
-    var previousX = stroke.points[0].x
-    var previousY = stroke.points[0].y
+    var previousX = s.points[0].x
+    var previousY = s.points[0].y
     path.moveTo(previousX, previousY)
-    for (i in 1 until stroke.points.size) {
-        val currentX = stroke.points[i].x
-        val currentY = stroke.points[i].y
+    for (i in 1 until s.points.size) {
+        val currentX = s.points[i].x
+        val currentY = s.points[i].y
         val midX = (previousX + currentX) / 2f
         val midY = (previousY + currentY) / 2f
         path.quadraticTo(previousX, previousY, midX, midY)
@@ -1175,30 +1390,30 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
         previousY = currentY
     }
     path.lineTo(previousX, previousY)
-    when (stroke.tool) {
+    when (s.tool) {
         DrawingTool.WATERCOLOR -> {
             // A broad translucent wash with irregular pigment blooms reads as a wet medium.
-            drawPath(path, stroke.color.copy(alpha = stroke.alpha * 0.24f), style = Stroke(stroke.strokeWidth * 1.7f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawPath(path, stroke.color.copy(alpha = stroke.alpha * 0.32f), style = Stroke(stroke.strokeWidth * 1.12f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawWatercolorBlooms(stroke)
+            drawPath(path, s.color.copy(alpha = s.alpha * 0.24f), style = Stroke(s.strokeWidth * 1.7f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(path, s.color.copy(alpha = s.alpha * 0.32f), style = Stroke(s.strokeWidth * 1.12f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawWatercolorBlooms(s)
         }
         DrawingTool.CRAYON -> {
             // A broken core plus high-contrast paper flecks exposes the canvas through wax.
-            drawPath(path, stroke.color.copy(alpha = stroke.alpha * 0.76f), style = Stroke(stroke.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawCrayonTexture(stroke)
+            drawPath(path, s.color.copy(alpha = s.alpha * 0.76f), style = Stroke(s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawCrayonTexture(s)
         }
         DrawingTool.ERASER -> {
             drawPath(
                 path = path,
                 color = Color.Black,
-                style = Stroke(width = stroke.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
                 blendMode = BlendMode.Clear
             )
         }
         else -> drawPath(
             path = path,
-            color = stroke.color.copy(alpha = stroke.alpha),
-            style = Stroke(width = stroke.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            color = s.color.copy(alpha = s.alpha),
+            style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
     }
 }

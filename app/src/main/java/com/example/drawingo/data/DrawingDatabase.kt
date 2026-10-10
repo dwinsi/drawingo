@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [DrawingProject::class, StrokeEntity::class], version = 1, exportSchema = false)
+@Database(entities = [DrawingProject::class, StrokeEntity::class, LayerEntity::class], version = 3, exportSchema = false)
 abstract class DrawingDatabase : RoomDatabase() {
     abstract fun drawingDao(): DrawingDao
 
@@ -19,7 +19,9 @@ abstract class DrawingDatabase : RoomDatabase() {
                     context.applicationContext,
                     DrawingDatabase::class.java,
                     "drawingo_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration(dropAllTables = true)
+                .build()
                 INSTANCE = instance
                 instance
             }

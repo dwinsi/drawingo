@@ -51,9 +51,40 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _currentProjectId = MutableStateFlow<Long?>(null)
     val currentProjectId: StateFlow<Long?> = _currentProjectId.asStateFlow()
 
+    private val _layers = MutableStateFlow<List<com.example.drawingo.model.DrawingLayer>>(emptyList())
+    val layers: StateFlow<List<com.example.drawingo.model.DrawingLayer>> = _layers.asStateFlow()
+
+    private val _selectedLayerId = MutableStateFlow<Long?>(null)
+    val selectedLayerId: StateFlow<Long?> = _selectedLayerId.asStateFlow()
+
+    private val _currentFrameIndex = MutableStateFlow(0)
+    val currentFrameIndex: StateFlow<Int> = _currentFrameIndex.asStateFlow()
+
+    private val _isPlayingLocalAnimation = MutableStateFlow(false)
+    val isPlayingLocalAnimation: StateFlow<Boolean> = _isPlayingLocalAnimation.asStateFlow()
+
+    private val _playbackFps = MutableStateFlow(12)
+    val playbackFps: StateFlow<Int> = _playbackFps.asStateFlow()
+    
+    private val _onionSkinEnabled = MutableStateFlow(true)
+    val onionSkinEnabled: StateFlow<Boolean> = _onionSkinEnabled.asStateFlow()
+
+    enum class QuickMagicPreset { NONE, WIGGLE, PULSE, DRAW_ON }
+    
+    private val _activePreset = MutableStateFlow(QuickMagicPreset.NONE)
+    val activePreset: StateFlow<QuickMagicPreset> = _activePreset.asStateFlow()
+
     fun createNewProject() {
         _currentProjectId.value = null
-        _completedStrokes.value = emptyList()
+        
+        val initialLayer = com.example.drawingo.model.DrawingLayer(id = System.currentTimeMillis(), name = "Layer 1")
+        _layers.value = listOf(initialLayer)
+        _selectedLayerId.value = initialLayer.id
+        _currentFrameIndex.value = 0
+        _isPlayingLocalAnimation.value = false
+        _activePreset.value = QuickMagicPreset.NONE
+        
+        _completedStrokes.value = emptyList() // We can keep this for flat drawing or replace it. Actually we should remove it and use layers.strokes.
         _activeStrokes.value = emptyMap()
         _undoStack.value = emptyList()
         _redoStack.value = emptyList()
@@ -63,11 +94,38 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     fun loadProject(projectId: Long) {
         viewModelScope.launch {
             _currentProjectId.value = projectId
-            val strokes = drawingDao.getStrokesForProject(projectId)
-            val drawnStrokes = strokes.mapIndexed { index, entity ->
-                StrokeMapper.fromEntity(entity, strokeIdGenerator.getAndIncrement())
+            val layerEntities = drawingDao.getLayersForProject(projectId)
+            val strokeEntities = drawingDao.getStrokesForProject(projectId)
+            
+            val strokesByLayerAndFrame = strokeEntities.groupBy { Pair(it.layerId, it.frameIndex) }
+            
+            val loadedLayers = layerEntities.map { layerEntity ->
+                // Determine max frame index for this layer
+                val layerStrokesKeys = strokesByLayerAndFrame.keys.filter { it.first == layerEntity.id }
+                val maxFrame = if (layerStrokesKeys.isNotEmpty()) layerStrokesKeys.maxOf { it.second } else 0
+                
+                val frames = (0..maxFrame).map { frameIdx ->
+                    val strokesForThisFrame = strokesByLayerAndFrame[Pair(layerEntity.id, frameIdx)]?.map { strokeEntity ->
+                        StrokeMapper.fromEntity(strokeEntity, strokeIdGenerator.getAndIncrement())
+                    } ?: emptyList()
+                    com.example.drawingo.model.DrawingFrame(strokes = strokesForThisFrame)
+                }
+
+                com.example.drawingo.model.DrawingLayer(
+                    id = layerEntity.id,
+                    name = layerEntity.name,
+                    isVisible = layerEntity.isVisible,
+                    opacity = layerEntity.opacity,
+                    frames = frames
+                )
             }
-            _completedStrokes.value = drawnStrokes
+
+            _layers.value = if (loadedLayers.isNotEmpty()) loadedLayers else listOf(com.example.drawingo.model.DrawingLayer(id = System.currentTimeMillis(), name = "Layer 1"))
+            _selectedLayerId.value = _layers.value.first().id
+            _currentFrameIndex.value = 0
+            _isPlayingLocalAnimation.value = false
+            _activePreset.value = QuickMagicPreset.NONE
+            
             _activeStrokes.value = emptyMap()
             _undoStack.value = emptyList()
             _redoStack.value = emptyList()
@@ -89,14 +147,42 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             }
             _currentProjectId.value = newId
             
-            // Delete old strokes and insert new ones
+            // Rebuild layers and strokes
+            drawingDao.deleteLayersForProject(newId)
             drawingDao.deleteStrokesForProject(newId)
-            val strokeEntities = _completedStrokes.value.mapIndexed { index, stroke ->
-                StrokeMapper.toEntity(stroke, newId, index)
+            
+            val layerEntities = _layers.value.mapIndexed { index, layer ->
+                com.example.drawingo.data.LayerEntity(
+                    projectId = newId,
+                    name = layer.name,
+                    isVisible = layer.isVisible,
+                    opacity = layer.opacity,
+                    orderIndex = index
+                )
             }
-            drawingDao.insertStrokes(strokeEntities)
+            
+            // Insert layers and get their new IDs
+            val newLayerIds = drawingDao.insertLayers(layerEntities)
+            
+            // Now associate strokes with these new Layer IDs and Frame Indices
+            val allStrokeEntities = mutableListOf<com.example.drawingo.data.StrokeEntity>()
+            _layers.value.forEachIndexed { layerIndex, layer ->
+                val assignedLayerId = newLayerIds[layerIndex]
+                layer.frames.forEachIndexed { frameIdx, frame ->
+                    frame.strokes.forEachIndexed { strokeIndex, stroke ->
+                        allStrokeEntities.add(StrokeMapper.toEntity(stroke, newId, assignedLayerId, frameIdx, strokeIndex))
+                    }
+                }
+            }
+            drawingDao.insertStrokes(allStrokeEntities)
         }
     }
+
+    private val _selectedStrokes = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedStrokes: StateFlow<Set<Long>> = _selectedStrokes.asStateFlow()
+
+    private val _lassoTransform = MutableStateFlow(Offset.Zero)
+    val lassoTransform: StateFlow<Offset> = _lassoTransform.asStateFlow()
 
     private val strokeIdGenerator = AtomicLong(1L)
 
@@ -128,9 +214,157 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _selectedPaperStyle = MutableStateFlow(com.example.drawingo.model.CanvasPaperStyle.PURE_WHITE)
     val selectedPaperStyle: StateFlow<com.example.drawingo.model.CanvasPaperStyle> = _selectedPaperStyle.asStateFlow()
 
-    // Undo and Redo Stacks
-    private val _undoStack = MutableStateFlow<List<List<DrawnStroke>>>(emptyList())
-    private val _redoStack = MutableStateFlow<List<List<DrawnStroke>>>(emptyList())
+    private val _symmetryMode = MutableStateFlow(com.example.drawingo.model.SymmetryMode.NONE)
+    val symmetryMode: StateFlow<com.example.drawingo.model.SymmetryMode> = _symmetryMode.asStateFlow()
+
+    // Screen dimensions to calculate symmetry
+    var screenWidth = 0f
+    var screenHeight = 0f
+
+    // Layer Management Functions
+    fun addLayer() {
+        val currentLayers = _layers.value.toMutableList()
+        val newLayer = com.example.drawingo.model.DrawingLayer(id = System.currentTimeMillis(), name = "Layer ${currentLayers.size + 1}")
+        currentLayers.add(0, newLayer) // Add to top of stack
+        _layers.value = currentLayers
+        _selectedLayerId.value = newLayer.id
+    }
+
+    fun deleteLayer(layerId: Long) {
+        val currentLayers = _layers.value.toMutableList()
+        if (currentLayers.size <= 1) return // Prevent deleting the last layer
+        
+        currentLayers.removeAll { it.id == layerId }
+        _layers.value = currentLayers
+        if (_selectedLayerId.value == layerId) {
+            _selectedLayerId.value = currentLayers.first().id
+        }
+    }
+
+    fun selectLayer(layerId: Long) {
+        _selectedLayerId.value = layerId
+    }
+
+    fun toggleLayerVisibility(layerId: Long) {
+        _layers.value = _layers.value.map { 
+            if (it.id == layerId) it.copy(isVisible = !it.isVisible) else it 
+        }
+    }
+
+    fun setLayerOpacity(layerId: Long, opacity: Float) {
+        _layers.value = _layers.value.map { 
+            if (it.id == layerId) it.copy(opacity = opacity) else it 
+        }
+    }
+
+    fun reorderLayers(fromIndex: Int, toIndex: Int) {
+        val currentLayers = _layers.value.toMutableList()
+        val item = currentLayers.removeAt(fromIndex)
+        currentLayers.add(toIndex, item)
+        _layers.value = currentLayers
+    }
+
+    // Frame Management Functions
+    fun addFrame() {
+        _undoStack.value = _undoStack.value + listOf(_layers.value)
+        _redoStack.value = emptyList()
+        val nextIdx = _currentFrameIndex.value + 1
+        _layers.value = _layers.value.map { layer ->
+            val newFrames = layer.frames.toMutableList()
+            while (newFrames.size <= nextIdx) {
+                newFrames.add(com.example.drawingo.model.DrawingFrame())
+            }
+            layer.copy(frames = newFrames)
+        }
+        _currentFrameIndex.value = nextIdx
+        updateUndoRedoStates()
+    }
+
+    fun duplicateFrame() {
+        _undoStack.value = _undoStack.value + listOf(_layers.value)
+        _redoStack.value = emptyList()
+        val currentIdx = _currentFrameIndex.value
+        val nextIdx = currentIdx + 1
+        _layers.value = _layers.value.map { layer ->
+            val newFrames = layer.frames.toMutableList()
+            val currentFrameStrokes = newFrames.getOrNull(currentIdx)?.strokes ?: emptyList()
+            
+            // Insert a new frame right after the current one with the same strokes
+            newFrames.add(nextIdx, com.example.drawingo.model.DrawingFrame(strokes = currentFrameStrokes))
+            layer.copy(frames = newFrames)
+        }
+        _currentFrameIndex.value = nextIdx
+        updateUndoRedoStates()
+    }
+
+    fun deleteFrame(index: Int) {
+        val maxFrames = _layers.value.maxOfOrNull { it.frames.size } ?: 1
+        if (maxFrames <= 1) return // Don't delete the last frame
+        
+        _undoStack.value = _undoStack.value + listOf(_layers.value)
+        _redoStack.value = emptyList()
+        
+        _layers.value = _layers.value.map { layer ->
+            val newFrames = layer.frames.toMutableList()
+            if (index < newFrames.size) {
+                newFrames.removeAt(index)
+            }
+            if (newFrames.isEmpty()) newFrames.add(com.example.drawingo.model.DrawingFrame())
+            layer.copy(frames = newFrames)
+        }
+        
+        if (_currentFrameIndex.value >= _layers.value.maxOf { it.frames.size }) {
+            _currentFrameIndex.value = _layers.value.maxOf { it.frames.size } - 1
+        }
+        updateUndoRedoStates()
+    }
+
+    fun selectFrame(index: Int) {
+        if (index >= 0) {
+            _currentFrameIndex.value = index
+        }
+    }
+    
+    fun toggleOnionSkin() {
+        _onionSkinEnabled.value = !_onionSkinEnabled.value
+    }
+    
+    // Playback Logic
+    fun toggleLocalPlayback() {
+        if (_isPlayingLocalAnimation.value) {
+            stopLocalPlayback()
+        } else {
+            startLocalPlayback()
+        }
+    }
+    
+    private fun startLocalPlayback() {
+        _isPlayingLocalAnimation.value = true
+        val maxFrames = _layers.value.maxOfOrNull { it.frames.size } ?: 1
+        if (maxFrames <= 1) return // Nothing to animate
+        
+        animationLoopJob?.cancel()
+        animationLoopJob = viewModelScope.launch {
+            while (_isPlayingLocalAnimation.value) {
+                val nextFrame = (_currentFrameIndex.value + 1) % maxFrames
+                _currentFrameIndex.value = nextFrame
+                delay(1000L / _playbackFps.value)
+            }
+        }
+    }
+    
+    private fun stopLocalPlayback() {
+        _isPlayingLocalAnimation.value = false
+        animationLoopJob?.cancel()
+    }
+
+    fun setQuickMagicPreset(preset: QuickMagicPreset) {
+        _activePreset.value = preset
+    }
+
+    // Undo and Redo Stacks (Global for now)
+    private val _undoStack = MutableStateFlow<List<List<com.example.drawingo.model.DrawingLayer>>>(emptyList())
+    private val _redoStack = MutableStateFlow<List<List<com.example.drawingo.model.DrawingLayer>>>(emptyList())
 
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
@@ -138,7 +372,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _canRedo = MutableStateFlow(false)
     val canRedo: StateFlow<Boolean> = _canRedo.asStateFlow()
 
-    // Completed drawn strokes
+    // Completed drawn strokes (deprecated, use layers instead)
     private val _completedStrokes = MutableStateFlow<List<DrawnStroke>>(emptyList())
     val completedStrokes: StateFlow<List<DrawnStroke>> = _completedStrokes.asStateFlow()
 
@@ -189,6 +423,9 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     }
 
     fun setTool(tool: DrawingTool) {
+        if (_selectedTool.value == DrawingTool.LASSO && tool != DrawingTool.LASSO) {
+            applyLassoTransformIfAny()
+        }
         _selectedTool.value = tool
     }
 
@@ -206,6 +443,15 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     fun setPaperStyle(style: com.example.drawingo.model.CanvasPaperStyle) {
         _selectedPaperStyle.value = style
+    }
+
+    fun toggleSymmetryMode() {
+        _symmetryMode.value = when (_symmetryMode.value) {
+            com.example.drawingo.model.SymmetryMode.NONE -> com.example.drawingo.model.SymmetryMode.HORIZONTAL
+            com.example.drawingo.model.SymmetryMode.HORIZONTAL -> com.example.drawingo.model.SymmetryMode.VERTICAL
+            com.example.drawingo.model.SymmetryMode.VERTICAL -> com.example.drawingo.model.SymmetryMode.QUAD
+            com.example.drawingo.model.SymmetryMode.QUAD -> com.example.drawingo.model.SymmetryMode.NONE
+        }
     }
 
     fun onPanAndZoom(zoomChange: Float, panChange: Offset) {
@@ -234,11 +480,14 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     fun undo() {
         val currentUndo = _undoStack.value
         if (currentUndo.isNotEmpty()) {
+            _selectedStrokes.value = emptySet()
+            _lassoTransform.value = Offset.Zero
+            
             val previousState = currentUndo.last()
             val newUndo = currentUndo.dropLast(1)
-            _redoStack.value = _redoStack.value + listOf(_completedStrokes.value)
+            _redoStack.value = _redoStack.value + listOf(_layers.value)
             _undoStack.value = newUndo
-            _completedStrokes.value = previousState
+            _layers.value = previousState
             updateUndoRedoStates()
         }
     }
@@ -246,21 +495,34 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     fun redo() {
         val currentRedo = _redoStack.value
         if (currentRedo.isNotEmpty()) {
+            _selectedStrokes.value = emptySet()
+            _lassoTransform.value = Offset.Zero
+            
             val nextState = currentRedo.last()
             val newRedo = currentRedo.dropLast(1)
-            _undoStack.value = _undoStack.value + listOf(_completedStrokes.value)
+            _undoStack.value = _undoStack.value + listOf(_layers.value)
             _redoStack.value = newRedo
-            _completedStrokes.value = nextState
+            _layers.value = nextState
             updateUndoRedoStates()
         }
     }
 
     fun clearCanvas() {
-        if (_completedStrokes.value.isNotEmpty()) {
+        if (_layers.value.any { layer -> layer.frames.any { it.strokes.isNotEmpty() } }) {
             stopAnimation()
-            _undoStack.value = _undoStack.value + listOf(_completedStrokes.value)
+            _selectedStrokes.value = emptySet()
+            _lassoTransform.value = Offset.Zero
+            
+            _undoStack.value = _undoStack.value + listOf(_layers.value)
             _redoStack.value = emptyList()
-            _completedStrokes.value = emptyList()
+            val currentFrameIdx = _currentFrameIndex.value
+            _layers.value = _layers.value.map { layer -> 
+                val updatedFrames = layer.frames.toMutableList()
+                if (currentFrameIdx < updatedFrames.size) {
+                    updatedFrames[currentFrameIdx] = updatedFrames[currentFrameIdx].copy(strokes = emptyList())
+                }
+                layer.copy(frames = updatedFrames)
+            }
             updateUndoRedoStates()
         }
     }
@@ -270,19 +532,36 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         _canRedo.value = _redoStack.value.isNotEmpty()
     }
 
-    fun onPointerDown(pointerId: Long, screenPosition: Offset) {
+    fun onPointerDown(pointerId: Long, screenPosition: Offset, pressure: Float = 1.0f) {
 
         val tool = _selectedTool.value
         val canvasPos = toCanvasCoordinate(screenPosition)
 
+        // If lasso is active and we tap, check if we are dragging an existing selection
+        if (tool == DrawingTool.LASSO && _selectedStrokes.value.isNotEmpty()) {
+            _activeStrokes.value = _activeStrokes.value + (pointerId to DrawnStroke(
+                id = -1L, // Special ID indicating a lasso drag operation
+                color = Color.Transparent,
+                tool = tool,
+                points = listOf(canvasPos)
+            ))
+            return
+        }
+
+        // If we tap with lasso outside, clear previous selection and start drawing new lasso
+        if (tool == DrawingTool.LASSO) {
+            applyLassoTransformIfAny()
+            _selectedStrokes.value = emptySet()
+        }
+
         val strokeColor = when (tool) {
             DrawingTool.ERASER -> Color.White
-            DrawingTool.PEN, DrawingTool.HIGHLIGHTER, DrawingTool.BRUSH,
-            DrawingTool.WATERCOLOR, DrawingTool.CRAYON, DrawingTool.LASSO -> _selectedColor.value
+            DrawingTool.PEN, DrawingTool.BRUSH,
+            DrawingTool.WATERCOLOR, DrawingTool.CRAYON -> _selectedColor.value
+            DrawingTool.LASSO -> Color(0xFF69489B) // Purple color for lasso line
         }
         val strokeWidth = when (tool) {
             DrawingTool.PEN -> _selectedStrokeWidth.value
-            DrawingTool.HIGHLIGHTER -> _selectedStrokeWidth.value * 2.2f
             DrawingTool.BRUSH -> _selectedStrokeWidth.value * 1.8f
             DrawingTool.ERASER -> _selectedEraserWidth.value
             DrawingTool.LASSO -> 4f
@@ -291,7 +570,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         }
         val alpha = when (tool) {
             DrawingTool.PEN -> 1.0f
-            DrawingTool.HIGHLIGHTER -> 0.38f
             DrawingTool.BRUSH -> 0.85f
             DrawingTool.WATERCOLOR -> 0.68f
             DrawingTool.CRAYON -> 0.95f
@@ -303,16 +581,27 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             strokeWidth = strokeWidth,
             alpha = alpha,
             tool = tool,
-            points = listOf(canvasPos)
+            points = listOf(canvasPos),
+            pressures = listOf(pressure)
         )
 
         _activeStrokes.value = _activeStrokes.value + (pointerId to newStroke)
     }
 
-    fun onPointerMove(pointerId: Long, screenPosition: Offset) {
+    fun onPointerMove(pointerId: Long, screenPosition: Offset, pressure: Float = 1.0f) {
 
         val currentStroke = _activeStrokes.value[pointerId] ?: return
         val canvasPos = toCanvasCoordinate(screenPosition)
+        
+        // Handle Lasso Dragging
+        if (currentStroke.id == -1L && currentStroke.tool == DrawingTool.LASSO) {
+            val startPos = currentStroke.points.first()
+            val dx = canvasPos.x - startPos.x
+            val dy = canvasPos.y - startPos.y
+            _lassoTransform.value = Offset(dx, dy)
+            return
+        }
+
         val lastPoint = currentStroke.points.lastOrNull()
 
         if (lastPoint != null) {
@@ -322,7 +611,8 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         }
 
         val updatedStroke = currentStroke.copy(
-            points = currentStroke.points + canvasPos
+            points = currentStroke.points + canvasPos,
+            pressures = currentStroke.pressures + pressure
         )
         _activeStrokes.value = _activeStrokes.value + (pointerId to updatedStroke)
     }
@@ -332,28 +622,154 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val stroke = _activeStrokes.value[pointerId] ?: return
         _activeStrokes.value = _activeStrokes.value - pointerId
 
+        if (stroke.tool == DrawingTool.LASSO && stroke.id == -1L) {
+            // Finished dragging lasso selection
+            return
+        }
+
         if (stroke.points.isEmpty()) return
 
         val finalStroke = stroke.copy(
             boundingBox = DrawnStroke.calculateBounds(stroke.points)
         )
 
-        _undoStack.value = _undoStack.value + listOf(_completedStrokes.value)
+        if (stroke.tool == DrawingTool.LASSO) {
+            performLassoSelection(finalStroke)
+            return
+        }
+
+        // Generate symmetry strokes
+        val mirroredStrokes = generateMirroredStrokes(finalStroke)
+        val allNewStrokes = listOf(finalStroke) + mirroredStrokes
+
+        _undoStack.value = _undoStack.value + listOf(_layers.value)
         _redoStack.value = emptyList()
-        val currentList = _completedStrokes.value
-        _completedStrokes.value = if (currentList.size >= MAX_STORED_STROKES) {
-            currentList.drop(currentList.size - MAX_STORED_STROKES + 1) + finalStroke
-        } else {
-            currentList + finalStroke
+
+        val activeLayerId = _selectedLayerId.value ?: _layers.value.firstOrNull()?.id ?: return
+        val currentFrameIdx = _currentFrameIndex.value
+        
+        _layers.value = _layers.value.map { layer ->
+            if (layer.id == activeLayerId) {
+                // We need to ensure the layer has enough frames to reach currentFrameIdx
+                val updatedFrames = layer.frames.toMutableList()
+                while (updatedFrames.size <= currentFrameIdx) {
+                    updatedFrames.add(com.example.drawingo.model.DrawingFrame())
+                }
+                
+                val currentFrame = updatedFrames[currentFrameIdx]
+                val currentStrokes = currentFrame.strokes
+                val updatedStrokes = if (currentStrokes.size >= MAX_STORED_STROKES) {
+                    currentStrokes.drop(currentStrokes.size - MAX_STORED_STROKES + allNewStrokes.size) + allNewStrokes
+                } else {
+                    currentStrokes + allNewStrokes
+                }
+                
+                updatedFrames[currentFrameIdx] = currentFrame.copy(strokes = updatedStrokes)
+                layer.copy(frames = updatedFrames)
+            } else layer
         }
         updateUndoRedoStates()
+    }
+
+    private fun generateMirroredStrokes(originalStroke: DrawnStroke): List<DrawnStroke> {
+        val mode = _symmetryMode.value
+        if (mode == com.example.drawingo.model.SymmetryMode.NONE || screenWidth == 0f || screenHeight == 0f) return emptyList()
+
+        val midX = screenWidth / 2f
+        val midY = screenHeight / 2f
+
+        return buildList {
+            if (mode == com.example.drawingo.model.SymmetryMode.VERTICAL || mode == com.example.drawingo.model.SymmetryMode.QUAD) {
+                val mirroredPoints = originalStroke.points.map { Offset(midX + (midX - it.x), it.y) }
+                add(originalStroke.copy(
+                    id = strokeIdGenerator.getAndIncrement(),
+                    points = mirroredPoints,
+                    boundingBox = DrawnStroke.calculateBounds(mirroredPoints)
+                ))
+            }
+            if (mode == com.example.drawingo.model.SymmetryMode.HORIZONTAL || mode == com.example.drawingo.model.SymmetryMode.QUAD) {
+                val mirroredPoints = originalStroke.points.map { Offset(it.x, midY + (midY - it.y)) }
+                add(originalStroke.copy(
+                    id = strokeIdGenerator.getAndIncrement(),
+                    points = mirroredPoints,
+                    boundingBox = DrawnStroke.calculateBounds(mirroredPoints)
+                ))
+            }
+            if (mode == com.example.drawingo.model.SymmetryMode.QUAD) {
+                val mirroredPoints = originalStroke.points.map { Offset(midX + (midX - it.x), midY + (midY - it.y)) }
+                add(originalStroke.copy(
+                    id = strokeIdGenerator.getAndIncrement(),
+                    points = mirroredPoints,
+                    boundingBox = DrawnStroke.calculateBounds(mirroredPoints)
+                ))
+            }
+        }
+    }
+
+    private fun performLassoSelection(lassoStroke: DrawnStroke) {
+        val lassoBounds = lassoStroke.boundingBox
+        val activeLayerId = _selectedLayerId.value ?: return
+        val currentLayer = _layers.value.find { it.id == activeLayerId } ?: return
+        val currentFrame = currentLayer.frames.getOrNull(_currentFrameIndex.value) ?: return
+
+        // Simple bounding box intersection for selection
+        val newlySelected = currentFrame.strokes.filter { stroke ->
+            val bounds = stroke.boundingBox
+            // Check if bounds intersect
+            bounds.left <= lassoBounds.right && bounds.right >= lassoBounds.left &&
+            bounds.top <= lassoBounds.bottom && bounds.bottom >= lassoBounds.top
+        }.map { it.id }.toSet()
+
+        _selectedStrokes.value = newlySelected
+        _lassoTransform.value = Offset.Zero
+    }
+
+    private fun applyLassoTransformIfAny() {
+        val transform = _lassoTransform.value
+        val selectedIds = _selectedStrokes.value
+        
+        if (transform != Offset.Zero && selectedIds.isNotEmpty()) {
+            val activeLayerId = _selectedLayerId.value ?: return
+            
+            _undoStack.value = _undoStack.value + listOf(_layers.value)
+            _redoStack.value = emptyList()
+
+            _layers.value = _layers.value.map { layer ->
+                if (layer.id == activeLayerId) {
+                    val currentFrameIdx = _currentFrameIndex.value
+                    val updatedFrames = layer.frames.toMutableList()
+                    val currentFrame = updatedFrames.getOrNull(currentFrameIdx)
+                    
+                    if (currentFrame != null) {
+                        val updatedStrokes = currentFrame.strokes.map { stroke ->
+                            if (stroke.id in selectedIds) {
+                                val shiftedPoints = stroke.points.map { Offset(it.x + transform.x, it.y + transform.y) }
+                                stroke.copy(
+                                    points = shiftedPoints,
+                                    boundingBox = DrawnStroke.calculateBounds(shiftedPoints)
+                                )
+                            } else stroke
+                        }
+                        updatedFrames[currentFrameIdx] = currentFrame.copy(strokes = updatedStrokes)
+                        layer.copy(frames = updatedFrames)
+                    } else layer
+                } else layer
+            }
+            updateUndoRedoStates()
+        }
+        
+        _lassoTransform.value = Offset.Zero
+        _selectedStrokes.value = emptySet()
     }
 
     /**
      * Triggers Gemini AI Drawing-to-Animation recognition via ADC Backend Client with local fallback.
      */
     fun triggerDrawingAnimation(context: Context, canvasBitmap: Bitmap, allowCloudAi: Boolean) {
-        val strokes = _completedStrokes.value
+        val strokes = _layers.value.flatMap { layer -> 
+            val frame = layer.frames.getOrNull(_currentFrameIndex.value)
+            frame?.strokes ?: emptyList()
+        }
         if (strokes.isEmpty()) return
 
         viewModelScope.launch {

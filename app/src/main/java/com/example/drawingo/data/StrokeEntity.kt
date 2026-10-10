@@ -8,6 +8,8 @@ data class StrokeEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val projectId: Long,
+    val layerId: Long,
+    val frameIndex: Int = 0,
     val tool: String,
     val colorArgb: Int,
     val strokeWidth: Float,

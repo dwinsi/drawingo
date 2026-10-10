@@ -8,7 +8,6 @@ enum class DrawingTool {
     LASSO,
     ERASER,
     PEN,
-    HIGHLIGHTER,
     BRUSH,
     WATERCOLOR,
     CRAYON
@@ -20,6 +19,25 @@ enum class CanvasPaperStyle {
     RULED,
     KRAFT
 }
+
+enum class SymmetryMode {
+    NONE,
+    HORIZONTAL,
+    VERTICAL,
+    QUAD
+}
+
+data class DrawingFrame(
+    val strokes: List<DrawnStroke> = emptyList()
+)
+
+data class DrawingLayer(
+    val id: Long = 0,
+    val name: String = "Layer",
+    val isVisible: Boolean = true,
+    val opacity: Float = 1.0f,
+    val frames: List<DrawingFrame> = listOf(DrawingFrame())
+)
 
 /**
  * Drawingo's four-row palette, arranged in hue families down each column.
@@ -86,6 +104,7 @@ data class DrawnStroke(
     val alpha: Float = 1.0f,
     val tool: DrawingTool = DrawingTool.PEN,
     val points: List<Offset> = emptyList(),
+    val pressures: List<Float> = emptyList(),
     val boundingBox: Rect = calculateBounds(points)
 ) {
     companion object {
