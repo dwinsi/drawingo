@@ -11,10 +11,10 @@ These instructions are the shared starting point for Codex and Gemini in Android
 
 ## Shared principles
 
-- Drawingo is an adult-oriented, recreational drawing app designed to feel calm, playful, and low pressure. Do not add child-directed content, parental controls, or claims that the app treats or prevents a health condition.
+- Drawingo is a universal, recreational drawing app for every age group, designed to feel calm, elegant, and simple. The UI should remain minimal and accessible. Do not add claims that the app treats or prevents a health condition.
 - Keep drawing responsive and enjoyable. Prefer understandable, accessible UI and native Android patterns already used in the app.
-- Keep the app local-first. Any network transfer of a drawing must remain explicit, clearly described, and consistent with Settings and the privacy policy. Never add analytics, accounts, advertising, or cloud uploads implicitly.
-- Keep secrets out of source, resources, and client builds. Use HTTPS, validate inputs, and handle network failures without exposing credentials or private payloads.
+- Keep the app strictly local-first, utilizing on-device ML Kit for AI features. Never add analytics, accounts, advertising, or cloud uploads.
+- Keep secrets out of source, resources, and client builds. Validate inputs and handle failures without exposing private payloads.
 - Match existing Kotlin, Jetpack Compose, Gradle version-catalog, and architecture conventions. Avoid new dependencies unless they solve a concrete need.
 - Make focused, reviewable changes. Do not commit, deploy, publish, or perform destructive actions unless the user asks.
 - Report what changed, important tradeoffs, and exactly what validation was run. Never claim a build or test passed unless it did.

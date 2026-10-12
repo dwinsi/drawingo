@@ -19,42 +19,49 @@ object CanvasBitmapUtils {
 
     fun createBitmapFromStrokes(
         strokes: List<DrawnStroke>,
-        width: Int = 800,
-        height: Int = 800
+        screenWidth: Int,
+        screenHeight: Int,
+        backgroundImagePath: String? = null
     ): Bitmap {
+        // We render the export exactly at the device screen dimensions so 1:1 mapping works.
+        // We can scale it down at the very end if we want, but doing it 1:1 ensures coordinates perfectly match.
+        val width = screenWidth
+        val height = screenHeight
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
         // Background paper color
         val bgColor = 0xFFFFFFFF.toInt()
         canvas.drawColor(bgColor)
+        
+        // Draw background image if present
+        if (backgroundImagePath != null) {
+            val bgBitmap = android.graphics.BitmapFactory.decodeFile(backgroundImagePath)
+            if (bgBitmap != null) {
+                // Exact same scaling logic as DrawingCanvas to ensure perfect visual match
+                val scale = minOf(width.toFloat() / bgBitmap.width, height.toFloat() / bgBitmap.height)
+                val drawWidth = bgBitmap.width * scale
+                val drawHeight = bgBitmap.height * scale
+                val left = (width - drawWidth) / 2f
+                val top = (height - drawHeight) / 2f
+                
+                val srcRect = android.graphics.Rect(0, 0, bgBitmap.width, bgBitmap.height)
+                val dstRect = android.graphics.Rect(left.toInt(), top.toInt(), (left + drawWidth).toInt(), (top + drawHeight).toInt())
+                val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
+                canvas.drawBitmap(bgBitmap, srcRect, dstRect, paint)
+                bgBitmap.recycle()
+            }
+        }
 
         if (strokes.isEmpty()) {
             return bitmap
         }
 
-        // Determine bounds of strokes to scale bitmap efficiently
-        var minX = Float.MAX_VALUE
-        var minY = Float.MAX_VALUE
-        var maxX = Float.MIN_VALUE
-        var maxY = Float.MIN_VALUE
-
-        for (stroke in strokes) {
-            for (p in stroke.points) {
-                if (p.x < minX) minX = p.x
-                if (p.x > maxX) maxX = p.x
-                if (p.y < minY) minY = p.y
-                if (p.y > maxY) maxY = p.y
-            }
-        }
-
-        val strokeWidthRange = (maxX - minX).coerceAtLeast(100f)
-        val strokeHeightRange = (maxY - minY).coerceAtLeast(100f)
-
-        val padding = 40f
-        val scaleX = (width - padding * 2) / strokeWidthRange
-        val scaleY = (height - padding * 2) / strokeHeightRange
-        val scale = minOf(scaleX, scaleY).coerceIn(0.2f, 3.0f)
+        // We DO NOT auto-crop if we want strokes and background to match 1:1. 
+        // We just draw the strokes exactly where they are on the screen.
+        val scale = 1f
+        val offsetX = 0f
+        val offsetY = 0f
 
         val paint = Paint().apply {
             isAntiAlias = true
@@ -69,25 +76,92 @@ object CanvasBitmapUtils {
             val color = stroke.color.toArgb()
             val baseWidth = (stroke.strokeWidth * scale).coerceIn(4f, 80f)
             paint.color = color
-            paint.strokeWidth = baseWidth
             paint.alpha = (stroke.alpha * 255).toInt().coerceIn(0, 255)
 
             if (stroke.tool == DrawingTool.ERASER) {
                 paint.color = bgColor
             }
 
+            val tool = stroke.tool
+
+            // Variable width logic for stylus pressure
+            if ((tool == DrawingTool.PEN || tool == DrawingTool.BRUSH) && stroke.pressures.size == stroke.points.size) {
+                var previousX = stroke.points[0].x * scale + offsetX
+                var previousY = stroke.points[0].y * scale + offsetY
+                var previousPressure = stroke.pressures[0]
+                
+                var lastDrawX = previousX
+                var lastDrawY = previousY
+                
+                for (i in 1 until stroke.points.size) {
+                    val currentX = stroke.points[i].x * scale + offsetX
+                    val currentY = stroke.points[i].y * scale + offsetY
+                    val currentPressure = stroke.pressures[i]
+                    
+                    val midX = (previousX + currentX) / 2f
+                    val midY = (previousY + currentY) / 2f
+                    
+                    val avgWidth = baseWidth * (0.2f + ((previousPressure + currentPressure) / 2f) * 1.5f)
+                    paint.strokeWidth = avgWidth
+                    
+                    val segmentPath = Path()
+                    segmentPath.moveTo(lastDrawX, lastDrawY)
+                    segmentPath.quadTo(previousX, previousY, midX, midY)
+                    canvas.drawPath(segmentPath, paint)
+                    
+                    lastDrawX = midX
+                    lastDrawY = midY
+                    previousX = currentX
+                    previousY = currentY
+                    previousPressure = currentPressure
+                }
+                
+                val finalPath = Path()
+                finalPath.moveTo(lastDrawX, lastDrawY)
+                finalPath.lineTo(previousX, previousY)
+                paint.strokeWidth = baseWidth * (0.2f + previousPressure * 1.5f)
+                canvas.drawPath(finalPath, paint)
+                continue
+            }
+
+            paint.strokeWidth = baseWidth
+
+            if (stroke.tool == DrawingTool.TEXT) {
+                val text = stroke.text
+                if (text != null) {
+                    paint.style = Paint.Style.FILL
+                    paint.textSize = baseWidth
+                    paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    paint.textAlign = Paint.Align.CENTER
+                    val x = stroke.points[0].x * scale + offsetX
+                    val y = stroke.points[0].y * scale + offsetY + (paint.textSize / 3f)
+                    canvas.drawText(text, x, y, paint)
+                }
+                continue
+            }
+
             val path = Path()
             val first = stroke.points[0]
-            val firstX = (first.x - minX) * scale + padding
-            val firstY = (first.y - minY) * scale + padding
+            val firstX = first.x * scale + offsetX
+            val firstY = first.y * scale + offsetY
             path.moveTo(firstX, firstY)
+
+            var previousX = firstX
+            var previousY = firstY
 
             for (i in 1 until stroke.points.size) {
                 val pt = stroke.points[i]
-                val px = (pt.x - minX) * scale + padding
-                val py = (pt.y - minY) * scale + padding
-                path.lineTo(px, py)
+                val px = pt.x * scale + offsetX
+                val py = pt.y * scale + offsetY
+                
+                val midX = (previousX + px) / 2f
+                val midY = (previousY + py) / 2f
+                path.quadTo(previousX, previousY, midX, midY)
+                
+                previousX = px
+                previousY = py
             }
+            path.lineTo(previousX, previousY)
 
             when (stroke.tool) {
                 DrawingTool.WATERCOLOR -> {
@@ -97,13 +171,13 @@ object CanvasBitmapUtils {
                     paint.alpha = (stroke.alpha * 0.32f * 255).toInt().coerceIn(0, 255)
                     paint.strokeWidth = baseWidth * 1.12f
                     canvas.drawPath(path, paint)
-                    drawWatercolorBlooms(canvas, stroke, minX, minY, scale, padding, color)
+                    drawWatercolorBlooms(canvas, stroke, offsetX, offsetY, scale, color)
                 }
                 DrawingTool.CRAYON -> {
                     paint.alpha = (stroke.alpha * 0.76f * 255).toInt().coerceIn(0, 255)
                     paint.strokeWidth = baseWidth
                     canvas.drawPath(path, paint)
-                    drawCrayonTexture(canvas, stroke, minX, minY, scale, padding, color)
+                    drawCrayonTexture(canvas, stroke, offsetX, offsetY, scale, color)
                 }
                 else -> canvas.drawPath(path, paint)
             }
@@ -113,8 +187,8 @@ object CanvasBitmapUtils {
     }
 
     private fun drawWatercolorBlooms(
-        canvas: Canvas, stroke: DrawnStroke, minX: Float, minY: Float,
-        scale: Float, padding: Float, color: Int
+        canvas: Canvas, stroke: DrawnStroke, offsetX: Float, offsetY: Float,
+        scale: Float, color: Int
     ) {
         val stride = (stroke.points.size / 32).coerceAtLeast(1)
         val bloomPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -123,8 +197,8 @@ object CanvasBitmapUtils {
             val seed = stroke.id xor (index.toLong() * 31L)
             val offset = (((seed ushr 8) and 15).toFloat() - 7.5f) * stroke.strokeWidth * 0.09f * scale
             val radius = (stroke.strokeWidth * scale * (0.22f + ((seed and 7).toFloat() * 0.025f))).coerceAtLeast(1f)
-            val centerX = (point.x - minX) * scale + padding + offset
-            val centerY = (point.y - minY) * scale + padding - offset
+            val centerX = point.x * scale + offsetX + offset
+            val centerY = point.y * scale + offsetY - offset
             val pigment = (stroke.alpha * 0.24f * 255).toInt().coerceIn(0, 255)
             bloomPaint.shader = RadialGradient(
                 centerX, centerY, radius,
@@ -135,8 +209,8 @@ object CanvasBitmapUtils {
     }
 
     private fun drawCrayonTexture(
-        canvas: Canvas, stroke: DrawnStroke, minX: Float, minY: Float,
-        scale: Float, padding: Float, color: Int
+        canvas: Canvas, stroke: DrawnStroke, offsetX: Float, offsetY: Float,
+        scale: Float, color: Int
     ) {
         val stride = (stroke.points.size / 72).coerceAtLeast(1)
         val fleckPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -146,8 +220,8 @@ object CanvasBitmapUtils {
             val side = if ((seed and 1L) == 0L) -1f else 1f
             val across = side * stroke.strokeWidth * scale * (0.2f + ((seed ushr 4 and 7).toFloat() * 0.045f))
             val radius = (stroke.strokeWidth * scale * 0.055f).coerceAtLeast(0.8f)
-            val x = (point.x - minX) * scale + padding
-            val y = (point.y - minY) * scale + padding
+            val x = point.x * scale + offsetX
+            val y = point.y * scale + offsetY
             fleckPaint.color = 0xA8FFFFFF.toInt()
             canvas.drawCircle(x + across, y + side * radius, radius, fleckPaint)
             if (index % 3 == 0) {

@@ -3,29 +3,24 @@ package com.example.drawingo.theme
 import androidx.compose.ui.graphics.Color
 
 // ==========================================
-// Drawingo palette tokens
+// Drawingo Elegant Universal Palette
 // ==========================================
 
-// Primary Bubbly Colors
-val BubblegumPink = Color(0xFFFF6B9E)
-val SunnyYellow = Color(0xFFFFD166)
-val MintyGreen = Color(0xFF06D6A0)
-val SkyBlue = Color(0xFF4FC3F7)
-val SoftPurple = Color(0xFFB39DDB)
-val BrightOrange = Color(0xFFFF9F1C)
-
-// Theme Surfaces ("Candy Cloud")
+// Neutrals
 val CloudWhite = Color(0xFFFFFFFF)
-val SoftSand = Color(0xFFFFF8EE)
+val SoftSand = Color(0xFFF9F9F9)
 val MilkyGlass = Color(0xE6FFFFFF)
-val DarkNavy = Color(0xFF2B2D42)
+val DarkNavy = Color(0xFF1E1E1E)
+val Charcoal = Color(0xFF333333)
 
-val ElectricCyan = Color(0xFF00F0FF)
-val ElectricCyanDark = Color(0xFF008B99)
-val CosmicSlate = Color(0xFF141722)
-val NeonRose = Color(0xFFFF007F)
+// Elegant Accents
+val SoftIndigo = Color(0xFF5C6BC0)
+val SageGreen = Color(0xFF81C784)
+val SlateGray = Color(0xFF78909C)
+
+val CosmicSlate = Color(0xFF121212)
 
 // Aliases for Material Theme
-val PrimaryDrawingo = Color(0xFF176B86)
-val SecondaryDrawingo = BubblegumPink
-val TertiaryDrawingo = SunnyYellow
+val PrimaryDrawingo = SoftIndigo
+val SecondaryDrawingo = SageGreen
+val TertiaryDrawingo = SlateGray

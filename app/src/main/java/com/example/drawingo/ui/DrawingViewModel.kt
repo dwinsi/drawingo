@@ -31,9 +31,11 @@ import kotlin.random.Random
 
 import com.example.drawingo.data.DrawingDao
 import com.example.drawingo.data.DrawingProject
+import com.example.drawingo.util.ImageUtils
 import com.example.drawingo.util.StrokeMapper
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import android.net.Uri
 
 /**
  * Lightweight MVVM ViewModel managing the Drawingo canvas,
@@ -74,6 +76,13 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _activePreset = MutableStateFlow(QuickMagicPreset.NONE)
     val activePreset: StateFlow<QuickMagicPreset> = _activePreset.asStateFlow()
 
+    // Text Tool State
+    private val _showTextPrompt = MutableStateFlow(false)
+    val showTextPrompt: StateFlow<Boolean> = _showTextPrompt.asStateFlow()
+
+    private val _textPromptPosition = MutableStateFlow(Offset.Zero)
+    val textPromptPosition: StateFlow<Offset> = _textPromptPosition.asStateFlow()
+
     fun createNewProject() {
         _currentProjectId.value = null
         
@@ -83,6 +92,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         _currentFrameIndex.value = 0
         _isPlayingLocalAnimation.value = false
         _activePreset.value = QuickMagicPreset.NONE
+        _backgroundImagePath.value = null
         
         _completedStrokes.value = emptyList() // We can keep this for flat drawing or replace it. Actually we should remove it and use layers.strokes.
         _activeStrokes.value = emptyMap()
@@ -94,6 +104,13 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     fun loadProject(projectId: Long) {
         viewModelScope.launch {
             _currentProjectId.value = projectId
+            val project = drawingDao.getProjectById(projectId)
+            if (project != null) {
+                _backgroundImagePath.value = project.backgroundImagePath
+            } else {
+                _backgroundImagePath.value = null
+            }
+            
             val layerEntities = drawingDao.getLayersForProject(projectId)
             val strokeEntities = drawingDao.getStrokesForProject(projectId)
             
@@ -136,13 +153,14 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     fun saveCurrentProject(name: String) {
         viewModelScope.launch {
             val projectId = _currentProjectId.value
+            val currentBgPath = _backgroundImagePath.value
             val newId = if (projectId == null) {
                 // Insert new project
-                val project = DrawingProject(name = name)
+                val project = DrawingProject(name = name, backgroundImagePath = currentBgPath)
                 drawingDao.insertProject(project)
             } else {
                 val project = drawingDao.getProjectById(projectId) ?: return@launch
-                drawingDao.updateProject(project.copy(name = name, updatedAt = System.currentTimeMillis()))
+                drawingDao.updateProject(project.copy(name = name, updatedAt = System.currentTimeMillis(), backgroundImagePath = currentBgPath))
                 projectId
             }
             _currentProjectId.value = newId
@@ -213,6 +231,9 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     private val _selectedPaperStyle = MutableStateFlow(com.example.drawingo.model.CanvasPaperStyle.PURE_WHITE)
     val selectedPaperStyle: StateFlow<com.example.drawingo.model.CanvasPaperStyle> = _selectedPaperStyle.asStateFlow()
+    
+    private val _backgroundImagePath = MutableStateFlow<String?>(null)
+    val backgroundImagePath: StateFlow<String?> = _backgroundImagePath.asStateFlow()
 
     private val _symmetryMode = MutableStateFlow(com.example.drawingo.model.SymmetryMode.NONE)
     val symmetryMode: StateFlow<com.example.drawingo.model.SymmetryMode> = _symmetryMode.asStateFlow()
@@ -262,6 +283,33 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val item = currentLayers.removeAt(fromIndex)
         currentLayers.add(toIndex, item)
         _layers.value = currentLayers
+    }
+
+    fun cancelTextPrompt() {
+        _showTextPrompt.value = false
+    }
+
+    fun addTextStroke(text: String) {
+        _showTextPrompt.value = false
+        if (text.isBlank()) return
+
+        val canvasPos = _textPromptPosition.value
+        val tool = DrawingTool.TEXT
+
+        val newStroke = DrawnStroke(
+            id = strokeIdGenerator.getAndIncrement(),
+            color = _selectedColor.value,
+            strokeWidth = _selectedStrokeWidth.value * 4f,
+            alpha = 1.0f,
+            tool = tool,
+            points = listOf(canvasPos),
+            text = text,
+            boundingBox = Rect(canvasPos, 1f) // Bounding box approximation for now
+        )
+
+        // Inject this directly as a completed stroke
+        _activeStrokes.value = _activeStrokes.value + (-2L to newStroke)
+        onPointerUp(-2L)
     }
 
     // Frame Management Functions
@@ -360,6 +408,16 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     fun setQuickMagicPreset(preset: QuickMagicPreset) {
         _activePreset.value = preset
+    }
+
+    fun setBackgroundImage(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            val projectId = _currentProjectId.value
+            val savedPath = ImageUtils.saveImageToInternalStorage(context, uri, projectId)
+            if (savedPath != null) {
+                _backgroundImagePath.value = savedPath
+            }
+        }
     }
 
     // Undo and Redo Stacks (Global for now)
@@ -557,7 +615,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val strokeColor = when (tool) {
             DrawingTool.ERASER -> Color.White
             DrawingTool.PEN, DrawingTool.BRUSH,
-            DrawingTool.WATERCOLOR, DrawingTool.CRAYON -> _selectedColor.value
+            DrawingTool.WATERCOLOR, DrawingTool.CRAYON, DrawingTool.TEXT -> _selectedColor.value
             DrawingTool.LASSO -> Color(0xFF69489B) // Purple color for lasso line
         }
         val strokeWidth = when (tool) {
@@ -567,14 +625,22 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             DrawingTool.LASSO -> 4f
             DrawingTool.WATERCOLOR -> _selectedStrokeWidth.value * 2.2f
             DrawingTool.CRAYON -> _selectedStrokeWidth.value * 1.25f
+            DrawingTool.TEXT -> _selectedStrokeWidth.value * 4f // Text scales with brush size
         }
         val alpha = when (tool) {
             DrawingTool.PEN -> 1.0f
             DrawingTool.BRUSH -> 0.85f
             DrawingTool.WATERCOLOR -> 0.68f
             DrawingTool.CRAYON -> 0.95f
-            DrawingTool.ERASER, DrawingTool.LASSO -> 1.0f
+            DrawingTool.ERASER, DrawingTool.LASSO, DrawingTool.TEXT -> 1.0f
         }
+        // If text tool, trigger dialog and don't start a line
+        if (tool == DrawingTool.TEXT) {
+            _textPromptPosition.value = canvasPos
+            _showTextPrompt.value = true
+            return
+        }
+
         val newStroke = DrawnStroke(
             id = strokeIdGenerator.getAndIncrement(),
             color = strokeColor,
@@ -607,7 +673,12 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         if (lastPoint != null) {
             val dx = canvasPos.x - lastPoint.x
             val dy = canvasPos.y - lastPoint.y
-            if (dx * dx + dy * dy < 9f) return
+            // Lower threshold to capture fine handwriting detail.
+            if (dx * dx + dy * dy < 1f) return
+            
+            // Optional: apply a very slight moving average to smooth out hardware digitizer jitter
+            // val smoothedPos = Offset(lastPoint.x + dx * 0.7f, lastPoint.y + dy * 0.7f)
+            // But with midpoint quadraticTo rendering and historical points, raw points usually look best.
         }
 
         val updatedStroke = currentStroke.copy(
@@ -770,7 +841,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             val frame = layer.frames.getOrNull(_currentFrameIndex.value)
             frame?.strokes ?: emptyList()
         }
-        if (strokes.isEmpty()) return
+        if (strokes.isEmpty() && _backgroundImagePath.value == null) return
 
         viewModelScope.launch {
             _isGeminiLoading.value = true

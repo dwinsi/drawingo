@@ -15,5 +15,6 @@ data class StrokeEntity(
     val strokeWidth: Float,
     val alpha: Float,
     val pointsJson: String,
+    val text: String? = null,
     val orderIndex: Int
 )

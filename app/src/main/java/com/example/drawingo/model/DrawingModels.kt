@@ -10,7 +10,8 @@ enum class DrawingTool {
     PEN,
     BRUSH,
     WATERCOLOR,
-    CRAYON
+    CRAYON,
+    TEXT
 }
 
 enum class CanvasPaperStyle {
@@ -105,6 +106,7 @@ data class DrawnStroke(
     val tool: DrawingTool = DrawingTool.PEN,
     val points: List<Offset> = emptyList(),
     val pressures: List<Float> = emptyList(),
+    val text: String? = null,
     val boundingBox: Rect = calculateBounds(points)
 ) {
     companion object {

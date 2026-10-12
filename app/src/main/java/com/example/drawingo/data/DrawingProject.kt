@@ -10,5 +10,6 @@ data class DrawingProject(
     val name: String,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val thumbnailPath: String? = null
+    val thumbnailPath: String? = null,
+    val backgroundImagePath: String? = null
 )

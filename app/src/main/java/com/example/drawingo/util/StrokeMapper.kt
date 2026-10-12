@@ -25,6 +25,7 @@ object StrokeMapper {
             strokeWidth = stroke.strokeWidth,
             alpha = stroke.alpha,
             pointsJson = bundledJson,
+            text = stroke.text,
             orderIndex = orderIndex
         )
     }
@@ -59,7 +60,8 @@ object StrokeMapper {
             alpha = entity.alpha,
             tool = tool,
             points = points,
-            pressures = pressures
+            pressures = pressures,
+            text = entity.text
         )
     }
 }

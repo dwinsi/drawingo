@@ -45,6 +45,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,17 +65,27 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.StrokeJoin
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.drawscope.withTransform
 import com.example.drawingo.animation.QuickMagicRenderer.processMagicStroke
 import com.example.drawingo.model.DrawingFrame
 import com.example.drawingo.model.CanvasPaperStyle
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -87,13 +100,15 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.Icon
 import com.example.drawingo.R
 import com.example.drawingo.animation.CanvasAnimationRenderer
 import com.example.drawingo.AppPreferences
 import com.example.drawingo.model.DrawingTool
 import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
-import com.example.drawingo.theme.ElectricCyan
 import com.example.drawingo.util.CanvasBitmapUtils
 
 val ToolDockBackgroundColor = Color(0xFFFFFEFA)
@@ -134,9 +149,6 @@ fun DrawingCanvas(
     val showGeminiDialog by viewModel.showGeminiDialog.collectAsState()
     val animationStatus by viewModel.animationStatus.collectAsState()
     val animationSubject by viewModel.animationSubject.collectAsState()
-    val isVideoGenerating by viewModel.isVideoGenerating.collectAsState()
-    val generatedVideo by viewModel.generatedVideo.collectAsState()
-    val videoError by viewModel.videoError.collectAsState()
 
     // Animation States
     val isAnimationActive by viewModel.isAnimationActive.collectAsState()
@@ -149,16 +161,31 @@ fun DrawingCanvas(
     var showApiLogsPage by remember { mutableStateOf(false) }
     var showPaperStyleMenu by remember { mutableStateOf(false) }
     var showLayersMenu by remember { mutableStateOf(false) }
-    var showVideoPrompt by remember { mutableStateOf(false) }
     var showAnimationDock by remember { mutableStateOf(false) }
+    val showTextPrompt by viewModel.showTextPrompt.collectAsState()
+    
+    // Launchers for Photo Import
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.setBackgroundImage(context, it) }
+    }
+
+    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            cameraImageUri?.let { viewModel.setBackgroundImage(context, it) }
+        }
+    }
     
     // Animation States
     val currentFrameIndex by viewModel.currentFrameIndex.collectAsState()
     val isPlayingLocalAnimation by viewModel.isPlayingLocalAnimation.collectAsState()
     val onionSkinEnabled by viewModel.onionSkinEnabled.collectAsState()
     val activePreset by viewModel.activePreset.collectAsState()
-    var videoPrompt by remember { mutableStateOf("Gently bring the main subject to life with calm, flowing movement.") }
-    var videoAspectRatio by remember { mutableStateOf("16:9") }
+    val backgroundImagePath by viewModel.backgroundImagePath.collectAsState()
 
     var frameTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -167,12 +194,6 @@ fun DrawingCanvas(
                 frameTimeMs = System.currentTimeMillis()
             }
         }
-    }
-    LaunchedEffect(generatedVideo) {
-        if (generatedVideo != null) showVideoPrompt = false
-    }
-    LaunchedEffect(videoError) {
-        if (videoError != null) showVideoPrompt = true
     }
 
     Box(
@@ -190,7 +211,7 @@ fun DrawingCanvas(
                 }
                 .pointerInput(Unit) {
                     detectTransformGestures { _, pan, zoom, _ ->
-                        if (!isAnimationActive && generatedVideo == null && (zoom != 1f || pan != Offset.Zero)) {
+                        if (!isAnimationActive && (zoom != 1f || pan != Offset.Zero)) {
                             viewModel.onPanAndZoom(zoom, pan)
                         }
                     }
@@ -199,9 +220,6 @@ fun DrawingCanvas(
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Main)
-                            if (generatedVideo != null) {
-                                continue
-                            }
                             if (event.changes.size == 1) {
                                 for (change in event.changes) {
                                     val pointerId = change.id.value
@@ -212,6 +230,15 @@ fun DrawingCanvas(
                                         viewModel.onPointerDown(pointerId, position, pressure)
                                         change.consume()
                                     } else if (change.pressed && change.positionChanged()) {
+                                        change.historical.forEach { historicalChange ->
+                                            // Fallback to current pressure if historical pressure isn't available
+                                            // (Some older Compose versions didn't expose it, but it's usually there)
+                                            val hPos = historicalChange.position
+                                            // To be safe, we can just use the current change.pressure or check if historicalChange has it.
+                                            // Actually, HistoricalChange DOES NOT have pressure in standard Compose APIs up to recently.
+                                            // Wait, let's see if historicalChange.pressure compiles.
+                                            viewModel.onPointerMove(pointerId, hPos, change.pressure)
+                                        }
                                         viewModel.onPointerMove(pointerId, position, pressure)
                                         change.consume()
                                     } else if (change.changedToUp()) {
@@ -243,20 +270,6 @@ fun DrawingCanvas(
                         compositingStrategy = CompositingStrategy.Offscreen
                     }
             ) {
-                if (symmetryMode != com.example.drawingo.model.SymmetryMode.NONE) {
-                    val midX = size.width / 2f
-                    val midY = size.height / 2f
-                    val dashPathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                    val lineColor = Color.Gray.copy(alpha = 0.5f)
-                    
-                    if (symmetryMode == com.example.drawingo.model.SymmetryMode.VERTICAL || symmetryMode == com.example.drawingo.model.SymmetryMode.QUAD) {
-                        drawLine(color = lineColor, start = Offset(midX, 0f), end = Offset(midX, size.height), strokeWidth = 2f, pathEffect = dashPathEffect)
-                    }
-                    if (symmetryMode == com.example.drawingo.model.SymmetryMode.HORIZONTAL || symmetryMode == com.example.drawingo.model.SymmetryMode.QUAD) {
-                        drawLine(color = lineColor, start = Offset(0f, midY), end = Offset(size.width, midY), strokeWidth = 2f, pathEffect = dashPathEffect)
-                    }
-                }
-
                 if (isAnimationActive && activeAnimationScene != null) {
                     // Render Active Drawing-to-Animation Scene!
                     CanvasAnimationRenderer.renderScene(
@@ -268,12 +281,45 @@ fun DrawingCanvas(
                         currentTimeMs = frameTimeMs
                     )
                 } else {
-                    // Render Standard Static Canvas on top only when not playing video
-                    if (generatedVideo == null) {
-                        withTransform({
-                            translate(canvasOffsetX, canvasOffsetY)
-                            scale(canvasScale, canvasScale, pivot = Offset.Zero)
-                        }) {
+                    // Render Standard Static Canvas on top
+                    withTransform({
+                        translate(canvasOffsetX, canvasOffsetY)
+                        scale(canvasScale, canvasScale, pivot = Offset.Zero)
+                    }) {
+                            if (backgroundImagePath != null) {
+                                val bitmap = BitmapFactory.decodeFile(backgroundImagePath)?.asImageBitmap()
+                                if (bitmap != null) {
+                                    // Scale to fit center
+                                    val imgScale = minOf(size.width / bitmap.width, size.height / bitmap.height)
+                                    val drawWidth = bitmap.width * imgScale
+                                    val drawHeight = bitmap.height * imgScale
+                                    val left = (size.width - drawWidth) / 2f
+                                    val top = (size.height - drawHeight) / 2f
+                                    
+                                    withTransform({
+                                        translate(left, top)
+                                        scale(imgScale, imgScale, pivot = Offset.Zero)
+                                    }) {
+                                        drawImage(image = bitmap)
+                                    }
+                                }
+                            }
+                            
+                            if (symmetryMode != com.example.drawingo.model.SymmetryMode.NONE) {
+                                val midX = size.width / 2f
+                                val midY = size.height / 2f
+                                val dashPathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                                val lineColor = Color.Gray.copy(alpha = 0.5f)
+                                
+                                if (symmetryMode == com.example.drawingo.model.SymmetryMode.VERTICAL || symmetryMode == com.example.drawingo.model.SymmetryMode.QUAD) {
+                                    drawLine(color = lineColor, start = Offset(midX, 0f), end = Offset(midX, size.height), strokeWidth = 2f, pathEffect = dashPathEffect)
+                                }
+                                if (symmetryMode == com.example.drawingo.model.SymmetryMode.HORIZONTAL || symmetryMode == com.example.drawingo.model.SymmetryMode.QUAD) {
+                                    drawLine(color = lineColor, start = Offset(0f, midY), end = Offset(size.width, midY), strokeWidth = 2f, pathEffect = dashPathEffect)
+                                }
+                            }
+                            
+                            // Render Text Input bounds if needed, for now just render strokes
                             drawAllCanvasContent(
                                 layers = layers,
                                 activeStrokes = activeStrokes.values.toList(),
@@ -285,68 +331,39 @@ fun DrawingCanvas(
                                 lassoTransform = lassoTransform,
                                 timeMs = frameTimeMs
                             )
-                        }
                     }
-                }
-            }
-
-            // Canvas-native Video Rendering across full canvas!
-            if (generatedVideo != null) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { viewContext ->
-                            VideoView(viewContext).apply {
-                                setVideoURI(Uri.fromFile(generatedVideo))
-                                setOnPreparedListener { mp ->
-                                    mp.isLooping = true
-                                    start()
-                                }
-                                setOnClickListener {
-                                    if (isPlaying) pause() else start()
-                                }
-                            }
-                        },
-                        update = { view ->
-                            if (!view.isPlaying) view.start()
-                        }
-                    )
                 }
             }
         }
 
         // Top Action Bar
         TopKeepBar(
-            canUndo = canUndo && generatedVideo == null,
-            canRedo = canRedo && generatedVideo == null,
-            hasArtwork = layers.any { layer -> layer.frames.any { it.strokes.isNotEmpty() } } && generatedVideo == null,
-            isAnimationActive = isAnimationActive || (generatedVideo != null),
-            hasVideo = generatedVideo != null,
+            canUndo = canUndo,
+            canRedo = canRedo,
+            hasArtwork = layers.any { layer -> layer.frames.any { it.strokes.isNotEmpty() } },
+            isAnimationActive = isAnimationActive,
             onUndo = { viewModel.undo() },
             onRedo = { viewModel.redo() },
             onClear = { viewModel.clearCanvas() },
             onAnimateDrawingClick = {
                 showAnimationDock = !showAnimationDock
             },
-            onGenerateVideoClick = { showVideoPrompt = true },
             onStopAnimationClick = {
-                if (generatedVideo != null) viewModel.closeGeneratedVideo()
-                else viewModel.stopAnimation()
+                viewModel.stopAnimation()
             },
             onLayersClick = { showLayersMenu = true },
             onPaperStyleClick = { showPaperStyleMenu = true },
+            onImportGalleryClick = { galleryLauncher.launch("image/*") },
+            onImportCameraClick = {
+                val tempFile = File.createTempFile("camera_temp", ".jpg", File(context.cacheDir, "camera_images").apply { mkdirs() })
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
+                cameraImageUri = uri
+                cameraLauncher.launch(uri)
+            },
             onExportClick = { format -> 
                 val flatStrokes = layers.flatMap { layer -> layer.frames.getOrNull(currentFrameIndex)?.strokes ?: emptyList() }
-                val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(flatStrokes)
+                val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(flatStrokes, viewModel.screenWidth.toInt(), viewModel.screenHeight.toInt(), backgroundImagePath = backgroundImagePath)
                 com.example.drawingo.util.ExportUtils.saveBitmapToGallery(context, bitmap, "Drawingo_${System.currentTimeMillis()}", format == "PNG")
-            },
-            onSaveVideoClick = {
-                generatedVideo?.let {
-                    com.example.drawingo.util.ExportUtils.saveVideoToGallery(context, it, "Drawingo_${System.currentTimeMillis()}")
-                }
             },
             onGalleryClick = onNavigateBack,
             onSettingsClick = { showAppSettings = true },
@@ -358,144 +375,6 @@ fun DrawingCanvas(
                 .padding(12.dp)
                 .align(Alignment.TopCenter)
         )
-
-        if (showVideoPrompt) {
-            Dialog(onDismissRequest = { if (!isVideoGenerating) showVideoPrompt = false }) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(0.94f),
-                    shape = RoundedCornerShape(24.dp),
-                    color = Color(0xFFFFFEFA),
-                    contentColor = Color(0xFF25283A),
-                    shadowElevation = 8.dp
-                ) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            "Bring your drawing to life",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF25283A)
-                        )
-                        Text(
-                            if (AppPreferences.isCloudAiAllowed(context))
-                                "A copy of this drawing and your prompt will be sent to Google Cloud to create a 4-second video. The model may reinterpret the drawing, and each generation may incur a backend charge."
-                            else "Cloud AI is off. Enable it in Settings before sending a drawing to Google Cloud.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF555866)
-                        )
-                        OutlinedTextField(
-                            value = videoPrompt,
-                            onValueChange = { videoPrompt = it.take(800) },
-                            label = { Text("Describe the motion") },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 2,
-                            maxLines = 4,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color(0xFF25283A),
-                                unfocusedTextColor = Color(0xFF25283A),
-                                cursorColor = Color(0xFFC53C65),
-                                focusedBorderColor = Color(0xFFC53C65),
-                                unfocusedBorderColor = Color(0xFF8E919C),
-                                focusedLabelColor = Color(0xFFC53C65),
-                                unfocusedLabelColor = Color(0xFF555866),
-                                focusedPlaceholderColor = Color(0xFF8E919C),
-                                unfocusedPlaceholderColor = Color(0xFF8E919C)
-                            )
-                        )
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Aspect ratio", style = MaterialTheme.typography.labelMedium, color = Color(0xFF555866))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Surface(
-                                    onClick = { videoAspectRatio = "16:9" },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (videoAspectRatio == "16:9") Color(0xFFC53C65) else Color(0xFFF0EAE1),
-                                    contentColor = if (videoAspectRatio == "16:9") Color.White else Color(0xFF25283A)
-                                ) {
-                                    Text(
-                                        "16:9 Landscape",
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Surface(
-                                    onClick = { videoAspectRatio = "9:16" },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (videoAspectRatio == "9:16") Color(0xFFC53C65) else Color(0xFFF0EAE1),
-                                    contentColor = if (videoAspectRatio == "9:16") Color.White else Color(0xFF25283A)
-                                ) {
-                                    Text(
-                                        "9:16 Portrait",
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                        videoError?.let { Text(it, color = Color(0xFFB4234D), style = MaterialTheme.typography.bodySmall) }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                            androidx.compose.material3.TextButton(
-                                onClick = { showVideoPrompt = false },
-                                enabled = !isVideoGenerating,
-                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF555866))
-                            ) { Text("Cancel") }
-                            Button(
-                                enabled = AppPreferences.isCloudAiAllowed(context) && !isVideoGenerating && completedStrokes.isNotEmpty(),
-                                onClick = {
-                                    showVideoPrompt = false
-                                    val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(completedStrokes)
-                                    viewModel.generateVideo(context, bitmap, videoPrompt, videoAspectRatio)
-                                },
-                                shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC53C65))
-                            ) {
-                                if (isVideoGenerating) CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                                else Text("Create video", color = Color.White)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Floating Back to Drawing Pill when video is playing
-        if (generatedVideo != null) {
-            Surface(
-                onClick = { viewModel.closeGeneratedVideo() },
-                shape = CircleShape,
-                color = Color(0xFFD94F79),
-                shadowElevation = 8.dp,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 24.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("✏️", fontSize = 18.sp)
-                    Text(
-                        "Back to drawing",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
-            }
-        }
-
-        if (isVideoGenerating) {
-            Box(Modifier.fillMaxSize().background(Color(0x66000000)), contentAlignment = Alignment.Center) {
-                Surface(shape = RoundedCornerShape(24.dp), color = Color.White) {
-                    Row(Modifier.padding(22.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(color = Color(0xFFC53C65))
-                        Text("Creating your video… this can take a few minutes.", color = Color(0xFF343849))
-                    }
-                }
-            }
-        }
 
         if (showGeminiDialog) {
             Dialog(onDismissRequest = { viewModel.closeGeminiDialog() }) {
@@ -534,7 +413,32 @@ fun DrawingCanvas(
             }
         }
 
-        if (showAnimationDock && generatedVideo == null) {
+        if (showTextPrompt) {
+            var textValue by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { viewModel.cancelTextPrompt() },
+                title = { Text("Add Text") },
+                text = {
+                    TextField(
+                        value = textValue,
+                        onValueChange = { textValue = it },
+                        placeholder = { Text("Type here...") }
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.addTextStroke(textValue) }) {
+                        Text("Add")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.cancelTextPrompt() }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showAnimationDock) {
             AnimationBottomDock(
                 currentFrameIndex = currentFrameIndex,
                 frameCount = layers.maxOfOrNull { it.frames.size } ?: 1,
@@ -553,7 +457,7 @@ fun DrawingCanvas(
                     .navigationBarsPadding()
                     .align(Alignment.BottomCenter)
             )
-        } else if (!isAnimationActive && generatedVideo == null) {
+        } else if (!isAnimationActive) {
             BottomDrawingoDock(
                 selectedTool = selectedTool,
                 selectedColor = selectedColor,
@@ -591,7 +495,7 @@ fun DrawingCanvas(
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        color = ElectricCyan,
+                        color = com.example.drawingo.theme.SoftIndigo,
                         strokeWidth = 4.dp,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -687,17 +591,16 @@ fun TopKeepBar(
     canRedo: Boolean,
     hasArtwork: Boolean,
     isAnimationActive: Boolean,
-    hasVideo: Boolean = false,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onClear: () -> Unit,
     onAnimateDrawingClick: () -> Unit,
-    onGenerateVideoClick: () -> Unit,
     onStopAnimationClick: () -> Unit,
     onLayersClick: () -> Unit,
     onPaperStyleClick: () -> Unit,
+    onImportGalleryClick: () -> Unit,
+    onImportCameraClick: () -> Unit,
     onExportClick: (String) -> Unit,
-    onSaveVideoClick: () -> Unit = {},
     onGalleryClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onApiLogsClick: () -> Unit,
@@ -719,63 +622,69 @@ fun TopKeepBar(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             if (isAnimationActive) {
-                CompactAction("⬅️", "Back to Drawing", size = 44.dp, onClick = onStopAnimationClick)
+                CompactAction(Icons.Rounded.ArrowBack, "Back to Drawing", size = 44.dp, onClick = onStopAnimationClick)
             } else {
-                CompactAction("🖼️", "Gallery", size = 44.dp, onClick = onGalleryClick)
+                CompactAction(Icons.Rounded.Image, "Gallery", size = 44.dp, onClick = onGalleryClick)
             }
-            ModeSelector(
-                animeEnabled = hasArtwork,
-                onAnimeClick = onAnimateDrawingClick,
-                onGenerateVideoClick = onGenerateVideoClick
-            )
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (hasArtwork) Color(0xFF69489B) else Color(0xFFE9E2F0))
+                    .clickable(enabled = hasArtwork, onClick = onAnimateDrawingClick)
+                    .semantics { contentDescription = "Anime drawing" },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = if (hasArtwork) Color.White else Color(0xFFB5B2AD))
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(1.dp), verticalAlignment = Alignment.CenterVertically) {
-            CompactAction("📑", "Layers", size = 40.dp, onClick = onLayersClick)
-            CompactAction("↶", "Undo", enabled = canUndo, size = 40.dp, onClick = onUndo)
-            CompactAction("↷", "Redo", enabled = canRedo, size = 40.dp, onClick = onRedo)
+            CompactAction(Icons.Rounded.Layers, "Layers", size = 40.dp, onClick = onLayersClick)
+            CompactAction(Icons.Rounded.Undo, "Undo", enabled = canUndo, size = 40.dp, onClick = onUndo)
+            CompactAction(Icons.Rounded.Redo, "Redo", enabled = canRedo, size = 40.dp, onClick = onRedo)
             CompactAction(
-                icon = "🦋", 
+                icon = Icons.Rounded.Flip, 
                 label = "Symmetry", 
                 selected = symmetryMode != com.example.drawingo.model.SymmetryMode.NONE,
                 size = 40.dp, 
                 onClick = { viewModel.toggleSymmetryMode() }
             )
-            CompactAction("🗑", "Clear drawing", size = 40.dp, onClick = { showClearConfirmation = true })
+            CompactAction(Icons.Rounded.Delete, "Clear drawing", size = 40.dp, onClick = { showClearConfirmation = true })
             Box {
-                CompactAction("⋯", "More actions", size = 40.dp, onClick = { actionsExpanded = true })
+                CompactAction(Icons.Rounded.MoreVert, "More actions", size = 40.dp, onClick = { actionsExpanded = true })
                 DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
-                    if (isAnimationActive && !hasVideo) {
+                    if (isAnimationActive) {
                         DropdownMenuItem(
-                            text = { Text("⏹  Stop animation") },
+                            text = { Text("Stop animation") },
                             onClick = { actionsExpanded = false; onStopAnimationClick() }
                         )
                     }
-                    if (hasVideo) {
-                        DropdownMenuItem(
-                            text = { Text("💾  Save Video") },
-                            onClick = { actionsExpanded = false; onSaveVideoClick() }
-                        )
-                    }
                     DropdownMenuItem(
-                        text = { Text("📄  Paper style") },
+                        text = { Text("Import from Camera") },
+                        onClick = { actionsExpanded = false; onImportCameraClick() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Import from Gallery") },
+                        onClick = { actionsExpanded = false; onImportGalleryClick() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Paper style") },
                         onClick = { actionsExpanded = false; onPaperStyleClick() }
                     )
-                    if (!hasVideo) {
-                        DropdownMenuItem(
-                            text = { Text("💾  Save as PNG") },
-                            onClick = { actionsExpanded = false; onExportClick("PNG") }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("💾  Save as JPEG") },
-                            onClick = { actionsExpanded = false; onExportClick("JPEG") }
-                        )
-                    }
                     DropdownMenuItem(
-                        text = { Text("⚙️  Settings") },
+                        text = { Text("Save as PNG") },
+                        onClick = { actionsExpanded = false; onExportClick("PNG") }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Save as JPEG") },
+                        onClick = { actionsExpanded = false; onExportClick("JPEG") }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Settings") },
                         onClick = { actionsExpanded = false; onSettingsClick() }
                     )
                     DropdownMenuItem(
-                        text = { Text("📋  API & Cloud logs") },
+                        text = { Text("API & Cloud logs") },
                         onClick = { actionsExpanded = false; onApiLogsClick() }
                     )
                 }
@@ -840,46 +749,8 @@ fun TopKeepBar(
 }
 
 @Composable
-private fun ModeSelector(
-    animeEnabled: Boolean,
-    onAnimeClick: () -> Unit,
-    onGenerateVideoClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(DockIconBackground)
-            .padding(3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (animeEnabled) Color(0xFF69489B) else Color(0xFFE9E2F0))
-                .clickable(enabled = animeEnabled, onClick = onAnimeClick)
-                .semantics { contentDescription = "Anime drawing" },
-            contentAlignment = Alignment.Center
-        ) {
-            Text("🌠", fontSize = 24.sp)
-        }
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (animeEnabled) Color(0xFFE4F2F0) else Color(0xFFF2F0EC))
-                .clickable(enabled = animeEnabled, onClick = onGenerateVideoClick)
-                .semantics { contentDescription = "Create AI video from drawing" },
-            contentAlignment = Alignment.Center
-        ) {
-            Text("🎬", fontSize = 24.sp)
-        }
-    }
-}
-
-@Composable
 private fun CompactAction(
-    icon: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     enabled: Boolean = true,
     selected: Boolean = false,
@@ -895,11 +766,10 @@ private fun CompactAction(
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center
     ) {
-        Text(
+        Icon(
             icon,
-            color = when { selected -> Color.White; enabled -> Color(0xFF343849); else -> Color(0xFFB5B2AD) },
-            fontSize = if (size <= 36.dp) 21.sp else 26.sp,
-            fontWeight = FontWeight.Bold
+            contentDescription = null,
+            tint = when { selected -> Color.White; enabled -> Color(0xFF343849); else -> Color(0xFFB5B2AD) }
         )
     }
 }
@@ -960,7 +830,7 @@ fun BottomDrawingoDock(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("🎛️", fontSize = 18.sp)
+                        Icon(Icons.Rounded.Colorize, contentDescription = null, tint = Color(0xFF343849))
                         Text("Mix Custom Color", fontWeight = FontWeight.Bold, color = Color(0xFF343849))
                     }
                 }
@@ -971,12 +841,13 @@ fun BottomDrawingoDock(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                         val tools = listOf(
-                            Triple(DrawingTool.PEN, "✏️", "Pen"),
-                            Triple(DrawingTool.BRUSH, "🖌️", "Brush"),
-                            Triple(DrawingTool.WATERCOLOR, "💧", "Watercolor"),
-                            Triple(DrawingTool.CRAYON, "🖍", "Crayon"),
-                            Triple(DrawingTool.ERASER, "🧹", "Eraser"),
-                            Triple(DrawingTool.LASSO, "🪄", "Wand")
+                            Triple(DrawingTool.PEN, Icons.Rounded.Edit, "Pen"),
+                            Triple(DrawingTool.BRUSH, Icons.Rounded.Brush, "Brush"),
+                            Triple(DrawingTool.WATERCOLOR, Icons.Rounded.WaterDrop, "Watercolor"),
+                            Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
+                            Triple(DrawingTool.ERASER, Icons.Rounded.AutoFixHigh, "Eraser"),
+                            Triple(DrawingTool.LASSO, Icons.Rounded.Highlight, "Wand"),
+                            Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text")
                         )
                         tools.forEach { (tool, icon, label) ->
                             val isSelected = selectedTool == tool
@@ -986,34 +857,17 @@ fun BottomDrawingoDock(
                                     .background(if (isSelected) ActiveToolHighlight else DockIconBackground)
                                     .clickable { onToolClick(tool) }
                                     .semantics { contentDescription = "$label tool" }
-                                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                                    .padding(horizontal = 7.dp, vertical = 6.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(0.dp)
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Text(icon, fontSize = 24.sp, lineHeight = 28.sp)
-                                if (tool == DrawingTool.WATERCOLOR || tool == DrawingTool.CRAYON) {
-                                    Canvas(Modifier.width(42.dp).height(12.dp)) {
-                                        val previewPath = Path().apply {
-                                            moveTo(3.dp.toPx(), size.height * 0.62f)
-                                            cubicTo(size.width * 0.3f, -size.height, size.width * 0.65f, size.height * 1.8f, size.width - 3.dp.toPx(), size.height * 0.38f)
-                                        }
-                                        if (tool == DrawingTool.WATERCOLOR) {
-                                            drawPath(previewPath, Color(0xFF4388A4).copy(alpha = 0.38f), style = Stroke(8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-                                            drawCircle(Color(0xFF4388A4).copy(alpha = 0.3f), radius = 3.dp.toPx(), center = Offset(size.width * 0.52f, size.height * 0.56f))
-                                        } else {
-                                            drawPath(previewPath, Color(0xFF4388A4), style = Stroke(5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-                                            listOf(0.25f, 0.48f, 0.7f).forEach { fraction ->
-                                                drawCircle(Color.White, radius = 1.dp.toPx(), center = Offset(size.width * fraction, size.height * 0.52f))
-                                            }
-                                        }
-                                    }
-                                }
+                                Icon(icon, contentDescription = null, tint = if (isSelected) Color.White else Color(0xFF343849))
                                 Text(label, color = if (isSelected) Color.White else Color(0xFF4F5260), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                         Box {
                             CompactAction(
-                                "📏",
+                                Icons.Rounded.Straighten,
                                 if (selectedTool == DrawingTool.ERASER) "Choose eraser size" else "Choose brush size",
                                 size = 40.dp
                             ) { sizesExpanded = true }
@@ -1350,28 +1204,48 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
         var previousY = s.points[0].y
         var previousPressure = s.pressures[0]
         
+        var lastDrawX = previousX
+        var lastDrawY = previousY
+        
         for (i in 1 until s.points.size) {
             val currentX = s.points[i].x
             val currentY = s.points[i].y
             val currentPressure = s.pressures[i]
             
-            // Map pressure (typically 0.0 to 1.0) to a width multiplier
-            val p1Width = s.strokeWidth * (0.2f + (previousPressure * 1.5f))
-            val p2Width = s.strokeWidth * (0.2f + (currentPressure * 1.5f))
-            val avgWidth = (p1Width + p2Width) / 2f
+            val midX = (previousX + currentX) / 2f
+            val midY = (previousY + currentY) / 2f
             
-            drawLine(
+            // Map pressure to width (smooth transition between previous and current pressure)
+            val avgWidth = s.strokeWidth * (0.2f + ((previousPressure + currentPressure) / 2f) * 1.5f)
+            
+            val segmentPath = Path()
+            segmentPath.moveTo(lastDrawX, lastDrawY)
+            segmentPath.quadraticTo(previousX, previousY, midX, midY)
+            
+            drawPath(
+                path = segmentPath,
                 color = s.color.copy(alpha = s.alpha),
-                start = Offset(previousX, previousY),
-                end = Offset(currentX, currentY),
-                strokeWidth = avgWidth,
-                cap = StrokeCap.Round
+                style = Stroke(width = avgWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
             )
             
+            lastDrawX = midX
+            lastDrawY = midY
             previousX = currentX
             previousY = currentY
             previousPressure = currentPressure
         }
+        
+        // Final segment connecting to the last point
+        val finalPath = Path()
+        finalPath.moveTo(lastDrawX, lastDrawY)
+        finalPath.lineTo(previousX, previousY)
+        val finalWidth = s.strokeWidth * (0.2f + previousPressure * 1.5f)
+        
+        drawPath(
+            path = finalPath,
+            color = s.color.copy(alpha = s.alpha),
+            style = Stroke(width = finalWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
         return
     }
 
@@ -1409,6 +1283,23 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
                 style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
                 blendMode = BlendMode.Clear
             )
+        }
+        DrawingTool.TEXT -> {
+            val text = s.text
+            if (text != null) {
+                val paint = android.graphics.Paint().apply {
+                    color = s.color.toArgb()
+                    textSize = s.strokeWidth
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    text,
+                    previousX,
+                    previousY + (paint.textSize / 3f), // approximate vertical centering
+                    paint
+                )
+            }
         }
         else -> drawPath(
             path = path,
