@@ -3,16 +3,19 @@ package com.example.drawingo.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -155,15 +158,24 @@ fun AnimationBottomDock(
             }
         } else {
             // Quick Magic Presets
+            val scrollState = rememberScrollState()
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scrollState),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Spacer(modifier = Modifier.width(8.dp))
                 PresetButton("None", "🚫", activePreset == QuickMagicPreset.NONE) { onSelectPreset(QuickMagicPreset.NONE) }
                 PresetButton("Wiggle", "〰️", activePreset == QuickMagicPreset.WIGGLE) { onSelectPreset(QuickMagicPreset.WIGGLE) }
                 PresetButton("Pulse", "💓", activePreset == QuickMagicPreset.PULSE) { onSelectPreset(QuickMagicPreset.PULSE) }
-                PresetButton("Draw-On", "✍️", activePreset == QuickMagicPreset.DRAW_ON) { onSelectPreset(QuickMagicPreset.DRAW_ON) }
+                PresetButton("Float", "☁️", activePreset == QuickMagicPreset.FLOAT) { onSelectPreset(QuickMagicPreset.FLOAT) }
+                PresetButton("Shimmer", "✨", activePreset == QuickMagicPreset.SHIMMER) { onSelectPreset(QuickMagicPreset.SHIMMER) }
+                PresetButton("Spin", "🔄", activePreset == QuickMagicPreset.SPIN) { onSelectPreset(QuickMagicPreset.SPIN) }
+                PresetButton("Wander", "🧭", activePreset == QuickMagicPreset.WANDER) { onSelectPreset(QuickMagicPreset.WANDER) }
+                PresetButton("Flip", "🪞", activePreset == QuickMagicPreset.FLIP) { onSelectPreset(QuickMagicPreset.FLIP) }
+                Spacer(modifier = Modifier.width(8.dp))
             }
         }
     }

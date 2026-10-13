@@ -6,21 +6,21 @@ import androidx.compose.ui.graphics.Color
 // Drawingo Elegant Universal Palette
 // ==========================================
 
-// Neutrals
+// Obsidian Gold & Midnight Indigo Theme
+val ObsidianBlack = Color(0xFF0A0A0C)
+val MidnightIndigo = Color(0xFF16182B)
+val IndigoGloss = Color(0xFF23253F)
+val SoftIndigo = Color(0xFF35395E)
+
+val LuxGold = Color(0xFFFFD700)
+val GoldVariant = Color(0xFFC5A000)
+val SoftGold = Color(0xFFFFF2B2)
+
 val CloudWhite = Color(0xFFFFFFFF)
-val SoftSand = Color(0xFFF9F9F9)
-val MilkyGlass = Color(0xE6FFFFFF)
-val DarkNavy = Color(0xFF1E1E1E)
-val Charcoal = Color(0xFF333333)
-
-// Elegant Accents
-val SoftIndigo = Color(0xFF5C6BC0)
-val SageGreen = Color(0xFF81C784)
-val SlateGray = Color(0xFF78909C)
-
-val CosmicSlate = Color(0xFF121212)
+val MilkyGlass = Color(0x33FFFFFF)
+val MutedSlate = Color(0xFF8E919C)
 
 // Aliases for Material Theme
-val PrimaryDrawingo = SoftIndigo
-val SecondaryDrawingo = SageGreen
-val TertiaryDrawingo = SlateGray
+val PrimaryDrawingo = LuxGold
+val SecondaryDrawingo = MidnightIndigo
+val TertiaryDrawingo = GoldVariant

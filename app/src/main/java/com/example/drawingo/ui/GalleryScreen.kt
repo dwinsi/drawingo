@@ -25,13 +25,30 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Brush
+import androidx.core.content.FileProvider
+import java.io.File
+import android.net.Uri
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,22 +59,80 @@ fun GalleryScreen(
     onNavigateToCanvas: () -> Unit
 ) {
     val projects by viewModel.allProjects.collectAsState()
+    val context = LocalContext.current
+    var fabMenuExpanded by remember { mutableStateOf(false) }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            viewModel.createNewProject()
+            viewModel.setBackgroundImage(context, it)
+            onNavigateToCanvas()
+        }
+    }
+
+    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            cameraImageUri?.let {
+                viewModel.createNewProject()
+                viewModel.setBackgroundImage(context, it)
+                onNavigateToCanvas()
+            }
+        }
+    }
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    viewModel.createNewProject()
-                    onNavigateToCanvas()
-                },
-                containerColor = Color(0xFFC53C65),
-                contentColor = Color.White,
-                shape = CircleShape
-            ) {
-                Text("+", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Box {
+                FloatingActionButton(
+                    onClick = { fabMenuExpanded = true },
+                    containerColor = com.example.drawingo.theme.LuxGold,
+                    contentColor = com.example.drawingo.theme.ObsidianBlack,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Rounded.Add, contentDescription = "New Drawing")
+                }
+                DropdownMenu(
+                    expanded = fabMenuExpanded,
+                    onDismissRequest = { fabMenuExpanded = false },
+                    modifier = Modifier.background(com.example.drawingo.theme.MidnightIndigo)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("New Blank Canvas", color = Color.White) },
+                        leadingIcon = { Icon(Icons.Rounded.Brush, contentDescription = null, tint = Color.White) },
+                        onClick = {
+                            fabMenuExpanded = false
+                            viewModel.createNewProject()
+                            onNavigateToCanvas()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Import from Camera", color = Color.White) },
+                        leadingIcon = { Icon(Icons.Rounded.CameraAlt, contentDescription = null, tint = Color.White) },
+                        onClick = {
+                            fabMenuExpanded = false
+                            val tempFile = File.createTempFile("camera_temp", ".jpg", File(context.cacheDir, "camera_images").apply { mkdirs() })
+                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
+                            cameraImageUri = uri
+                            cameraLauncher.launch(uri)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Import from Gallery", color = Color.White) },
+                        leadingIcon = { Icon(Icons.Rounded.Image, contentDescription = null, tint = Color.White) },
+                        onClick = {
+                            fabMenuExpanded = false
+                            galleryLauncher.launch("image/*")
+                        }
+                    )
+                }
             }
         },
-        containerColor = Color(0xFFF3EFE7)
+        containerColor = com.example.drawingo.theme.ObsidianBlack
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -69,13 +144,13 @@ fun GalleryScreen(
                 text = "My Drawings",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF343849),
+                color = com.example.drawingo.theme.LuxGold,
                 modifier = Modifier.padding(24.dp)
             )
 
             if (projects.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No drawings yet. Tap + to start!", color = Color(0xFF8B8884))
+                    Text("No drawings yet. Tap + to start!", color = com.example.drawingo.theme.MutedSlate)
                 }
             } else {
                 LazyVerticalGrid(
@@ -93,7 +168,7 @@ fun GalleryScreen(
                                     onNavigateToCanvas()
                                 },
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            colors = CardDefaults.cardColors(containerColor = com.example.drawingo.theme.MidnightIndigo),
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
@@ -102,21 +177,21 @@ fun GalleryScreen(
                                         .fillMaxWidth()
                                         .size(120.dp)
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFFF7F5F1)),
+                                        .background(com.example.drawingo.theme.IndigoGloss),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("🎨", fontSize = 48.sp)
+                                    Icon(Icons.Rounded.Brush, contentDescription = null, tint = com.example.drawingo.theme.SoftGold, modifier = Modifier.size(48.dp))
                                 }
                                 Text(
                                     text = project.name,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF343849),
+                                    color = Color.White,
                                     modifier = Modifier.padding(top = 12.dp)
                                 )
                                 Text(
                                     text = SimpleDateFormat("MMM dd, yyyy", java.util.Locale.US).format(Date(project.updatedAt)),
                                     fontSize = 12.sp,
-                                    color = Color(0xFF8B8884),
+                                    color = com.example.drawingo.theme.MutedSlate,
                                     modifier = Modifier.padding(top = 4.dp)
                                 )
                             }

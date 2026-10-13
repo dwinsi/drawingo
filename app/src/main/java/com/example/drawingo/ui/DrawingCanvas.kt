@@ -111,9 +111,9 @@ import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
 import com.example.drawingo.util.CanvasBitmapUtils
 
-val ToolDockBackgroundColor = Color(0xFFFFFEFA)
-val DockIconBackground = Color(0xFFF3EFE7)
-val ActiveToolHighlight = Color(0xFFC53C65)
+val ToolDockBackgroundColor = com.example.drawingo.theme.MidnightIndigo
+val DockIconBackground = com.example.drawingo.theme.IndigoGloss
+val ActiveToolHighlight = com.example.drawingo.theme.LuxGold
 val DockShadow = Color(0x33000000)
 
 @Composable
@@ -163,22 +163,7 @@ fun DrawingCanvas(
     var showLayersMenu by remember { mutableStateOf(false) }
     var showAnimationDock by remember { mutableStateOf(false) }
     val showTextPrompt by viewModel.showTextPrompt.collectAsState()
-    
-    // Launchers for Photo Import
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.setBackgroundImage(context, it) }
-    }
-
-    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) {
-            cameraImageUri?.let { viewModel.setBackgroundImage(context, it) }
-        }
-    }
+    val showQuickMenu by viewModel.showQuickMenu.collectAsState()
     
     // Animation States
     val currentFrameIndex by viewModel.currentFrameIndex.collectAsState()
@@ -353,13 +338,6 @@ fun DrawingCanvas(
             },
             onLayersClick = { showLayersMenu = true },
             onPaperStyleClick = { showPaperStyleMenu = true },
-            onImportGalleryClick = { galleryLauncher.launch("image/*") },
-            onImportCameraClick = {
-                val tempFile = File.createTempFile("camera_temp", ".jpg", File(context.cacheDir, "camera_images").apply { mkdirs() })
-                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
-                cameraImageUri = uri
-                cameraLauncher.launch(uri)
-            },
             onExportClick = { format -> 
                 val flatStrokes = layers.flatMap { layer -> layer.frames.getOrNull(currentFrameIndex)?.strokes ?: emptyList() }
                 val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(flatStrokes, viewModel.screenWidth.toInt(), viewModel.screenHeight.toInt(), backgroundImagePath = backgroundImagePath)
@@ -368,6 +346,8 @@ fun DrawingCanvas(
             onGalleryClick = onNavigateBack,
             onSettingsClick = { showAppSettings = true },
             onApiLogsClick = { showApiLogsPage = true },
+            selectedTool = selectedTool,
+            onToolClick = { viewModel.setTool(it) },
             viewModel = viewModel,
             modifier = Modifier
                 .fillMaxWidth()
@@ -375,6 +355,124 @@ fun DrawingCanvas(
                 .padding(12.dp)
                 .align(Alignment.TopCenter)
         )
+
+        if (showQuickMenu) {
+            Dialog(onDismissRequest = { viewModel.closeQuickMenu() }) {
+                Surface(
+                    modifier = Modifier.width(340.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(0xFFFFFEFA),
+                    shadowElevation = 8.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            "Tools & Animation",
+                            color = Color(0xFF343849),
+                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+
+                        Text("Tools", fontWeight = FontWeight.Bold, color = Color(0xFF555866))
+                        val tools = listOf(
+                            Triple(DrawingTool.PEN, Icons.Rounded.Edit, "Pen"),
+                            Triple(DrawingTool.BRUSH, Icons.Rounded.Brush, "Brush"),
+                            Triple(DrawingTool.WATERCOLOR, Icons.Rounded.WaterDrop, "Water..."),
+                            Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
+                            Triple(DrawingTool.ERASER, Icons.Rounded.AutoFixHigh, "Eraser"),
+                            Triple(DrawingTool.LASSO, Icons.Rounded.Highlight, "Lasso"),
+                            Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text")
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            tools.forEach { (tool, icon, label) ->
+                                val isSelected = selectedTool == tool
+                                Column(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) com.example.drawingo.theme.SoftIndigo else Color(0xFFF3F0F7))
+                                        .clickable { 
+                                            viewModel.setTool(tool)
+                                            viewModel.closeQuickMenu() 
+                                        }
+                                        .padding(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(icon, contentDescription = null, tint = if (isSelected) Color.White else Color(0xFF5A5D7A))
+                                    Text(label, color = if (isSelected) Color.White else Color(0xFF5A5D7A), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        Text("Quick Magic", fontWeight = FontWeight.Bold, color = Color(0xFF555866))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            val presets = listOf(
+                                Triple(DrawingViewModel.QuickMagicPreset.NONE, "🚫", "None"),
+                                Triple(DrawingViewModel.QuickMagicPreset.WIGGLE, "〰️", "Wiggle"),
+                                Triple(DrawingViewModel.QuickMagicPreset.PULSE, "💓", "Pulse"),
+                                Triple(DrawingViewModel.QuickMagicPreset.FLOAT, "☁️", "Float"),
+                                Triple(DrawingViewModel.QuickMagicPreset.SHIMMER, "✨", "Shimmer"),
+                                Triple(DrawingViewModel.QuickMagicPreset.SPIN, "🔄", "Spin"),
+                                Triple(DrawingViewModel.QuickMagicPreset.WANDER, "🧭", "Wander"),
+                                Triple(DrawingViewModel.QuickMagicPreset.FLIP, "🪞", "Flip")
+                            )
+                            presets.forEach { (preset, icon, label) ->
+                                val isSelected = activePreset == preset
+                                Column(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isSelected) com.example.drawingo.theme.SoftIndigo else Color(0xFFF3F0F7))
+                                        .clickable { 
+                                            viewModel.setQuickMagicPreset(preset)
+                                            viewModel.closeQuickMenu() 
+                                        }
+                                        .padding(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(icon, fontSize = 24.sp)
+                                    Text(label, color = if (isSelected) Color.White else Color(0xFF5A5D7A), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = { 
+                                    viewModel.closeQuickMenu()
+                                    showAnimationDock = !showAnimationDock 
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF3F0F7), contentColor = Color(0xFF343849))
+                            ) { Text("Animation Dock") }
+                            
+                            Button(
+                                onClick = { 
+                                    viewModel.closeQuickMenu()
+                                    showAnimationDock = !showAnimationDock
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = com.example.drawingo.theme.LuxGold, contentColor = com.example.drawingo.theme.ObsidianBlack)
+                            ) { 
+                                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("AI Scene", fontWeight = FontWeight.Bold) 
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         if (showGeminiDialog) {
             Dialog(onDismissRequest = { viewModel.closeGeminiDialog() }) {
@@ -598,12 +696,12 @@ fun TopKeepBar(
     onStopAnimationClick: () -> Unit,
     onLayersClick: () -> Unit,
     onPaperStyleClick: () -> Unit,
-    onImportGalleryClick: () -> Unit,
-    onImportCameraClick: () -> Unit,
     onExportClick: (String) -> Unit,
     onGalleryClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onApiLogsClick: () -> Unit,
+    selectedTool: DrawingTool,
+    onToolClick: (DrawingTool) -> Unit,
     viewModel: DrawingViewModel,
     modifier: Modifier = Modifier
 ) {
@@ -615,7 +713,7 @@ fun TopKeepBar(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
             .background(ToolDockBackgroundColor)
-            .border(1.dp, Color(0xFFE8E2D9), RoundedCornerShape(24.dp))
+            .border(1.dp, com.example.drawingo.theme.SoftIndigo, RoundedCornerShape(24.dp))
             .padding(horizontal = 6.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -630,16 +728,23 @@ fun TopKeepBar(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (hasArtwork) Color(0xFF69489B) else Color(0xFFE9E2F0))
+                    .background(if (hasArtwork) com.example.drawingo.theme.LuxGold else com.example.drawingo.theme.IndigoGloss)
                     .clickable(enabled = hasArtwork, onClick = onAnimateDrawingClick)
                     .semantics { contentDescription = "Anime drawing" },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = if (hasArtwork) Color.White else Color(0xFFB5B2AD))
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = if (hasArtwork) com.example.drawingo.theme.ObsidianBlack else Color(0xFF5A5D7A))
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(1.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactAction(Icons.Rounded.Layers, "Layers", size = 40.dp, onClick = onLayersClick)
+            CompactAction(
+                icon = Icons.Rounded.Highlight,
+                label = "Lasso",
+                selected = selectedTool == DrawingTool.LASSO,
+                size = 40.dp,
+                onClick = { onToolClick(DrawingTool.LASSO) }
+            )
             CompactAction(Icons.Rounded.Undo, "Undo", enabled = canUndo, size = 40.dp, onClick = onUndo)
             CompactAction(Icons.Rounded.Redo, "Redo", enabled = canRedo, size = 40.dp, onClick = onRedo)
             CompactAction(
@@ -659,14 +764,6 @@ fun TopKeepBar(
                             onClick = { actionsExpanded = false; onStopAnimationClick() }
                         )
                     }
-                    DropdownMenuItem(
-                        text = { Text("Import from Camera") },
-                        onClick = { actionsExpanded = false; onImportCameraClick() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Import from Gallery") },
-                        onClick = { actionsExpanded = false; onImportGalleryClick() }
-                    )
                     DropdownMenuItem(
                         text = { Text("Paper style") },
                         onClick = { actionsExpanded = false; onPaperStyleClick() }
@@ -761,7 +858,7 @@ private fun CompactAction(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(when { selected -> ActiveToolHighlight; enabled -> DockIconBackground; else -> Color(0xFFF7F5F1) })
+            .background(when { selected -> ActiveToolHighlight; enabled -> DockIconBackground; else -> Color(0xFF1E2036) })
             .clickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center
@@ -769,7 +866,7 @@ private fun CompactAction(
         Icon(
             icon,
             contentDescription = null,
-            tint = when { selected -> Color.White; enabled -> Color(0xFF343849); else -> Color(0xFFB5B2AD) }
+            tint = when { selected -> com.example.drawingo.theme.ObsidianBlack; enabled -> Color.White; else -> Color(0xFF5A5D7A) }
         )
     }
 }
@@ -802,7 +899,7 @@ fun BottomDrawingoDock(
     Column(
         modifier = modifier
             .padding(horizontal = 10.dp, vertical = 6.dp)
-            .border(1.dp, Color(0xFFE8E2D9), RoundedCornerShape(26.dp))
+            .border(1.dp, com.example.drawingo.theme.SoftIndigo, RoundedCornerShape(26.dp))
             .clip(RoundedCornerShape(26.dp))
             .background(ToolDockBackgroundColor)
             .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -830,8 +927,8 @@ fun BottomDrawingoDock(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Rounded.Colorize, contentDescription = null, tint = Color(0xFF343849))
-                        Text("Mix Custom Color", fontWeight = FontWeight.Bold, color = Color(0xFF343849))
+                        Icon(Icons.Rounded.Colorize, contentDescription = null, tint = Color.White)
+                        Text("Mix Custom Color", fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
 
@@ -861,8 +958,8 @@ fun BottomDrawingoDock(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Icon(icon, contentDescription = null, tint = if (isSelected) Color.White else Color(0xFF343849))
-                                Text(label, color = if (isSelected) Color.White else Color(0xFF4F5260), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                Icon(icon, contentDescription = null, tint = if (isSelected) com.example.drawingo.theme.ObsidianBlack else Color.White)
+                                Text(label, color = if (isSelected) com.example.drawingo.theme.ObsidianBlack else Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                         Box {
@@ -1126,6 +1223,47 @@ private fun DrawScope.drawAllCanvasContent(
     lassoTransform: Offset = Offset.Zero,
     timeMs: Long
 ) {
+    // Determine the global target group for animation across all layers
+    val globalTargetStrokes = mutableListOf<DrawnStroke>()
+    if (selectedStrokeIds.isNotEmpty()) {
+        layers.forEach { layer ->
+            val currentFrame = layer.frames.getOrNull(currentFrameIndex)
+            currentFrame?.strokes?.forEach { if (it.id in selectedStrokeIds) globalTargetStrokes.add(it) }
+        }
+    } else {
+        layers.forEach { layer ->
+            if (layer.isVisible && layer.opacity > 0f) {
+                val currentFrame = layer.frames.getOrNull(currentFrameIndex)
+                currentFrame?.strokes?.let { globalTargetStrokes.addAll(it) }
+            }
+        }
+    }
+    
+    // Calculate the unified global center of the target group
+    var groupCenter: Offset? = null
+    if (globalTargetStrokes.isNotEmpty()) {
+        var minX = Float.POSITIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+        
+        globalTargetStrokes.forEach { stroke ->
+            val points = if (stroke.id in selectedStrokeIds) {
+                stroke.points.map { Offset(it.x + lassoTransform.x, it.y + lassoTransform.y) }
+            } else stroke.points
+            
+            points.forEach { p ->
+                if (p.x < minX) minX = p.x
+                if (p.x > maxX) maxX = p.x
+                if (p.y < minY) minY = p.y
+                if (p.y > maxY) maxY = p.y
+            }
+        }
+        if (minX != Float.POSITIVE_INFINITY) {
+            groupCenter = Offset((minX + maxX) / 2f, (minY + maxY) / 2f)
+        }
+    }
+
     for (layer in layers) {
         if (!layer.isVisible) continue
         
@@ -1155,14 +1293,19 @@ private fun DrawScope.drawAllCanvasContent(
             val strokeWithAlpha = finalStroke.copy(alpha = finalStroke.alpha * layerAlpha)
             
             if (activePreset != DrawingViewModel.QuickMagicPreset.NONE) {
-                val magicStroke = processMagicStroke(strokeWithAlpha, activePreset, timeMs)
-                if (magicStroke != null) drawSingleStroke(magicStroke)
+                // Animate only if no strokes are selected, OR if this specific stroke is selected
+                if (selectedStrokeIds.isEmpty() || stroke.id in selectedStrokeIds) {
+                    val magicStroke = processMagicStroke(strokeWithAlpha, activePreset, timeMs, groupCenter)
+                    if (magicStroke != null) drawSingleStroke(magicStroke)
+                } else {
+                    drawSingleStroke(strokeWithAlpha)
+                }
             } else {
                 drawSingleStroke(strokeWithAlpha)
             }
             
-            // Draw selection highlight bounding box
-            if (stroke.id in selectedStrokeIds) {
+            // Draw selection highlight bounding box only if no animation is currently active
+            if (stroke.id in selectedStrokeIds && activePreset == DrawingViewModel.QuickMagicPreset.NONE) {
                 val bounds = DrawnStroke.calculateBounds(finalStroke.points)
                 drawRect(
                     color = Color(0xFFC53C65).copy(alpha = 0.3f),

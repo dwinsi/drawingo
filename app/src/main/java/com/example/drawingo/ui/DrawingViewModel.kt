@@ -10,7 +10,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.drawingo.animation.ParticleEngine
 import com.example.drawingo.audio.SoundManager
 import com.example.drawingo.model.AnimatedDrawingEntity
-import com.example.drawingo.model.AnimationSceneResult
 import com.example.drawingo.model.AnimationSceneType
 import com.example.drawingo.model.DrawingTool
 import com.example.drawingo.model.DrawingoPalette
@@ -36,6 +35,11 @@ import com.example.drawingo.util.StrokeMapper
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import android.net.Uri
+import android.util.Log
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.label.ImageLabeling
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+import kotlinx.coroutines.tasks.await
 
 /**
  * Lightweight MVVM ViewModel managing the Drawingo canvas,
@@ -71,7 +75,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _onionSkinEnabled = MutableStateFlow(true)
     val onionSkinEnabled: StateFlow<Boolean> = _onionSkinEnabled.asStateFlow()
 
-    enum class QuickMagicPreset { NONE, WIGGLE, PULSE, DRAW_ON }
+    enum class QuickMagicPreset { NONE, WIGGLE, PULSE, FLOAT, SHIMMER, SPIN, WANDER, FLIP }
     
     private val _activePreset = MutableStateFlow(QuickMagicPreset.NONE)
     val activePreset: StateFlow<QuickMagicPreset> = _activePreset.asStateFlow()
@@ -79,6 +83,12 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     // Text Tool State
     private val _showTextPrompt = MutableStateFlow(false)
     val showTextPrompt: StateFlow<Boolean> = _showTextPrompt.asStateFlow()
+
+    private val _showQuickMenu = MutableStateFlow(false)
+    val showQuickMenu: StateFlow<Boolean> = _showQuickMenu.asStateFlow()
+
+    private var longPressJob: Job? = null
+    private var pointerDownCanvasPos: Offset? = null
 
     private val _textPromptPosition = MutableStateFlow(Offset.Zero)
     val textPromptPosition: StateFlow<Offset> = _textPromptPosition.asStateFlow()
@@ -478,6 +488,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     companion object {
         private const val MAX_STORED_STROKES = 250
+        private const val TAG = "DrawingViewModel"
     }
 
     fun setTool(tool: DrawingTool) {
@@ -595,6 +606,14 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val tool = _selectedTool.value
         val canvasPos = toCanvasCoordinate(screenPosition)
 
+        // Handle long press detection
+        pointerDownCanvasPos = canvasPos
+        longPressJob?.cancel()
+        longPressJob = viewModelScope.launch {
+            delay(500) // 500ms for long press
+            _showQuickMenu.value = true
+        }
+
         // If lasso is active and we tap, check if we are dragging an existing selection
         if (tool == DrawingTool.LASSO && _selectedStrokes.value.isNotEmpty()) {
             _activeStrokes.value = _activeStrokes.value + (pointerId to DrawnStroke(
@@ -659,6 +678,15 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val currentStroke = _activeStrokes.value[pointerId] ?: return
         val canvasPos = toCanvasCoordinate(screenPosition)
         
+        // Cancel long press if moved significantly
+        pointerDownCanvasPos?.let { downPos ->
+            val dist = kotlin.math.hypot(canvasPos.x - downPos.x, canvasPos.y - downPos.y)
+            if (dist > 10f) {
+                longPressJob?.cancel()
+                pointerDownCanvasPos = null
+            }
+        }
+        
         // Handle Lasso Dragging
         if (currentStroke.id == -1L && currentStroke.tool == DrawingTool.LASSO) {
             val startPos = currentStroke.points.first()
@@ -689,7 +717,9 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     }
 
     fun onPointerUp(pointerId: Long) {
-
+        longPressJob?.cancel()
+        pointerDownCanvasPos = null
+        
         val stroke = _activeStrokes.value[pointerId] ?: return
         _activeStrokes.value = _activeStrokes.value - pointerId
 
@@ -834,13 +864,25 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     }
 
     /**
-     * Triggers Gemini AI Drawing-to-Animation recognition via ADC Backend Client with local fallback.
+     * Triggers local ML Kit Image Labeler to detect what the user drew and sets the animation scene.
      */
     fun triggerDrawingAnimation(context: Context, canvasBitmap: Bitmap, allowCloudAi: Boolean) {
-        val strokes = _layers.value.flatMap { layer -> 
+        val selectedIds = _selectedStrokes.value
+        val currentLassoTransform = _lassoTransform.value
+
+        var strokes = _layers.value.flatMap { layer -> 
             val frame = layer.frames.getOrNull(_currentFrameIndex.value)
             frame?.strokes ?: emptyList()
         }
+
+        // If user has a selection, only animate the selected strokes, and apply their dragged offset
+        if (selectedIds.isNotEmpty()) {
+            strokes = strokes.filter { it.id in selectedIds }.map { stroke ->
+                val shiftedPoints = stroke.points.map { Offset(it.x + currentLassoTransform.x, it.y + currentLassoTransform.y) }
+                stroke.copy(points = shiftedPoints)
+            }
+        }
+
         if (strokes.isEmpty() && _backgroundImagePath.value == null) return
 
         viewModelScope.launch {
@@ -849,22 +891,38 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             currentGeminiInteractionId = UUID.randomUUID().toString()
             soundManager?.playChimeTwinkle()
 
-            val sceneResult = if (allowCloudAi) {
-                AdcBackendClient.analyzeDrawing(context, canvasBitmap, currentGeminiInteractionId)
-            } else null
+            var sceneType = AnimationSceneType.ABSTRACT_FLOW
+            var subjectName = "Your drawing"
+
+            try {
+                val image = InputImage.fromBitmap(canvasBitmap, 0)
+                val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
+                val labels = labeler.process(image).await()
+
+                if (labels.isNotEmpty()) {
+                    val topLabel = labels.first().text
+                    subjectName = topLabel
+                    Log.d(TAG, "ML Kit detected: $topLabel (Confidence: ${labels.first().confidence})")
+
+                    // Simple mapping based on labels
+                    val lowerLabel = topLabel.lowercase()
+                    sceneType = when {
+                        lowerLabel.contains("water") || lowerLabel.contains("fish") || lowerLabel.contains("marine") || lowerLabel.contains("ocean") || lowerLabel.contains("sea") || lowerLabel.contains("dolphin") -> AnimationSceneType.OCEAN_LEAP
+                        lowerLabel.contains("sky") || lowerLabel.contains("bird") || lowerLabel.contains("fly") || lowerLabel.contains("cloud") || lowerLabel.contains("airplane") -> AnimationSceneType.SKY_FLIGHT
+                        lowerLabel.contains("space") || lowerLabel.contains("star") || lowerLabel.contains("moon") || lowerLabel.contains("planet") || lowerLabel.contains("rocket") -> AnimationSceneType.SPACE_LAUNCH
+                        lowerLabel.contains("animal") || lowerLabel.contains("tree") || lowerLabel.contains("plant") || lowerLabel.contains("grass") || lowerLabel.contains("land") || lowerLabel.contains("cat") || lowerLabel.contains("dog") -> AnimationSceneType.LAND_SAFARI
+                        else -> AnimationSceneType.ABSTRACT_FLOW
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "ML Kit image labeling failed", e)
+                _animationStatus.value = "Image analysis failed. Showing a local animation preview."
+            }
 
             _isGeminiLoading.value = false
-            if (sceneResult == null) {
-                _animationStatus.value = if (allowCloudAi) {
-                    "Cloud analysis could not connect. Showing a local animation preview."
-                } else {
-                    "Cloud animation is off. Enable it in Settings to analyze this drawing."
-                }
-            }
-            val activeScene = sceneResult ?: AnimationSceneResult(AnimationSceneType.ABSTRACT_FLOW, "Your drawing")
-            _animationSubject.value = sceneResult?.subjectName ?: "Your drawing"
+            _animationSubject.value = subjectName
             _showGeminiDialog.value = true
-            _activeAnimationScene.value = activeScene.sceneType
+            _activeAnimationScene.value = sceneType
 
             var minX = Float.POSITIVE_INFINITY
             var minY = Float.POSITIVE_INFINITY
@@ -971,7 +1029,13 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         _generatedVideo.value = null
     }
 
+    fun closeQuickMenu() {
+        _showQuickMenu.value = false
+    }
+
     fun onPointerCancel(pointerId: Long) {
+        longPressJob?.cancel()
+        pointerDownCanvasPos = null
         _activeStrokes.value = _activeStrokes.value - pointerId
     }
 

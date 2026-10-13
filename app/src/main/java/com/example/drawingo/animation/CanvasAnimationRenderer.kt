@@ -304,8 +304,9 @@ object CanvasAnimationRenderer {
         val bounce = kotlin.math.abs(sin(phase * 2f)).toFloat()
         val posX: Float
         val posY: Float
-        var scaleX = baseScale
-        var scaleY = baseScale
+        val scaleX: Float
+        val scaleY: Float
+        val rotationDegrees: Float
 
         when (sceneType) {
             AnimationSceneType.OCEAN_LEAP -> {
@@ -314,36 +315,49 @@ object CanvasAnimationRenderer {
                 val squash = bounce * 0.06f
                 scaleX = baseScale * (1f + squash)
                 scaleY = baseScale * (1f - squash)
+                rotationDegrees = drift * 15f // Slight wobble
             }
             AnimationSceneType.SKY_FLIGHT -> {
                 posX = w * 0.5f + drift * w * 0.18f
                 posY = h * 0.37f + sin(phase * 2f).toFloat() * h * 0.07f
+                rotationDegrees = drift * -10f // Aerodynamic tilt
+                scaleX = if (drift < 0) -baseScale else baseScale // Flip horizontally based on direction
+                scaleY = baseScale
             }
             AnimationSceneType.SPACE_LAUNCH -> {
                 posX = w * 0.5f + drift * w * 0.12f
-                posY = h * 0.54f - (0.5f + 0.5f * sin(phase - PI.toFloat() / 2f)) * h * 0.12f
-                val pulse = sin(phase).toFloat() * 0.035f
-                scaleX = baseScale * (1f + pulse)
-                scaleY = baseScale * (1f + pulse)
+                posY = h * 0.54f - progress * h * 0.5f // Launch upwards over time
+                
+                val depthPhase = sin(phase) // Value between -1 and 1
+                val depthScale = 1f + depthPhase * 0.5f // Value between 0.5 and 1.5
+                scaleX = baseScale * depthScale
+                scaleY = baseScale * depthScale
+                
+                rotationDegrees = progress * 360f * 2f // Spin twice per cycle
             }
             AnimationSceneType.LAND_SAFARI -> {
                 posX = w * 0.5f + drift * w * 0.12f
-                posY = h * 0.58f - bounce * h * 0.055f
-                val squash = bounce * 0.1f
+                posY = h * 0.58f - bounce * h * 0.15f // Higher bounce
+                val squash = bounce * 0.2f // More squash on landing
                 scaleX = baseScale * (1f + squash)
                 scaleY = baseScale * (1f - squash)
+                rotationDegrees = bounce * 20f * (if (drift > 0) 1 else -1) // Tilt during jump
             }
             AnimationSceneType.ABSTRACT_FLOW -> {
-                posX = w * 0.5f + cos(phase).toFloat() * w * 0.1f
-                posY = h * 0.5f + sin(phase).toFloat() * h * 0.08f
-                val pulse = sin(timeMs * 0.002f).toFloat() * 0.035f
-                scaleX = baseScale * (1f + pulse)
-                scaleY = baseScale * (1f + pulse)
+                posX = w * 0.5f + cos(phase * 1.5f) * w * 0.2f
+                posY = h * 0.5f + sin(phase * 2f).toFloat() * h * 0.15f
+                
+                val flipPhase = cos(phase * 3f)
+                scaleX = baseScale * flipPhase // Flips in 3D effect
+                scaleY = baseScale * (1f + sin(timeMs * 0.002f).toFloat() * 0.05f)
+                
+                rotationDegrees = progress * 360f // Continuous slow rotation
             }
         }
 
         drawScope.withTransform({
             translate(posX, posY)
+            rotate(rotationDegrees, pivot = Offset.Zero)
             scale(scaleX, scaleY, pivot = Offset.Zero)
             translate(-drawnCenterX, -drawnCenterY)
         }) {
