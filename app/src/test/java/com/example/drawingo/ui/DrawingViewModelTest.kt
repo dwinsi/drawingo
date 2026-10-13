@@ -15,16 +15,38 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+import com.example.drawingo.data.DrawingDao
+import com.example.drawingo.data.DrawingProject
+import com.example.drawingo.data.LayerEntity
+import com.example.drawingo.data.StrokeEntity
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class DrawingViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var viewModel: DrawingViewModel
 
+    private val fakeDao = object : DrawingDao {
+        override fun getAllProjects(): Flow<List<DrawingProject>> = flowOf(emptyList())
+        override suspend fun getProjectById(id: Long): DrawingProject? = null
+        override suspend fun insertProject(project: DrawingProject): Long = 1L
+        override suspend fun updateProject(project: DrawingProject) {}
+        override suspend fun deleteProject(id: Long) {}
+        override suspend fun getLayersForProject(projectId: Long): List<LayerEntity> = emptyList()
+        override suspend fun insertLayers(layers: List<LayerEntity>): List<Long> = emptyList()
+        override suspend fun deleteLayersForProject(projectId: Long) {}
+        override suspend fun getStrokesForProject(projectId: Long): List<StrokeEntity> = emptyList()
+        override suspend fun insertStrokes(strokes: List<StrokeEntity>) {}
+        override suspend fun deleteStrokesForProject(projectId: Long) {}
+    }
+
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        viewModel = DrawingViewModel()
+        viewModel = DrawingViewModel(fakeDao)
+        viewModel.createNewProject()
     }
 
     @After
@@ -41,25 +63,27 @@ class DrawingViewModelTest {
         viewModel.onPointerMove(pointerId = 1L, screenPosition = Offset(150f, 200f))
         viewModel.onPointerUp(pointerId = 1L)
 
-        assertEquals(1, viewModel.completedStrokes.value.size)
+        val strokeCount = { viewModel.layers.value.sumOf { layer -> layer.frames.sumOf { it.strokes.size } } }
+
+        assertEquals(1, strokeCount())
         assertTrue(viewModel.canUndo.value)
         assertFalse(viewModel.canRedo.value)
 
         viewModel.onPointerDown(pointerId = 2L, screenPosition = Offset(200f, 300f))
         viewModel.onPointerUp(pointerId = 2L)
 
-        assertEquals(2, viewModel.completedStrokes.value.size)
+        assertEquals(2, strokeCount())
 
         viewModel.undo()
-        assertEquals(1, viewModel.completedStrokes.value.size)
+        assertEquals(1, strokeCount())
         assertTrue(viewModel.canRedo.value)
 
         viewModel.redo()
-        assertEquals(2, viewModel.completedStrokes.value.size)
+        assertEquals(2, strokeCount())
         assertFalse(viewModel.canRedo.value)
 
         viewModel.clearCanvas()
-        assertEquals(0, viewModel.completedStrokes.value.size)
+        assertEquals(0, strokeCount())
     }
 
     @Test
@@ -77,4 +101,19 @@ class DrawingViewModelTest {
         viewModel.resetPanAndZoom()
         assertEquals(1.0f, viewModel.canvasScale.value, 0.01f)
     }
+
+    @Test
+    fun `quick magic preset can be updated to translate and random`() {
+        assertEquals(DrawingViewModel.QuickMagicPreset.NONE, viewModel.activePreset.value)
+
+        viewModel.setQuickMagicPreset(DrawingViewModel.QuickMagicPreset.TRANSLATE)
+        assertEquals(DrawingViewModel.QuickMagicPreset.TRANSLATE, viewModel.activePreset.value)
+
+        viewModel.setQuickMagicPreset(DrawingViewModel.QuickMagicPreset.RANDOM)
+        assertEquals(DrawingViewModel.QuickMagicPreset.RANDOM, viewModel.activePreset.value)
+
+        viewModel.createNewProject()
+        assertEquals(DrawingViewModel.QuickMagicPreset.NONE, viewModel.activePreset.value)
+    }
 }
+

@@ -175,6 +175,8 @@ fun AnimationBottomDock(
                 PresetButton("Spin", "🔄", activePreset == QuickMagicPreset.SPIN) { onSelectPreset(QuickMagicPreset.SPIN) }
                 PresetButton("Wander", "🧭", activePreset == QuickMagicPreset.WANDER) { onSelectPreset(QuickMagicPreset.WANDER) }
                 PresetButton("Flip", "🪞", activePreset == QuickMagicPreset.FLIP) { onSelectPreset(QuickMagicPreset.FLIP) }
+                PresetButton("Translate", "↔️", activePreset == QuickMagicPreset.TRANSLATE) { onSelectPreset(QuickMagicPreset.TRANSLATE) }
+                PresetButton("Random", "🎲", activePreset == QuickMagicPreset.RANDOM) { onSelectPreset(QuickMagicPreset.RANDOM) }
                 Spacer(modifier = Modifier.width(8.dp))
             }
         }

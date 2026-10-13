@@ -75,7 +75,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _onionSkinEnabled = MutableStateFlow(true)
     val onionSkinEnabled: StateFlow<Boolean> = _onionSkinEnabled.asStateFlow()
 
-    enum class QuickMagicPreset { NONE, WIGGLE, PULSE, FLOAT, SHIMMER, SPIN, WANDER, FLIP }
+    enum class QuickMagicPreset { NONE, WIGGLE, PULSE, FLOAT, SHIMMER, SPIN, WANDER, FLIP, TRANSLATE, RANDOM }
     
     private val _activePreset = MutableStateFlow(QuickMagicPreset.NONE)
     val activePreset: StateFlow<QuickMagicPreset> = _activePreset.asStateFlow()

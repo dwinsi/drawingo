@@ -422,7 +422,9 @@ fun DrawingCanvas(
                                 Triple(DrawingViewModel.QuickMagicPreset.SHIMMER, "✨", "Shimmer"),
                                 Triple(DrawingViewModel.QuickMagicPreset.SPIN, "🔄", "Spin"),
                                 Triple(DrawingViewModel.QuickMagicPreset.WANDER, "🧭", "Wander"),
-                                Triple(DrawingViewModel.QuickMagicPreset.FLIP, "🪞", "Flip")
+                                Triple(DrawingViewModel.QuickMagicPreset.FLIP, "🪞", "Flip"),
+                                Triple(DrawingViewModel.QuickMagicPreset.TRANSLATE, "↔️", "Translate"),
+                                Triple(DrawingViewModel.QuickMagicPreset.RANDOM, "🎲", "Random")
                             )
                             presets.forEach { (preset, icon, label) ->
                                 val isSelected = activePreset == preset
@@ -1239,8 +1241,9 @@ private fun DrawScope.drawAllCanvasContent(
         }
     }
     
-    // Calculate the unified global center of the target group
+    // Calculate the unified global center and bounds of the target group
     var groupCenter: Offset? = null
+    var groupBounds: androidx.compose.ui.geometry.Rect? = null
     if (globalTargetStrokes.isNotEmpty()) {
         var minX = Float.POSITIVE_INFINITY
         var minY = Float.POSITIVE_INFINITY
@@ -1261,6 +1264,7 @@ private fun DrawScope.drawAllCanvasContent(
         }
         if (minX != Float.POSITIVE_INFINITY) {
             groupCenter = Offset((minX + maxX) / 2f, (minY + maxY) / 2f)
+            groupBounds = androidx.compose.ui.geometry.Rect(minX, minY, maxX, maxY)
         }
     }
 
@@ -1295,7 +1299,7 @@ private fun DrawScope.drawAllCanvasContent(
             if (activePreset != DrawingViewModel.QuickMagicPreset.NONE) {
                 // Animate only if no strokes are selected, OR if this specific stroke is selected
                 if (selectedStrokeIds.isEmpty() || stroke.id in selectedStrokeIds) {
-                    val magicStroke = processMagicStroke(strokeWithAlpha, activePreset, timeMs, groupCenter)
+                    val magicStroke = processMagicStroke(strokeWithAlpha, activePreset, timeMs, groupCenter, groupBounds, size)
                     if (magicStroke != null) drawSingleStroke(magicStroke)
                 } else {
                     drawSingleStroke(strokeWithAlpha)

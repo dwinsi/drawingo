@@ -1,13 +1,24 @@
 package com.example.drawingo.animation
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import com.example.drawingo.model.DrawnStroke
 import com.example.drawingo.ui.DrawingViewModel.QuickMagicPreset
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.sin
 
 object QuickMagicRenderer {
     
-    fun processMagicStroke(stroke: DrawnStroke, preset: QuickMagicPreset, timeMs: Long, groupCenter: Offset? = null): DrawnStroke? {
+    fun processMagicStroke(
+        stroke: DrawnStroke,
+        preset: QuickMagicPreset,
+        timeMs: Long,
+        groupCenter: Offset? = null,
+        groupBounds: Rect? = null,
+        canvasSize: Size? = null
+    ): DrawnStroke? {
         if (stroke.points.size < 2) return stroke
 
         return when (preset) {
@@ -19,6 +30,8 @@ object QuickMagicRenderer {
             QuickMagicPreset.SPIN -> spinStroke(stroke, timeMs, groupCenter)
             QuickMagicPreset.WANDER -> wanderStroke(stroke, timeMs)
             QuickMagicPreset.FLIP -> flipStroke(stroke, timeMs, groupCenter)
+            QuickMagicPreset.TRANSLATE -> translateStroke(stroke, timeMs, groupBounds, canvasSize)
+            QuickMagicPreset.RANDOM -> randomRoamStroke(stroke, timeMs, groupCenter, groupBounds, canvasSize)
         }
     }
 
@@ -152,5 +165,134 @@ object QuickMagicRenderer {
         val pulsedWidth = stroke.strokeWidth * (0.8f + pulse * 0.4f)
 
         return stroke.copy(alpha = pulsedAlpha, strokeWidth = pulsedWidth)
+    }
+
+    private fun translateStroke(
+        stroke: DrawnStroke,
+        timeMs: Long,
+        groupBounds: Rect?,
+        canvasSize: Size?
+    ): DrawnStroke {
+        if (stroke.points.isEmpty()) return stroke
+
+        val cycleMs = 6000L
+        val t = (timeMs % cycleMs).toFloat() / cycleMs
+        val phase = t * 4f
+        val phaseIndex = phase.toInt().coerceIn(0, 3)
+        val progress = phase - phaseIndex
+
+        // Smooth bell-curve easing (zero velocity at start, peak, and end)
+        val factor = (1f - cos(progress * 2f * PI.toFloat())) / 2f
+
+        // Calculate maximum allowable distances so artwork stays comfortably on-screen
+        val pad = 30f
+        val (forwardDist, backwardDist, upDist, downDist) = if (canvasSize != null && groupBounds != null && canvasSize.width > 0 && canvasSize.height > 0) {
+            val maxForward = (canvasSize.width - groupBounds.right - pad).coerceAtLeast(0f)
+            val maxBackward = (groupBounds.left - pad).coerceAtLeast(0f)
+            val maxUp = (groupBounds.top - pad).coerceAtLeast(0f)
+            val maxDown = (canvasSize.height - groupBounds.bottom - pad).coerceAtLeast(0f)
+
+            listOf(
+                if (maxForward > 60f) kotlin.math.min(maxForward, 200f) else kotlin.math.max(maxForward, 60f),
+                if (maxBackward > 60f) kotlin.math.min(maxBackward, 200f) else kotlin.math.max(maxBackward, 60f),
+                if (maxUp > 60f) kotlin.math.min(maxUp, 180f) else kotlin.math.max(maxUp, 60f),
+                if (maxDown > 60f) kotlin.math.min(maxDown, 180f) else kotlin.math.max(maxDown, 60f)
+            )
+        } else {
+            listOf(180f, 180f, 160f, 160f)
+        }
+
+        val (dx, dy) = when (phaseIndex) {
+            0 -> Pair(factor * forwardDist, 0f)         // Forward (right: +X)
+            1 -> Pair(-factor * backwardDist, 0f)       // Backward (left: -X)
+            2 -> Pair(0f, -factor * upDist)             // Up (-Y)
+            3 -> Pair(0f, factor * downDist)            // Down (+Y)
+            else -> Pair(0f, 0f)
+        }
+
+        val translatedPoints = stroke.points.map { p ->
+            Offset(p.x + dx, p.y + dy)
+        }
+        return stroke.copy(points = translatedPoints)
+    }
+
+    private fun randomRoamStroke(
+        stroke: DrawnStroke,
+        timeMs: Long,
+        groupCenter: Offset?,
+        groupBounds: Rect?,
+        canvasSize: Size?
+    ): DrawnStroke {
+        if (stroke.points.isEmpty()) return stroke
+
+        val (cx, cy) = if (groupCenter != null) {
+            Pair(groupCenter.x, groupCenter.y)
+        } else {
+            var minX = Float.POSITIVE_INFINITY
+            var minY = Float.POSITIVE_INFINITY
+            var maxX = Float.NEGATIVE_INFINITY
+            var maxY = Float.NEGATIVE_INFINITY
+            stroke.points.forEach { p ->
+                if (p.x < minX) minX = p.x
+                if (p.x > maxX) maxX = p.x
+                if (p.y < minY) minY = p.y
+                if (p.y > maxY) maxY = p.y
+            }
+            Pair((minX + maxX) / 2f, (minY + maxY) / 2f)
+        }
+
+        val bounds = groupBounds ?: run {
+            var minX = Float.POSITIVE_INFINITY
+            var minY = Float.POSITIVE_INFINITY
+            var maxX = Float.NEGATIVE_INFINITY
+            var maxY = Float.NEGATIVE_INFINITY
+            stroke.points.forEach { p ->
+                if (p.x < minX) minX = p.x
+                if (p.x > maxX) maxX = p.x
+                if (p.y < minY) minY = p.y
+                if (p.y > maxY) maxY = p.y
+            }
+            Rect(minX, minY, maxX, maxY)
+        }
+
+        val canvasW = if (canvasSize != null && canvasSize.width > 100f) canvasSize.width else 1080f
+        val canvasH = if (canvasSize != null && canvasSize.height > 100f) canvasSize.height else 1920f
+
+        val pad = 40f
+        val halfW = (bounds.width / 2f).coerceAtLeast(20f)
+        val halfH = (bounds.height / 2f).coerceAtLeast(20f)
+
+        val minCenterX = halfW + pad
+        val maxCenterX = (canvasW - halfW - pad).coerceAtLeast(minCenterX)
+        val minCenterY = halfH + pad
+        val maxCenterY = (canvasH - halfH - pad).coerceAtLeast(minCenterY)
+
+        val midX = (minCenterX + maxCenterX) / 2f
+        val midY = (minCenterY + maxCenterY) / 2f
+        val spanX = (maxCenterX - minCenterX) / 2f
+        val spanY = (maxCenterY - minCenterY) / 2f
+
+        // Multi-frequency incommensurate sinusoids generate smooth, non-repeating organic wandering
+        val timeSec = (timeMs % 1000000L) / 1000f
+        val normX = 0.52f * sin(timeSec * 0.47f + 1.2f) +
+                    0.33f * sin(timeSec * 0.79f + 3.4f) +
+                    0.15f * sin(timeSec * 1.23f + 0.7f)
+        val normY = 0.52f * sin(timeSec * 0.41f + 2.6f) +
+                    0.33f * sin(timeSec * 0.67f + 0.9f) +
+                    0.15f * sin(timeSec * 1.09f + 4.1f)
+
+        val effSpanX = if (spanX > 60f) spanX else canvasW * 0.15f
+        val effSpanY = if (spanY > 60f) spanY else canvasH * 0.15f
+
+        val targetCenterX = (if (spanX > 60f) midX else cx) + normX * effSpanX
+        val targetCenterY = (if (spanY > 60f) midY else cy) + normY * effSpanY
+
+        val dx = targetCenterX - cx
+        val dy = targetCenterY - cy
+
+        val roamedPoints = stroke.points.map { p ->
+            Offset(p.x + dx, p.y + dy)
+        }
+        return stroke.copy(points = roamedPoints)
     }
 }
