@@ -84,10 +84,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _showTextPrompt = MutableStateFlow(false)
     val showTextPrompt: StateFlow<Boolean> = _showTextPrompt.asStateFlow()
 
-    private val _showQuickMenu = MutableStateFlow(false)
-    val showQuickMenu: StateFlow<Boolean> = _showQuickMenu.asStateFlow()
-
-    private var longPressJob: Job? = null
     private var pointerDownCanvasPos: Offset? = null
 
     private val _textPromptPosition = MutableStateFlow(Offset.Zero)
@@ -236,7 +232,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _selectedStrokeWidth = MutableStateFlow(20f)
     val selectedStrokeWidth: StateFlow<Float> = _selectedStrokeWidth.asStateFlow()
 
-    private val _selectedEraserWidth = MutableStateFlow(32f)
+    private val _selectedEraserWidth = MutableStateFlow(120f)
     val selectedEraserWidth: StateFlow<Float> = _selectedEraserWidth.asStateFlow()
 
     private val _selectedPaperStyle = MutableStateFlow(com.example.drawingo.model.CanvasPaperStyle.PURE_WHITE)
@@ -606,14 +602,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val tool = _selectedTool.value
         val canvasPos = toCanvasCoordinate(screenPosition)
 
-        // Handle long press detection
-        pointerDownCanvasPos = canvasPos
-        longPressJob?.cancel()
-        longPressJob = viewModelScope.launch {
-            delay(500) // 500ms for long press
-            _showQuickMenu.value = true
-        }
-
         // If lasso is active and we tap, check if we are dragging an existing selection
         if (tool == DrawingTool.LASSO && _selectedStrokes.value.isNotEmpty()) {
             _activeStrokes.value = _activeStrokes.value + (pointerId to DrawnStroke(
@@ -640,7 +628,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val strokeWidth = when (tool) {
             DrawingTool.PEN -> _selectedStrokeWidth.value
             DrawingTool.BRUSH -> _selectedStrokeWidth.value * 1.8f
-            DrawingTool.ERASER -> _selectedEraserWidth.value
+            DrawingTool.ERASER -> 120f // Fixed single biggest size
             DrawingTool.LASSO -> 4f
             DrawingTool.WATERCOLOR -> _selectedStrokeWidth.value * 2.2f
             DrawingTool.CRAYON -> _selectedStrokeWidth.value * 1.25f
@@ -650,7 +638,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             DrawingTool.PEN -> 1.0f
             DrawingTool.BRUSH -> 0.85f
             DrawingTool.WATERCOLOR -> 0.68f
-            DrawingTool.CRAYON -> 0.95f
+            DrawingTool.CRAYON -> 1.0f
             DrawingTool.ERASER, DrawingTool.LASSO, DrawingTool.TEXT -> 1.0f
         }
         // If text tool, trigger dialog and don't start a line
@@ -677,15 +665,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
         val currentStroke = _activeStrokes.value[pointerId] ?: return
         val canvasPos = toCanvasCoordinate(screenPosition)
-        
-        // Cancel long press if moved significantly
-        pointerDownCanvasPos?.let { downPos ->
-            val dist = kotlin.math.hypot(canvasPos.x - downPos.x, canvasPos.y - downPos.y)
-            if (dist > 10f) {
-                longPressJob?.cancel()
-                pointerDownCanvasPos = null
-            }
-        }
         
         // Handle Lasso Dragging
         if (currentStroke.id == -1L && currentStroke.tool == DrawingTool.LASSO) {
@@ -717,7 +696,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     }
 
     fun onPointerUp(pointerId: Long) {
-        longPressJob?.cancel()
         pointerDownCanvasPos = null
         
         val stroke = _activeStrokes.value[pointerId] ?: return
@@ -1030,11 +1008,10 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     }
 
     fun closeQuickMenu() {
-        _showQuickMenu.value = false
+        // Removed
     }
 
     fun onPointerCancel(pointerId: Long) {
-        longPressJob?.cancel()
         pointerDownCanvasPos = null
         _activeStrokes.value = _activeStrokes.value - pointerId
     }

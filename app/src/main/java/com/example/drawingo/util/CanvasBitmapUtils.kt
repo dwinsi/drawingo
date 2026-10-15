@@ -74,7 +74,7 @@ object CanvasBitmapUtils {
             if (stroke.points.size < 2) continue
 
             val color = stroke.color.toArgb()
-            val baseWidth = (stroke.strokeWidth * scale).coerceIn(4f, 80f)
+            val baseWidth = (stroke.strokeWidth * scale).coerceIn(4f, 200f)
             paint.color = color
             paint.alpha = (stroke.alpha * 255).toInt().coerceIn(0, 255)
 
@@ -174,10 +174,7 @@ object CanvasBitmapUtils {
                     drawWatercolorBlooms(canvas, stroke, offsetX, offsetY, scale, color)
                 }
                 DrawingTool.CRAYON -> {
-                    paint.alpha = (stroke.alpha * 0.76f * 255).toInt().coerceIn(0, 255)
-                    paint.strokeWidth = baseWidth
-                    canvas.drawPath(path, paint)
-                    drawCrayonTexture(canvas, stroke, offsetX, offsetY, scale, color)
+                    CrayonRenderer.drawCrayonStroke(canvas, stroke, scale, offsetX, offsetY)
                 }
                 else -> canvas.drawPath(path, paint)
             }
@@ -208,28 +205,7 @@ object CanvasBitmapUtils {
         }
     }
 
-    private fun drawCrayonTexture(
-        canvas: Canvas, stroke: DrawnStroke, offsetX: Float, offsetY: Float,
-        scale: Float, color: Int
-    ) {
-        val stride = (stroke.points.size / 72).coerceAtLeast(1)
-        val fleckPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-        stroke.points.indices.step(stride).forEach { index ->
-            val point = stroke.points[index]
-            val seed = stroke.id xor (index.toLong() * 0x45D9F3BL)
-            val side = if ((seed and 1L) == 0L) -1f else 1f
-            val across = side * stroke.strokeWidth * scale * (0.2f + ((seed ushr 4 and 7).toFloat() * 0.045f))
-            val radius = (stroke.strokeWidth * scale * 0.055f).coerceAtLeast(0.8f)
-            val x = point.x * scale + offsetX
-            val y = point.y * scale + offsetY
-            fleckPaint.color = 0xA8FFFFFF.toInt()
-            canvas.drawCircle(x + across, y + side * radius, radius, fleckPaint)
-            if (index % 3 == 0) {
-                fleckPaint.color = color.withAlpha((stroke.alpha * 0.82f * 255).toInt().coerceIn(0, 255))
-                canvas.drawCircle(x - across * 0.55f, y - side * radius, radius * 0.85f, fleckPaint)
-            }
-        }
-    }
+
 
     private fun Int.withAlpha(alpha: Int): Int = (this and 0x00FFFFFF) or (alpha shl 24)
 }

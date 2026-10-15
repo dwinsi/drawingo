@@ -3,10 +3,21 @@ package com.example.drawingo.ui
 import android.net.Uri
 import android.widget.MediaController
 import android.widget.VideoView
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableFloatStateOf
+import kotlin.math.roundToInt
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -110,6 +121,7 @@ import com.example.drawingo.model.DrawingTool
 import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
 import com.example.drawingo.util.CanvasBitmapUtils
+import com.example.drawingo.util.CrayonRenderer
 
 val ToolDockBackgroundColor = com.example.drawingo.theme.MidnightIndigo
 val DockIconBackground = com.example.drawingo.theme.IndigoGloss
@@ -126,7 +138,6 @@ fun DrawingCanvas(
     val selectedTool by viewModel.selectedTool.collectAsState()
     val selectedColor by viewModel.selectedColor.collectAsState()
     val selectedStrokeWidth by viewModel.selectedStrokeWidth.collectAsState()
-    val selectedEraserWidth by viewModel.selectedEraserWidth.collectAsState()
     val selectedPaperStyle by viewModel.selectedPaperStyle.collectAsState()
     val symmetryMode by viewModel.symmetryMode.collectAsState()
     val canUndo by viewModel.canUndo.collectAsState()
@@ -162,8 +173,8 @@ fun DrawingCanvas(
     var showPaperStyleMenu by remember { mutableStateOf(false) }
     var showLayersMenu by remember { mutableStateOf(false) }
     var showAnimationDock by remember { mutableStateOf(false) }
+    var showMenus by remember { mutableStateOf(false) }
     val showTextPrompt by viewModel.showTextPrompt.collectAsState()
-    val showQuickMenu by viewModel.showQuickMenu.collectAsState()
     
     // Animation States
     val currentFrameIndex by viewModel.currentFrameIndex.collectAsState()
@@ -321,158 +332,89 @@ fun DrawingCanvas(
             }
         }
 
-        // Top Action Bar
-        TopKeepBar(
-            canUndo = canUndo,
-            canRedo = canRedo,
-            hasArtwork = layers.any { layer -> layer.frames.any { it.strokes.isNotEmpty() } },
-            isAnimationActive = isAnimationActive,
-            onUndo = { viewModel.undo() },
-            onRedo = { viewModel.redo() },
-            onClear = { viewModel.clearCanvas() },
-            onAnimateDrawingClick = {
-                showAnimationDock = !showAnimationDock
-            },
-            onStopAnimationClick = {
-                viewModel.stopAnimation()
-            },
-            onLayersClick = { showLayersMenu = true },
-            onPaperStyleClick = { showPaperStyleMenu = true },
-            onExportClick = { format -> 
-                val flatStrokes = layers.flatMap { layer -> layer.frames.getOrNull(currentFrameIndex)?.strokes ?: emptyList() }
-                val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(flatStrokes, viewModel.screenWidth.toInt(), viewModel.screenHeight.toInt(), backgroundImagePath = backgroundImagePath)
-                com.example.drawingo.util.ExportUtils.saveBitmapToGallery(context, bitmap, "Drawingo_${System.currentTimeMillis()}", format == "PNG")
-            },
-            onGalleryClick = onNavigateBack,
-            onSettingsClick = { showAppSettings = true },
-            onApiLogsClick = { showApiLogsPage = true },
-            selectedTool = selectedTool,
-            onToolClick = { viewModel.setTool(it) },
-            viewModel = viewModel,
+        AnimatedVisibility(
+            visible = showMenus,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .padding(12.dp)
                 .align(Alignment.TopCenter)
+        ) {
+            // Top Action Bar
+            TopKeepBar(
+                canUndo = canUndo,
+                canRedo = canRedo,
+                hasArtwork = layers.any { layer -> layer.frames.any { it.strokes.isNotEmpty() } },
+                isAnimationActive = isAnimationActive,
+                onUndo = { viewModel.undo() },
+                onRedo = { viewModel.redo() },
+                onClear = { viewModel.clearCanvas() },
+                onHideMenuClick = { showMenus = false },
+                onAnimateDrawingClick = {
+                    showAnimationDock = !showAnimationDock
+                },
+                onStopAnimationClick = {
+                    viewModel.stopAnimation()
+                },
+                onLayersClick = { showLayersMenu = true },
+                onPaperStyleClick = { showPaperStyleMenu = true },
+                onExportClick = { format -> 
+                    val flatStrokes = layers.flatMap { layer -> layer.frames.getOrNull(currentFrameIndex)?.strokes ?: emptyList() }
+                    val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(flatStrokes, viewModel.screenWidth.toInt(), viewModel.screenHeight.toInt(), backgroundImagePath = backgroundImagePath)
+                    com.example.drawingo.util.ExportUtils.saveBitmapToGallery(context, bitmap, "Drawingo_${System.currentTimeMillis()}", format == "PNG")
+                },
+                onGalleryClick = onNavigateBack,
+                onSettingsClick = { showAppSettings = true },
+                onApiLogsClick = { showApiLogsPage = true },
+                viewModel = viewModel,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        
+        FloatingColorPalette(
+            selectedColor = selectedColor,
+            onColorSelected = { viewModel.setColor(it) },
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 16.dp, top = 60.dp)
+        )
+        FloatingToolsPalette(
+            selectedTool = selectedTool,
+            selectedStrokeWidth = selectedStrokeWidth,
+            onToolClick = { viewModel.setTool(it) },
+            onWidthSelected = { viewModel.setStrokeWidth(it) },
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 16.dp, top = 60.dp)
+        )
+        FloatingEraserButton(
+            selectedTool = selectedTool,
+            onToggle = { 
+                if (selectedTool == DrawingTool.ERASER) {
+                    viewModel.setTool(DrawingTool.PEN) // Fallback when toggling off
+                } else {
+                    viewModel.setTool(DrawingTool.ERASER)
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 16.dp, top = 116.dp)
         )
 
-        if (showQuickMenu) {
-            Dialog(onDismissRequest = { viewModel.closeQuickMenu() }) {
-                Surface(
-                    modifier = Modifier.width(340.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    color = Color(0xFFFFFEFA),
-                    shadowElevation = 8.dp
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            "Tools & Animation",
-                            color = Color(0xFF343849),
-                            fontWeight = FontWeight.ExtraBold,
-                            style = MaterialTheme.typography.titleLarge
-                        )
-
-                        Text("Tools", fontWeight = FontWeight.Bold, color = Color(0xFF555866))
-                        val tools = listOf(
-                            Triple(DrawingTool.PEN, Icons.Rounded.Edit, "Pen"),
-                            Triple(DrawingTool.BRUSH, Icons.Rounded.Brush, "Brush"),
-                            Triple(DrawingTool.WATERCOLOR, Icons.Rounded.WaterDrop, "Water..."),
-                            Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
-                            Triple(DrawingTool.ERASER, Icons.Rounded.AutoFixHigh, "Eraser"),
-                            Triple(DrawingTool.LASSO, Icons.Rounded.Highlight, "Lasso"),
-                            Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text")
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            tools.forEach { (tool, icon, label) ->
-                                val isSelected = selectedTool == tool
-                                Column(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(if (isSelected) com.example.drawingo.theme.SoftIndigo else Color(0xFFF3F0F7))
-                                        .clickable { 
-                                            viewModel.setTool(tool)
-                                            viewModel.closeQuickMenu() 
-                                        }
-                                        .padding(12.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(icon, contentDescription = null, tint = if (isSelected) Color.White else Color(0xFF5A5D7A))
-                                    Text(label, color = if (isSelected) Color.White else Color(0xFF5A5D7A), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-
-                        Text("Quick Magic", fontWeight = FontWeight.Bold, color = Color(0xFF555866))
-                        Row(
-                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            val presets = listOf(
-                                Triple(DrawingViewModel.QuickMagicPreset.NONE, "🚫", "None"),
-                                Triple(DrawingViewModel.QuickMagicPreset.WIGGLE, "〰️", "Wiggle"),
-                                Triple(DrawingViewModel.QuickMagicPreset.PULSE, "💓", "Pulse"),
-                                Triple(DrawingViewModel.QuickMagicPreset.FLOAT, "☁️", "Float"),
-                                Triple(DrawingViewModel.QuickMagicPreset.SHIMMER, "✨", "Shimmer"),
-                                Triple(DrawingViewModel.QuickMagicPreset.SPIN, "🔄", "Spin"),
-                                Triple(DrawingViewModel.QuickMagicPreset.WANDER, "🧭", "Wander"),
-                                Triple(DrawingViewModel.QuickMagicPreset.FLIP, "🪞", "Flip"),
-                                Triple(DrawingViewModel.QuickMagicPreset.TRANSLATE, "↔️", "Translate"),
-                                Triple(DrawingViewModel.QuickMagicPreset.RANDOM, "🎲", "Random")
-                            )
-                            presets.forEach { (preset, icon, label) ->
-                                val isSelected = activePreset == preset
-                                Column(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(if (isSelected) com.example.drawingo.theme.SoftIndigo else Color(0xFFF3F0F7))
-                                        .clickable { 
-                                            viewModel.setQuickMagicPreset(preset)
-                                            viewModel.closeQuickMenu() 
-                                        }
-                                        .padding(12.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(icon, fontSize = 24.sp)
-                                    Text(label, color = if (isSelected) Color.White else Color(0xFF5A5D7A), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Button(
-                                onClick = { 
-                                    viewModel.closeQuickMenu()
-                                    showAnimationDock = !showAnimationDock 
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF3F0F7), contentColor = Color(0xFF343849))
-                            ) { Text("Animation Dock") }
-                            
-                            Button(
-                                onClick = { 
-                                    viewModel.closeQuickMenu()
-                                    showAnimationDock = !showAnimationDock
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = com.example.drawingo.theme.LuxGold, contentColor = com.example.drawingo.theme.ObsidianBlack)
-                            ) { 
-                                Icon(Icons.Rounded.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("AI Scene", fontWeight = FontWeight.Bold) 
-                            }
-                        }
-                    }
-                }
+        if (!showMenus) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(12.dp)
+            ) {
+                CompactAction(
+                    icon = Icons.Rounded.Menu,
+                    label = "Show menus",
+                    onClick = { showMenus = true }
+                )
             }
         }
 
@@ -538,45 +480,32 @@ fun DrawingCanvas(
             )
         }
 
-        if (showAnimationDock) {
-            AnimationBottomDock(
-                currentFrameIndex = currentFrameIndex,
-                frameCount = layers.maxOfOrNull { it.frames.size } ?: 1,
-                isPlaying = isPlayingLocalAnimation,
-                onionSkinEnabled = onionSkinEnabled,
-                activePreset = activePreset,
-                onFrameSelect = { viewModel.selectFrame(it) },
-                onAddFrame = { viewModel.addFrame() },
-                onDuplicateFrame = { viewModel.duplicateFrame() },
-                onDeleteFrame = { viewModel.deleteFrame(it) },
-                onTogglePlayback = { viewModel.toggleLocalPlayback() },
-                onToggleOnionSkin = { viewModel.toggleOnionSkin() },
-                onSelectPreset = { viewModel.setQuickMagicPreset(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .align(Alignment.BottomCenter)
-            )
-        } else if (!isAnimationActive) {
-            BottomDrawingoDock(
-                selectedTool = selectedTool,
-                selectedColor = selectedColor,
-                selectedStrokeWidth = if (selectedTool == DrawingTool.ERASER) selectedEraserWidth else selectedStrokeWidth,
-                onToolClick = { tool ->
-                    viewModel.setTool(tool)
-                },
-                onColorSelected = { color ->
-                    viewModel.setColor(color)
-                },
-                onWidthSelected = {
-                    if (selectedTool == DrawingTool.ERASER) viewModel.setEraserWidth(it)
-                    else viewModel.setStrokeWidth(it)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .align(Alignment.BottomCenter)
-            )
+        AnimatedVisibility(
+            visible = showMenus,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .align(Alignment.BottomCenter)
+        ) {
+            if (showAnimationDock) {
+                AnimationBottomDock(
+                    currentFrameIndex = currentFrameIndex,
+                    frameCount = layers.maxOfOrNull { it.frames.size } ?: 1,
+                    isPlaying = isPlayingLocalAnimation,
+                    onionSkinEnabled = onionSkinEnabled,
+                    activePreset = activePreset,
+                    onFrameSelect = { viewModel.selectFrame(it) },
+                    onAddFrame = { viewModel.addFrame() },
+                    onDuplicateFrame = { viewModel.duplicateFrame() },
+                    onDeleteFrame = { viewModel.deleteFrame(it) },
+                    onTogglePlayback = { viewModel.toggleLocalPlayback() },
+                    onToggleOnionSkin = { viewModel.toggleOnionSkin() },
+                    onSelectPreset = { viewModel.setQuickMagicPreset(it) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
 
         // Loading overlay while cloud drawing analysis runs.
@@ -694,6 +623,7 @@ fun TopKeepBar(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onClear: () -> Unit,
+    onHideMenuClick: () -> Unit,
     onAnimateDrawingClick: () -> Unit,
     onStopAnimationClick: () -> Unit,
     onLayersClick: () -> Unit,
@@ -702,8 +632,6 @@ fun TopKeepBar(
     onGalleryClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onApiLogsClick: () -> Unit,
-    selectedTool: DrawingTool,
-    onToolClick: (DrawingTool) -> Unit,
     viewModel: DrawingViewModel,
     modifier: Modifier = Modifier
 ) {
@@ -721,6 +649,7 @@ fun TopKeepBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            CompactAction(Icons.Rounded.Close, "Hide menus", size = 44.dp, onClick = onHideMenuClick)
             if (isAnimationActive) {
                 CompactAction(Icons.Rounded.ArrowBack, "Back to Drawing", size = 44.dp, onClick = onStopAnimationClick)
             } else {
@@ -740,13 +669,6 @@ fun TopKeepBar(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(1.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactAction(Icons.Rounded.Layers, "Layers", size = 40.dp, onClick = onLayersClick)
-            CompactAction(
-                icon = Icons.Rounded.Highlight,
-                label = "Lasso",
-                selected = selectedTool == DrawingTool.LASSO,
-                size = 40.dp,
-                onClick = { onToolClick(DrawingTool.LASSO) }
-            )
             CompactAction(Icons.Rounded.Undo, "Undo", enabled = canUndo, size = 40.dp, onClick = onUndo)
             CompactAction(Icons.Rounded.Redo, "Redo", enabled = canRedo, size = 40.dp, onClick = onRedo)
             CompactAction(
@@ -874,17 +796,180 @@ private fun CompactAction(
 }
 
 @Composable
-fun BottomDrawingoDock(
+fun FloatingToolsPalette(
     selectedTool: DrawingTool,
-    selectedColor: Color,
     selectedStrokeWidth: Float,
     onToolClick: (DrawingTool) -> Unit,
-    onColorSelected: (Color) -> Unit,
     onWidthSelected: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var drawerExpanded by remember { mutableStateOf(false) }
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    var expanded by remember { mutableStateOf(false) }
     var sizesExpanded by remember { mutableStateOf(false) }
+
+    val tools = listOf(
+        Triple(DrawingTool.PEN, Icons.Rounded.Draw, "Pen"),
+        Triple(DrawingTool.BRUSH, Icons.Rounded.Brush, "Brush"),
+        Triple(DrawingTool.WATERCOLOR, Icons.Rounded.WaterDrop, "Watercolor"),
+        Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
+        Triple(DrawingTool.LASSO, Icons.Rounded.Highlight, "Lasso"),
+        Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text")
+    )
+    val currentIcon = tools.find { it.first == selectedTool }?.second ?: Icons.Rounded.Brush
+    val isToolActive = selectedTool != DrawingTool.ERASER
+
+    Box(
+        modifier = modifier
+            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+    ) {
+        Column(horizontalAlignment = Alignment.End) {
+            // Floating tools button
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .shadow(4.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(ToolDockBackgroundColor)
+                    .border(
+                        1.5.dp,
+                        if (isToolActive) com.example.drawingo.theme.SoftIndigo else Color(0xFF4A4E68),
+                        CircleShape
+                    )
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            var isDragging = false
+                            val pointerId = down.id
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                if (change.changedToUp()) {
+                                    if (!isDragging) {
+                                        expanded = !expanded
+                                    }
+                                    break
+                                }
+                                if (change.isConsumed) break
+                                val dx = change.position.x - change.previousPosition.x
+                                val dy = change.position.y - change.previousPosition.y
+                                if (!isDragging && kotlin.math.hypot(change.position.x - down.position.x, change.position.y - down.position.y) > 8f) {
+                                    isDragging = true
+                                }
+                                if (isDragging) {
+                                    change.consume()
+                                    offsetX += dx
+                                    offsetY += dy
+                                }
+                            }
+                        }
+                    }
+                    .semantics { contentDescription = "Drawing tools" },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = currentIcon,
+                    contentDescription = "Tools",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            // Expanded tools dock
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(ToolDockBackgroundColor)
+                        .border(1.dp, com.example.drawingo.theme.SoftIndigo, RoundedCornerShape(20.dp))
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        tools.forEach { (tool, icon, label) ->
+                            val isSelected = selectedTool == tool
+                            Column(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(if (isSelected) ActiveToolHighlight else DockIconBackground)
+                                    .clickable { onToolClick(tool); expanded = false }
+                                    .semantics { contentDescription = "$label tool" }
+                                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    icon,
+                                    contentDescription = null,
+                                    tint = if (isSelected) com.example.drawingo.theme.ObsidianBlack else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    label,
+                                    color = if (isSelected) com.example.drawingo.theme.ObsidianBlack else Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Box {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(DockIconBackground)
+                                .clickable { sizesExpanded = !sizesExpanded }
+                                .padding(horizontal = 14.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Rounded.Straighten, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Text("Brush Size", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 11.sp)
+                        }
+                        DropdownMenu(
+                            expanded = sizesExpanded,
+                            onDismissRequest = { sizesExpanded = false },
+                            modifier = Modifier.background(Color(0xFFFFFEFA))
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text(
+                                    "Brush size",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF343849),
+                                    fontSize = 12.sp
+                                )
+                                StrokeSizeRow(selectedStrokeWidth) { width -> 
+                                    onWidthSelected(width)
+                                    sizesExpanded = false 
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FloatingColorPalette(
+    selectedColor: Color,
+    onColorSelected: (Color) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    var expanded by remember { mutableStateOf(false) }
     var showColorMixer by remember { mutableStateOf(false) }
 
     if (showColorMixer) {
@@ -898,97 +983,172 @@ fun BottomDrawingoDock(
         )
     }
 
-    Column(
+    Box(
         modifier = modifier
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-            .border(1.dp, com.example.drawingo.theme.SoftIndigo, RoundedCornerShape(26.dp))
-            .clip(RoundedCornerShape(26.dp))
-            .background(ToolDockBackgroundColor)
-            .padding(horizontal = 8.dp, vertical = 6.dp)
+            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
     ) {
-        DrawerHandle(drawerExpanded) { drawerExpanded = it }
-        PrimaryColorRow(selectedColor, onColorSelected)
-
-        AnimatedVisibility(
-            visible = drawerExpanded,
-            enter = expandVertically(expandFrom = Alignment.Bottom),
-            exit = shrinkVertically(shrinkTowards = Alignment.Bottom)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                DrawingoPalette.grid.drop(1).forEachIndexed { index, colors ->
-                    ColorSwatchRow(colors, selectedColor, onColorSelected, firstColorIndex = index * 8 + 8)
-                }
-
-                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(DockIconBackground)
-                            .clickable { showColorMixer = true }
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Rounded.Colorize, contentDescription = null, tint = Color.White)
-                        Text("Mix Custom Color", fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                        val tools = listOf(
-                            Triple(DrawingTool.PEN, Icons.Rounded.Edit, "Pen"),
-                            Triple(DrawingTool.BRUSH, Icons.Rounded.Brush, "Brush"),
-                            Triple(DrawingTool.WATERCOLOR, Icons.Rounded.WaterDrop, "Watercolor"),
-                            Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
-                            Triple(DrawingTool.ERASER, Icons.Rounded.AutoFixHigh, "Eraser"),
-                            Triple(DrawingTool.LASSO, Icons.Rounded.Highlight, "Wand"),
-                            Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text")
-                        )
-                        tools.forEach { (tool, icon, label) ->
-                            val isSelected = selectedTool == tool
-                            Column(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(if (isSelected) ActiveToolHighlight else DockIconBackground)
-                                    .clickable { onToolClick(tool) }
-                                    .semantics { contentDescription = "$label tool" }
-                                    .padding(horizontal = 7.dp, vertical = 6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(icon, contentDescription = null, tint = if (isSelected) com.example.drawingo.theme.ObsidianBlack else Color.White)
-                                Text(label, color = if (isSelected) com.example.drawingo.theme.ObsidianBlack else Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        Box {
-                            CompactAction(
-                                Icons.Rounded.Straighten,
-                                if (selectedTool == DrawingTool.ERASER) "Choose eraser size" else "Choose brush size",
-                                size = 40.dp
-                            ) { sizesExpanded = true }
-                            DropdownMenu(
-                                expanded = sizesExpanded,
-                                onDismissRequest = { sizesExpanded = false },
-                                modifier = Modifier.background(Color(0xFFFFFEFA))
-                            ) {
-                                Column(modifier = Modifier.padding(8.dp)) {
-                                    Text(
-                                        if (selectedTool == DrawingTool.ERASER) "Eraser size" else "Brush size",
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFF343849)
-                                    )
-                                    StrokeSizeRow(selectedStrokeWidth) { width -> onWidthSelected(width); sizesExpanded = false }
+        Column(horizontalAlignment = Alignment.Start) {
+            // Floating color palette button
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .shadow(4.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(ToolDockBackgroundColor)
+                    .border(1.5.dp, com.example.drawingo.theme.SoftIndigo, CircleShape)
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            var isDragging = false
+                            val pointerId = down.id
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                if (change.changedToUp()) {
+                                    if (!isDragging) {
+                                        expanded = !expanded
+                                    }
+                                    break
+                                }
+                                if (change.isConsumed) break
+                                val dx = change.position.x - change.previousPosition.x
+                                val dy = change.position.y - change.previousPosition.y
+                                if (!isDragging && kotlin.math.hypot(change.position.x - down.position.x, change.position.y - down.position.y) > 8f) {
+                                    isDragging = true
+                                }
+                                if (isDragging) {
+                                    change.consume()
+                                    offsetX += dx
+                                    offsetY += dy
                                 }
                             }
                         }
+                    }
+                    .semantics { contentDescription = "Color palette" },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Palette,
+                    contentDescription = "Color palette",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+                // Selected color indicator badge
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(2.dp)
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(selectedColor)
+                        .border(1.dp, Color.White.copy(alpha = 0.9f), CircleShape)
+                )
+            }
+
+            // Expanded color palette
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .width(280.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(ToolDockBackgroundColor)
+                        .border(1.dp, com.example.drawingo.theme.SoftIndigo, RoundedCornerShape(20.dp))
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    PrimaryColorRow(selectedColor, onColorSelected)
+                    DrawingoPalette.grid.drop(1).forEachIndexed { index, colors ->
+                        ColorSwatchRow(colors, selectedColor, onColorSelected, firstColorIndex = index * 8 + 8)
+                    }
+                    
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(DockIconBackground)
+                            .clickable { showColorMixer = true }
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Rounded.Colorize, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Text("Mix Custom Color", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 11.sp)
+                    }
                 }
+            }
         }
     }
 }
+
+@Composable
+fun FloatingEraserButton(
+    selectedTool: DrawingTool,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    val isEraser = selectedTool == DrawingTool.ERASER
+
+    Box(
+        modifier = modifier
+            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .shadow(4.dp, CircleShape)
+                .clip(CircleShape)
+                .background(if (isEraser) ActiveToolHighlight else ToolDockBackgroundColor)
+                .border(
+                    1.5.dp,
+                    if (isEraser) com.example.drawingo.theme.ObsidianBlack else com.example.drawingo.theme.SoftIndigo,
+                    CircleShape
+                )
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var isDragging = false
+                        val pointerId = down.id
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                            if (change.changedToUp()) {
+                                if (!isDragging) {
+                                    onToggle()
+                                }
+                                break
+                            }
+                            if (change.isConsumed) break
+                            val dx = change.position.x - change.previousPosition.x
+                            val dy = change.position.y - change.previousPosition.y
+                            if (!isDragging && kotlin.math.hypot(change.position.x - down.position.x, change.position.y - down.position.y) > 8f) {
+                                isDragging = true
+                            }
+                            if (isDragging) {
+                                change.consume()
+                                offsetX += dx
+                                offsetY += dy
+                            }
+                        }
+                    }
+                }
+                .semantics { contentDescription = "Eraser tool" },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.AutoFixHigh,
+                contentDescription = "Eraser",
+                tint = if (isEraser) com.example.drawingo.theme.ObsidianBlack else Color.White,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
 }
 
 @Composable
@@ -1419,14 +1579,12 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
             drawWatercolorBlooms(s)
         }
         DrawingTool.CRAYON -> {
-            // A broken core plus high-contrast paper flecks exposes the canvas through wax.
-            drawPath(path, s.color.copy(alpha = s.alpha * 0.76f), style = Stroke(s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawCrayonTexture(s)
+            CrayonRenderer.drawCrayonStroke(drawContext.canvas.nativeCanvas, s)
         }
         DrawingTool.ERASER -> {
             drawPath(
                 path = path,
-                color = Color.Black,
+                color = Color.White,
                 style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
                 blendMode = BlendMode.Clear
             )
@@ -1500,74 +1658,4 @@ private fun DrawScope.drawWatercolorBlooms(stroke: DrawnStroke) {
     }
 }
 
-private fun DrawScope.drawCrayonTexture(stroke: DrawnStroke) {
-    val stride = (stroke.points.size / 72).coerceAtLeast(1)
-    stroke.points.indices.step(stride).forEach { index ->
-        val point = stroke.points[index]
-        val seed = stroke.id xor (index.toLong() * 0x45D9F3BL)
-        val side = if ((seed and 1L) == 0L) -1f else 1f
-        val across = side * stroke.strokeWidth * (0.2f + ((seed ushr 4 and 7).toFloat() * 0.045f))
-        
-        // Randomize base sizes
-        val randRadiusMult = 0.4f + ((seed ushr 7 and 15).toFloat() / 15f) * 1.6f
-        val randLengthMult = 1.5f + ((seed ushr 11 and 15).toFloat() / 15f) * 4.5f
-        
-        val baseRadius = (stroke.strokeWidth * 0.055f).coerceAtLeast(0.8f)
-        val radius = baseRadius * randRadiusMult
-        
-        val drawLines = (seed and 3L) == 0L
 
-        if (drawLines && index > 0) {
-            val prevPoint = stroke.points[index - 1]
-            val dirX = point.x - prevPoint.x
-            val dirY = point.y - prevPoint.y
-            val len = kotlin.math.hypot(dirX.toDouble(), dirY.toDouble()).toFloat()
-            val dx = if (len > 0) dirX / len else 1f
-            val dy = if (len > 0) dirY / len else 0f
-            val lineLength = radius * randLengthMult
-            
-            drawLine(
-                color = Color.White.copy(alpha = 0.58f),
-                start = Offset(point.x + across, point.y + side * radius),
-                end = Offset(point.x + across + dx * lineLength, point.y + side * radius + dy * lineLength),
-                strokeWidth = radius,
-                cap = StrokeCap.Round
-            )
-        } else {
-            drawCircle(
-                color = Color.White.copy(alpha = 0.68f),
-                radius = radius,
-                center = Offset(point.x + across, point.y + side * radius)
-            )
-        }
-        
-        if (index % 3 == 0) {
-            val randColorRadiusMult = 0.4f + ((seed ushr 15 and 15).toFloat() / 15f) * 1.6f
-            val colorRadius = baseRadius * randColorRadiusMult * 0.85f
-            
-            if (drawLines && index < stroke.points.size - 1) {
-                val nextPoint = stroke.points[index + 1]
-                val dirX = nextPoint.x - point.x
-                val dirY = nextPoint.y - point.y
-                val len = kotlin.math.hypot(dirX.toDouble(), dirY.toDouble()).toFloat()
-                val dx = if (len > 0) dirX / len else 1f
-                val dy = if (len > 0) dirY / len else 0f
-                val lineLength = colorRadius * randLengthMult
-
-                drawLine(
-                    color = stroke.color.copy(alpha = stroke.alpha * 0.72f),
-                    start = Offset(point.x - across * 0.55f, point.y - side * colorRadius),
-                    end = Offset(point.x - across * 0.55f + dx * lineLength, point.y - side * colorRadius + dy * lineLength),
-                    strokeWidth = colorRadius,
-                    cap = StrokeCap.Round
-                )
-            } else {
-                drawCircle(
-                    color = stroke.color.copy(alpha = stroke.alpha * 0.82f),
-                    radius = colorRadius,
-                    center = Offset(point.x - across * 0.55f, point.y - side * colorRadius)
-                )
-            }
-        }
-    }
-}
