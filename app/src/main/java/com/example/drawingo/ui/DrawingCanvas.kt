@@ -517,10 +517,6 @@ fun DrawingCanvas(
                         x = effectiveOffsetX.dp,
                         y = -(toolDockHeight.dp + 12.dp) + effectiveOffsetY.dp
                     )
-                    .padding(
-                        start = if (toolCaddyOnLeft) 20.dp else 0.dp,
-                        end = if (toolCaddyOnLeft) 0.dp else 20.dp
-                    )
                     .onSizeChanged { toolCaddySizePx = it }
                     .graphicsLayer { alpha = controlsAlpha }
             )
@@ -1311,10 +1307,13 @@ private fun RecentToolCaddy(
             }
         )
     }
-    Box(modifier = modifier.width(68.dp).height(228.dp), contentAlignment = Alignment.Center) {
+    Box(modifier = modifier.width(68.dp).height(196.dp), contentAlignment = Alignment.Center) {
         if (isExpanded) {
             Surface(
-                modifier = Modifier.shadow(8.dp, RoundedCornerShape(28.dp)),
+                modifier = Modifier
+                    .shadow(8.dp, RoundedCornerShape(28.dp))
+                    .then(dragModifier)
+                    .semantics { contentDescription = "Recent tools; drag to move" },
                 shape = RoundedCornerShape(28.dp),
                 color = StudioSurface,
                 border = BorderStroke(1.dp, StudioOutline)
@@ -1324,14 +1323,6 @@ private fun RecentToolCaddy(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Box(
-                        modifier = Modifier.size(48.dp, 28.dp).then(dragModifier)
-                            .semantics { contentDescription = "Drag tool caddy" },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.DragHandle, contentDescription = null,
-                            tint = StudioMutedText, modifier = Modifier.size(20.dp))
-                    }
                     tools.take(3).forEach { tool ->
                 val selected = selectedTool == tool
                 val icon = when (tool) {
