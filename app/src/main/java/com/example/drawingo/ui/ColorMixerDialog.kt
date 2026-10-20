@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -31,6 +32,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.window.Dialog
 
 @Composable
@@ -42,6 +45,11 @@ fun ColorMixerDialog(
     var red by remember { mutableStateOf(initialColor.red) }
     var green by remember { mutableStateOf(initialColor.green) }
     var blue by remember { mutableStateOf(initialColor.blue) }
+    var hexInput by remember { mutableStateOf("") }
+    val normalizedHex = hexInput.trim().removePrefix("#")
+    val hexColor = normalizedHex.takeIf { it.matches(Regex("[0-9A-Fa-f]{6}")) }
+        ?.let { runCatching { Color(android.graphics.Color.parseColor("#$it")) }.getOrNull() }
+    val previewColor = hexColor ?: Color(red, green, blue)
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -66,14 +74,32 @@ fun ColorMixerDialog(
                     modifier = Modifier
                         .size(100.dp)
                         .clip(CircleShape)
-                        .background(Color(red, green, blue))
+                        .background(previewColor)
                         .border(2.dp, Color(0xFFE8E2D9), CircleShape)
+                )
+
+                OutlinedTextField(
+                    value = hexInput,
+                    onValueChange = { value ->
+                        val validCharacters = value.all { it == '#' || it.isDigit() || it.uppercaseChar() in 'A'..'F' }
+                        val hasSingleLeadingPrefix = value.count { it == '#' } <= 1 && (!value.contains('#') || value.startsWith('#'))
+                        if (validCharacters && hasSingleLeadingPrefix && value.length <= 7) hexInput = value.uppercase()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Hex color") },
+                    placeholder = { Text("#RRGGBB") },
+                    singleLine = true,
+                    isError = hexInput.isNotBlank() && hexColor == null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
+                    supportingText = {
+                        if (hexInput.isNotBlank() && hexColor == null) Text("Enter six hex digits, for example #C53C65")
+                    }
                 )
                 
                 // Sliders
-                ColorSlider("Red", red, Color.Red) { red = it }
-                ColorSlider("Green", green, Color.Green) { green = it }
-                ColorSlider("Blue", blue, Color.Blue) { blue = it }
+                ColorSlider("Red", red, Color.Red) { red = it; hexInput = "" }
+                ColorSlider("Green", green, Color.Green) { green = it; hexInput = "" }
+                ColorSlider("Blue", blue, Color.Blue) { blue = it; hexInput = "" }
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -84,7 +110,8 @@ fun ColorMixerDialog(
                         colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF343849))
                     ) { Text("Cancel") }
                     Button(
-                        onClick = { onColorMixed(Color(red, green, blue)) },
+                        onClick = { onColorMixed(hexColor ?: Color(red, green, blue)) },
+                        enabled = hexInput.isBlank() || hexColor != null,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC53C65))
                     ) { Text("Apply") }
                 }

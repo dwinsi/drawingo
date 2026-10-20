@@ -448,6 +448,10 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     fun toggleOnionSkin() {
         _onionSkinEnabled.value = !_onionSkinEnabled.value
     }
+
+    fun setPlaybackFps(fps: Int) {
+        _playbackFps.value = fps.coerceIn(1, 24)
+    }
     
     // Playback Logic
     fun toggleLocalPlayback() {
@@ -641,6 +645,11 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val tool = _selectedTool.value
         val canvasPos = toCanvasCoordinate(screenPosition)
 
+        if (tool == DrawingTool.FILL) {
+            fillEnclosedShape(canvasPos)
+            return
+        }
+
         // If lasso is active and we tap, check if we are dragging an existing selection
         if (tool == DrawingTool.LASSO && _selectedStrokes.value.isNotEmpty()) {
             _activeStrokes.value = _activeStrokes.value + (pointerId to DrawnStroke(
@@ -661,7 +670,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val strokeColor = when (tool) {
             DrawingTool.ERASER -> Color.White
             DrawingTool.PEN, DrawingTool.BRUSH,
-            DrawingTool.WATERCOLOR, DrawingTool.CRAYON, DrawingTool.TEXT -> _selectedColor.value
+            DrawingTool.WATERCOLOR, DrawingTool.CRAYON, DrawingTool.FILL, DrawingTool.TEXT -> _selectedColor.value
             DrawingTool.LASSO -> Color(0xFF69489B) // Purple color for lasso line
         }
         val strokeWidth = when (tool) {
@@ -671,6 +680,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             DrawingTool.LASSO -> 4f
             DrawingTool.WATERCOLOR -> _selectedStrokeWidth.value * 2.2f
             DrawingTool.CRAYON -> _selectedStrokeWidth.value * 1.25f
+            DrawingTool.FILL -> 0f
             DrawingTool.TEXT -> _selectedStrokeWidth.value * 4f // Text scales with brush size
         }
         val alpha = when (tool) {
@@ -678,7 +688,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             DrawingTool.BRUSH -> 0.85f
             DrawingTool.WATERCOLOR -> 0.68f
             DrawingTool.CRAYON -> 1.0f
-            DrawingTool.ERASER, DrawingTool.LASSO, DrawingTool.TEXT -> 1.0f
+            DrawingTool.ERASER, DrawingTool.LASSO, DrawingTool.FILL, DrawingTool.TEXT -> 1.0f
         }
         // If text tool, trigger dialog and don't start a line
         if (tool == DrawingTool.TEXT) {
@@ -698,6 +708,64 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         )
 
         _activeStrokes.value = _activeStrokes.value + (pointerId to newStroke)
+    }
+
+    private fun fillEnclosedShape(point: Offset) {
+        val frameIndex = _currentFrameIndex.value
+        val layerBoundaries = _layers.value
+            .filter { it.isVisible && it.opacity > 0f }
+            .flatMap { layer -> layer.frames.getOrNull(frameIndex)?.strokes.orEmpty().map { layer.id to it } }
+
+        val (fillLayerId, boundary) = layerBoundaries.asReversed().firstOrNull { (_, stroke) ->
+            stroke.tool != DrawingTool.FILL && stroke.tool != DrawingTool.ERASER &&
+                stroke.tool != DrawingTool.LASSO && stroke.tool != DrawingTool.TEXT &&
+                stroke.points.size >= 4 && isClosedLoop(stroke.points, stroke.strokeWidth) &&
+                pointInPolygon(point, stroke.points)
+        } ?: return
+
+        val fillStroke = DrawnStroke(
+            id = strokeIdGenerator.getAndIncrement(),
+            color = _selectedColor.value,
+            tool = DrawingTool.FILL,
+            points = boundary.points,
+            boundingBox = DrawnStroke.calculateBounds(boundary.points)
+        )
+        _undoStack.value = _undoStack.value + listOf(_layers.value)
+        _redoStack.value = emptyList()
+        _layers.value = _layers.value.map { layer ->
+            if (layer.id != fillLayerId) layer else {
+                val updatedFrames = layer.frames.toMutableList()
+                while (updatedFrames.size <= frameIndex) updatedFrames.add(com.example.drawingo.model.DrawingFrame())
+                updatedFrames[frameIndex] = updatedFrames[frameIndex].copy(
+                    strokes = updatedFrames[frameIndex].strokes + fillStroke
+                )
+                layer.copy(frames = updatedFrames)
+            }
+        }
+        updateUndoRedoStates()
+    }
+
+    private fun isClosedLoop(points: List<Offset>, strokeWidth: Float): Boolean {
+        val first = points.first()
+        val last = points.last()
+        val dx = first.x - last.x
+        val dy = first.y - last.y
+        val closeDistance = maxOf(24f, strokeWidth * 1.5f)
+        return dx * dx + dy * dy <= closeDistance * closeDistance
+    }
+
+    private fun pointInPolygon(point: Offset, polygon: List<Offset>): Boolean {
+        var inside = false
+        var previous = polygon.last()
+        for (current in polygon) {
+            if ((current.y > point.y) != (previous.y > point.y)) {
+                val crossingX = (previous.x - current.x) * (point.y - current.y) /
+                    (previous.y - current.y) + current.x
+                if (point.x < crossingX) inside = !inside
+            }
+            previous = current
+        }
+        return inside
     }
 
     fun onPointerMove(pointerId: Long, screenPosition: Offset, pressure: Float = 1.0f) {

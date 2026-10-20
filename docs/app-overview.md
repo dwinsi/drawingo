@@ -6,18 +6,19 @@ Drawingo is a native Android drawing and animation app. Its direction is a calm,
 
 ### Drawing canvas
 
-- Freehand drawing with pen, brush, watercolor, crayon, eraser, lasso selection, and text tools.
-- A hue-organized color palette, custom color mixing, and separate stroke and eraser size controls.
-- A unified bottom tool dock keeps the primary color row visible; its pull-up drawer contains the full palette, tools, and size controls.
+- Freehand drawing with pen, brush, watercolor, crayon, fill for closed loops, eraser, lasso selection, and text tools.
+- A hue-organized color palette, custom color mixing with direct hex entry, and separate stroke and eraser size controls.
+- A unified bottom tool dock keeps the primary color row visible; its pull-up drawer adds a second horizontally scrollable row with the rest of the palette, plus horizontally scrollable tools and size controls.
 - Undo, redo, clear, canvas pan and zoom, and horizontal, vertical, or quad symmetry.
 - Canvas background choices: white, grid, ruled, and kraft; imported images can also be used as a background.
 - A focus mode that hides drawing controls.
 
 ### Animation and effects
 
-- Flipbook animation with frame selection, adding, duplicating and deleting frames, playback, FPS state, and onion skin.
-- Quick Magic effects including wiggle, pulse, float, shimmer, spin, wander, flip, translate, random, bounce, wave, swing, jitter, heartbeat, spiral, and color cycle.
-- Quick Magic effects and flipbook playback are rendered locally. The app does not currently use an AI model to recognize or animate a subject.
+- Stroke replay reveals the current frame's strokes in their original order and direction, with play/pause, scrubbing, and restart controls.
+- Flipbook animation with frame selection, adding, duplicating and deleting frames, adjustable playback speed (1–24 fps), and onion skin.
+- Optional locally rendered motion effects including wiggle, pulse, float, shimmer, spin, wander, flip, translate, random, bounce, wave, swing, jitter, heartbeat, spiral, and color cycle.
+- Stroke replay, motion effects, and flipbook playback run locally. The app does not currently use an AI model to recognize or animate a subject.
 
 ### Projects, image input, and output
 

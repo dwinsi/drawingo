@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.Slider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import com.example.drawingo.ui.DrawingViewModel.QuickMagicPreset
 
 @Composable
@@ -41,19 +43,27 @@ fun AnimationBottomDock(
     currentFrameIndex: Int,
     frameCount: Int,
     isPlaying: Boolean,
+    playbackFps: Int,
     onionSkinEnabled: Boolean,
     activePresets: Set<QuickMagicPreset>,
+    canReplay: Boolean,
+    isReplayPlaying: Boolean,
+    replayProgress: Float,
     onFrameSelect: (Int) -> Unit,
     onAddFrame: () -> Unit,
     onDuplicateFrame: () -> Unit,
     onDeleteFrame: (Int) -> Unit,
     onTogglePlayback: () -> Unit,
+    onPlaybackFpsChange: (Int) -> Unit,
     onToggleOnionSkin: () -> Unit,
     onTogglePreset: (QuickMagicPreset) -> Unit,
     onClearPresets: () -> Unit,
+    onToggleReplay: () -> Unit,
+    onReplaySeek: (Float) -> Unit,
+    onResetReplay: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableStateOf(0) } // 0 = Flipbook, 1 = Quick Magic
+    var selectedTab by remember { mutableStateOf(1) } // 0 = Flipbook, 1 = Replay, 2 = Motion
 
     Column(
         modifier = modifier
@@ -73,7 +83,8 @@ fun AnimationBottomDock(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             AnimationTab("Flipbook", selectedTab == 0) { selectedTab = 0 }
-            AnimationTab("Quick Magic", selectedTab == 1) { selectedTab = 1 }
+            AnimationTab("Replay", selectedTab == 1) { selectedTab = 1 }
+            AnimationTab("Motion", selectedTab == 2) { selectedTab = 2 }
         }
 
         if (selectedTab == 0) {
@@ -157,8 +168,77 @@ fun AnimationBottomDock(
                     }
                 }
             }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Speed", color = Color(0xFF343849), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Slider(
+                    value = playbackFps.toFloat(),
+                    onValueChange = { onPlaybackFpsChange(it.roundToInt()) },
+                    valueRange = 1f..24f,
+                    steps = 22,
+                    enabled = frameCount > 1,
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { contentDescription = "Flipbook speed, $playbackFps frames per second" }
+                )
+                Text("${playbackFps} fps", color = Color(0xFF343849), fontWeight = FontWeight.Medium, fontSize = 13.sp)
+            }
+        } else if (selectedTab == 1) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(if (isReplayPlaying) ActiveToolHighlight else DockIconBackground)
+                        .clickable(enabled = canReplay) { onToggleReplay() }
+                        .semantics {
+                            contentDescription = when {
+                                !canReplay -> "Draw something before replaying"
+                                isReplayPlaying -> "Pause stroke replay"
+                                else -> "Play stroke replay"
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(if (isReplayPlaying) "Ⅱ" else "▶", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        if (canReplay) "Drawing replay" else "Draw something to replay",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF343849),
+                        fontSize = 12.sp
+                    )
+                    Slider(
+                        value = replayProgress,
+                        onValueChange = onReplaySeek,
+                        valueRange = 0f..1f,
+                        enabled = canReplay,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(DockIconBackground)
+                        .clickable { onResetReplay() }
+                        .semantics { contentDescription = "Restart stroke replay" },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("↺", fontSize = 22.sp)
+                }
+            }
         } else {
-            // Quick Magic Presets
+            // Locally rendered motion effects
             val scrollState = rememberScrollState()
             Row(
                 modifier = Modifier

@@ -129,6 +129,13 @@ import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
 import com.example.drawingo.util.CanvasBitmapUtils
 import com.example.drawingo.util.CrayonRenderer
+import com.example.drawingo.theme.StudioAccent
+import com.example.drawingo.theme.StudioAccentSoft
+import com.example.drawingo.theme.StudioControl
+import com.example.drawingo.theme.StudioMutedText
+import com.example.drawingo.theme.StudioOutline
+import com.example.drawingo.theme.StudioSurface
+import com.example.drawingo.theme.StudioText
 
 val ToolDockBackgroundColor = com.example.drawingo.theme.MidnightIndigo
 val DockIconBackground = com.example.drawingo.theme.IndigoGloss
@@ -189,9 +196,25 @@ fun DrawingCanvas(
     // Animation States
     val currentFrameIndex by viewModel.currentFrameIndex.collectAsState()
     val isPlayingLocalAnimation by viewModel.isPlayingLocalAnimation.collectAsState()
+    val playbackFps by viewModel.playbackFps.collectAsState()
     val onionSkinEnabled by viewModel.onionSkinEnabled.collectAsState()
     val activePresets by viewModel.activePresets.collectAsState()
     val backgroundImagePath by viewModel.backgroundImagePath.collectAsState()
+
+    val replayTimeline = remember(layers, currentFrameIndex) {
+        buildStrokeReplayTimeline(layers, currentFrameIndex)
+    }
+    val replayDurationMs = replayTimeline.durationMs
+    var isDrawingReplayMode by remember { mutableStateOf(false) }
+    var isDrawingReplayPlaying by remember { mutableStateOf(false) }
+    var drawingReplayProgress by remember { mutableFloatStateOf(0f) }
+    var drawingReplayStartedAtMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(layers, currentFrameIndex) {
+        isDrawingReplayMode = false
+        isDrawingReplayPlaying = false
+        drawingReplayProgress = 0f
+    }
 
     var frameTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -200,6 +223,20 @@ fun DrawingCanvas(
                 frameTimeMs = System.currentTimeMillis()
             }
         }
+    }
+
+    LaunchedEffect(frameTimeMs, isDrawingReplayPlaying, drawingReplayStartedAtMs, replayDurationMs) {
+        if (isDrawingReplayPlaying) {
+            val elapsedMs = frameTimeMs - drawingReplayStartedAtMs
+            drawingReplayProgress = (elapsedMs.toFloat() / replayDurationMs).coerceIn(0f, 1f)
+            if (drawingReplayProgress >= 1f) isDrawingReplayPlaying = false
+        }
+    }
+
+    val strokeRevealFractions = remember(replayTimeline, drawingReplayProgress, isDrawingReplayMode) {
+        if (isDrawingReplayMode && drawingReplayProgress < 1f) {
+            replayTimeline.fractionsAt(drawingReplayProgress)
+        } else null
     }
 
     Box(
@@ -314,7 +351,8 @@ fun DrawingCanvas(
                             activeLayerId = selectedLayerId,
                             currentFrameIndex = currentFrameIndex,
                             onionSkinEnabled = onionSkinEnabled && !isPlayingLocalAnimation,
-                            activePresets = activePresets,
+                            activePresets = if (isDrawingReplayMode) emptySet() else activePresets,
+                            strokeRevealFractions = strokeRevealFractions,
                             selectedStrokeIds = selectedStrokes,
                             lassoTransform = lassoTransform,
                             timeMs = frameTimeMs
@@ -516,16 +554,46 @@ fun DrawingCanvas(
                     currentFrameIndex = currentFrameIndex,
                     frameCount = layers.maxOfOrNull { it.frames.size } ?: 1,
                     isPlaying = isPlayingLocalAnimation,
+                    playbackFps = playbackFps,
                     onionSkinEnabled = onionSkinEnabled,
                     activePresets = activePresets,
+                    canReplay = replayTimeline.entries.isNotEmpty(),
+                    isReplayPlaying = isDrawingReplayPlaying,
+                    replayProgress = drawingReplayProgress,
                     onFrameSelect = { viewModel.selectFrame(it) },
                     onAddFrame = { viewModel.addFrame() },
                     onDuplicateFrame = { viewModel.duplicateFrame() },
                     onDeleteFrame = { viewModel.deleteFrame(it) },
                     onTogglePlayback = { viewModel.toggleLocalPlayback() },
+                    onPlaybackFpsChange = { viewModel.setPlaybackFps(it) },
                     onToggleOnionSkin = { viewModel.toggleOnionSkin() },
                     onTogglePreset = { viewModel.toggleQuickMagicPreset(it) },
                     onClearPresets = { viewModel.clearQuickMagicPresets() },
+                    onToggleReplay = {
+                        if (isDrawingReplayPlaying) {
+                            isDrawingReplayPlaying = false
+                        } else {
+                            isDrawingReplayMode = true
+                            if (drawingReplayProgress >= 1f) drawingReplayProgress = 0f
+                            if (isPlayingLocalAnimation) viewModel.toggleLocalPlayback()
+                            drawingReplayStartedAtMs = System.currentTimeMillis() -
+                                (drawingReplayProgress * replayDurationMs).toLong()
+                            isDrawingReplayPlaying = true
+                        }
+                    },
+                    onReplaySeek = { progress ->
+                        isDrawingReplayMode = true
+                        drawingReplayProgress = progress
+                        if (isDrawingReplayPlaying) {
+                            drawingReplayStartedAtMs = System.currentTimeMillis() -
+                                (progress * replayDurationMs).toLong()
+                        }
+                    },
+                    onResetReplay = {
+                        isDrawingReplayPlaying = false
+                        isDrawingReplayMode = false
+                        drawingReplayProgress = 0f
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -619,8 +687,8 @@ fun TopKeepBar(
         modifier = modifier
             .horizontalScroll(rememberScrollState())
             .clip(RoundedCornerShape(24.dp))
-            .background(ToolDockBackgroundColor)
-            .border(1.dp, com.example.drawingo.theme.SoftIndigo, RoundedCornerShape(24.dp))
+            .background(StudioSurface)
+            .border(1.dp, StudioOutline, RoundedCornerShape(24.dp))
             .padding(horizontal = 6.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -676,7 +744,7 @@ fun TopKeepBar(
             Surface(
                 modifier = Modifier.width(320.dp),
                 shape = RoundedCornerShape(24.dp),
-                color = Color(0xFFFFFEFA),
+                color = StudioSurface,
                 shadowElevation = 8.dp
             ) {
                 Column(
@@ -703,8 +771,8 @@ fun TopKeepBar(
                             onClick = { showClearConfirmation = false },
                             shape = CircleShape,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFEAE6F0),
-                                contentColor = Color(0xFF343849)
+                            containerColor = StudioControl,
+                            contentColor = StudioText
                             ),
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                         ) { Text("Keep drawing", fontWeight = FontWeight.Bold) }
@@ -715,7 +783,7 @@ fun TopKeepBar(
                             },
                             shape = CircleShape,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFD94F79),
+                                containerColor = StudioAccent,
                                 contentColor = Color.White
                             ),
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
@@ -740,7 +808,7 @@ private fun CompactAction(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(when { selected -> ActiveToolHighlight; enabled -> DockIconBackground; else -> Color(0xFF1E2036) })
+            .background(when { selected -> StudioAccentSoft; enabled -> StudioControl; else -> Color(0xFFE6E3DE) })
             .clickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center
@@ -748,7 +816,8 @@ private fun CompactAction(
         Icon(
             icon,
             contentDescription = null,
-            tint = when { selected -> com.example.drawingo.theme.ObsidianBlack; enabled -> Color.White; else -> Color(0xFF5A5D7A) }
+            tint = when { selected -> StudioAccent; enabled -> StudioText; else -> StudioMutedText },
+            modifier = Modifier.size(20.dp)
         )
     }
 }
@@ -1002,8 +1071,8 @@ private fun StudioToolDock(
         modifier = modifier
             .shadow(12.dp, RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
-        color = Color(0xFFFCFBF8),
-        border = BorderStroke(1.dp, Color(0x1A423B32))
+        color = StudioSurface,
+        border = BorderStroke(1.dp, StudioOutline)
     ) {
         Column(
             modifier = Modifier
@@ -1022,12 +1091,18 @@ private fun StudioToolDock(
                         .padding(top = 4.dp, bottom = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    DrawingoPalette.grid.drop(1).forEachIndexed { index, colors ->
-                        ColorSwatchRow(colors, selectedColor, onColorSelected, firstColorIndex = index * 8 + 8)
-                    }
+                    ColorSwatchRow(
+                        colors = DrawingoPalette.grid.drop(1).flatten(),
+                        selectedColor = selectedColor,
+                        onColorSelected = onColorSelected,
+                        firstColorIndex = 8,
+                        horizontalScrollable = true
+                    )
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1036,6 +1111,7 @@ private fun StudioToolDock(
                             Triple(DrawingTool.BRUSH, Icons.Rounded.Brush, "Brush"),
                             Triple(DrawingTool.WATERCOLOR, Icons.Rounded.WaterDrop, "Watercolor"),
                             Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
+                            Triple(DrawingTool.FILL, Icons.Rounded.FormatColorFill, "Fill"),
                             Triple(DrawingTool.ERASER, Icons.Rounded.AutoFixOff, "Eraser"),
                             Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text"),
                             Triple(DrawingTool.LASSO, Icons.Rounded.SelectAll, "Select")
@@ -1043,9 +1119,9 @@ private fun StudioToolDock(
                             val selected = selectedTool == tool
                             Column(
                                 modifier = Modifier
-                                    .weight(1f)
+                                    .width(68.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(if (selected) Color(0xFFE9E1F2) else Color(0xFFF1F0ED))
+                                    .background(if (selected) StudioAccentSoft else StudioControl)
                                     .clickable { onToolSelected(tool) }
                                     .padding(vertical = 7.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -1054,10 +1130,10 @@ private fun StudioToolDock(
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = label,
-                                    tint = if (selected) Color(0xFF69489B) else Color(0xFF4A4E55),
+                                    tint = if (selected) StudioAccent else StudioText,
                                     modifier = Modifier.size(20.dp)
                                 )
-                                Text(label, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF373941), maxLines = 1)
+                                Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = StudioText, maxLines = 1)
                             }
                         }
                     }
@@ -1070,8 +1146,8 @@ private fun StudioToolDock(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(if (eraserSelected) "Eraser size" else "Stroke size", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF353843))
-                            Text("${size.toInt()} px", fontWeight = FontWeight.Medium, fontSize = 12.sp, color = Color(0xFF72747B))
+                            Text(if (eraserSelected) "Eraser size" else "Stroke size", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = StudioText)
+                            Text("${size.toInt()} px", fontWeight = FontWeight.Medium, fontSize = 12.sp, color = StudioMutedText)
                         }
                         StrokeSizeRow(
                             selectedStrokeWidth = size,
@@ -1083,14 +1159,14 @@ private fun StudioToolDock(
                         modifier = Modifier
                             .align(Alignment.End)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF1F0ED))
+                            .background(StudioControl)
                             .clickable { showColorMixer = true }
                             .padding(horizontal = 12.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(Icons.Rounded.Colorize, contentDescription = null, tint = Color(0xFF4A4E55), modifier = Modifier.size(16.dp))
-                        Text("Mix a color", fontWeight = FontWeight.SemiBold, color = Color(0xFF4A4E55), fontSize = 11.sp)
+                        Icon(Icons.Rounded.Colorize, contentDescription = null, tint = StudioText, modifier = Modifier.size(16.dp))
+                        Text("Mix a color", fontWeight = FontWeight.SemiBold, color = StudioText, fontSize = 11.sp)
                     }
                 }
             }
@@ -1111,6 +1187,7 @@ private fun ToolsPopoverCard(
         Triple(DrawingTool.BRUSH, Icons.Rounded.Brush, "Brush"),
         Triple(DrawingTool.WATERCOLOR, Icons.Rounded.WaterDrop, "Watercolor"),
         Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
+        Triple(DrawingTool.FILL, Icons.Rounded.FormatColorFill, "Fill"),
         Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text"),
         Triple(DrawingTool.LASSO, Icons.Rounded.SelectAll, "Lasso")
     )
@@ -1264,6 +1341,7 @@ fun FloatingToolRail(
         DrawingTool.BRUSH -> Icons.Rounded.Brush
         DrawingTool.WATERCOLOR -> Icons.Rounded.WaterDrop
         DrawingTool.CRAYON -> Icons.Rounded.Draw
+        DrawingTool.FILL -> Icons.Rounded.FormatColorFill
         DrawingTool.TEXT -> Icons.Rounded.TextFields
         DrawingTool.LASSO -> Icons.Rounded.SelectAll
         DrawingTool.ERASER -> Icons.Rounded.Brush
@@ -1273,6 +1351,7 @@ fun FloatingToolRail(
         DrawingTool.BRUSH -> "Brush"
         DrawingTool.WATERCOLOR -> "Water"
         DrawingTool.CRAYON -> "Crayon"
+        DrawingTool.FILL -> "Fill"
         DrawingTool.TEXT -> "Text"
         DrawingTool.LASSO -> "Lasso"
         DrawingTool.ERASER -> "Tools"
@@ -1596,7 +1675,7 @@ private fun DrawerHandle(expanded: Boolean, onExpandedChange: (Boolean) -> Unit)
                 .width(34.dp)
                 .height(4.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFC8C3BA))
+                .background(StudioOutline)
         )
     }
 }
@@ -1662,13 +1741,13 @@ private fun ColorSwatchRow(
     colors: List<Color>,
     selectedColor: Color,
     onColorSelected: (Color) -> Unit,
-    firstColorIndex: Int
+    firstColorIndex: Int,
+    horizontalScrollable: Boolean = false
 ) {
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val cellSize = maxWidth / 8
+    if (horizontalScrollable) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             colors.forEachIndexed { index, color ->
@@ -1677,8 +1756,27 @@ private fun ColorSwatchRow(
                     selected = color == selectedColor,
                     colorName = ALL_COLOR_NAMES.getOrElse(firstColorIndex + index) { "Custom" },
                     onClick = { onColorSelected(color) },
-                    touchSize = cellSize
+                    touchSize = 44.dp
                 )
+            }
+        }
+    } else {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val cellSize = maxWidth / 8
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                colors.forEachIndexed { index, color ->
+                    ColorSwatch(
+                        color = color,
+                        selected = color == selectedColor,
+                        colorName = ALL_COLOR_NAMES.getOrElse(firstColorIndex + index) { "Custom" },
+                        onClick = { onColorSelected(color) },
+                        touchSize = cellSize
+                    )
+                }
             }
         }
     }
@@ -1711,7 +1809,7 @@ private fun StrokeSizeRow(selectedStrokeWidth: Float, onWidthSelected: (Float) -
             ) {
                 Box(
                     modifier = Modifier
-                        .size((width * 0.28f).coerceIn(6f, 25f).dp)
+                        .size((width * 0.22f).coerceIn(6f, 34f).dp)
                         .clip(CircleShape)
                         .background(if (selected) Color(0xFF69489B) else Color(0xFF676B73))
                 )
@@ -1807,6 +1905,88 @@ private fun DrawScope.drawPaperStyle(style: CanvasPaperStyle) {
     }
 }
 
+private data class StrokeReplayEntry(
+    val stroke: DrawnStroke,
+    val startDistance: Float,
+    val durationDistance: Float
+)
+
+private data class StrokeReplayTimeline(
+    val entries: List<StrokeReplayEntry>,
+    val totalDistance: Float
+) {
+    val durationMs: Long = ((totalDistance / 700f) * 1000f).toLong().coerceIn(1_200L, 24_000L)
+
+    fun fractionsAt(progress: Float): Map<Long, Float> {
+        val distance = totalDistance * progress.coerceIn(0f, 1f)
+        return entries.mapNotNull { entry ->
+            val revealed = ((distance - entry.startDistance) / entry.durationDistance).coerceIn(0f, 1f)
+            if (revealed > 0f) entry.stroke.id to revealed else null
+        }.toMap()
+    }
+}
+
+private fun buildStrokeReplayTimeline(
+    layers: List<com.example.drawingo.model.DrawingLayer>,
+    frameIndex: Int
+): StrokeReplayTimeline {
+    var distance = 0f
+    val entries = buildList {
+        layers.filter { it.isVisible && it.opacity > 0f }.forEach { layer ->
+            layer.frames.getOrNull(frameIndex)?.strokes.orEmpty().filter { it.tool != DrawingTool.FILL }.forEach { stroke ->
+                val pathDistance = stroke.points.zipWithNext { a, b ->
+                    kotlin.math.hypot((b.x - a.x).toDouble(), (b.y - a.y).toDouble()).toFloat()
+                }.sum()
+                val durationDistance = pathDistance.coerceAtLeast((stroke.strokeWidth * 2f).coerceAtLeast(16f))
+                add(StrokeReplayEntry(stroke, distance, durationDistance))
+                distance += durationDistance
+            }
+        }
+    }
+    return StrokeReplayTimeline(entries, distance)
+}
+
+private fun DrawnStroke.revealedTo(fraction: Float): DrawnStroke {
+    if (fraction >= 1f) return this
+    if (points.size < 2 || tool == DrawingTool.TEXT) return copy(points = emptyList(), pressures = emptyList())
+
+    val totalLength = points.zipWithNext { a, b ->
+        kotlin.math.hypot((b.x - a.x).toDouble(), (b.y - a.y).toDouble()).toFloat()
+    }.sum()
+    val targetLength = totalLength * fraction.coerceIn(0f, 1f)
+    if (targetLength <= 0f) return copy(points = emptyList(), pressures = emptyList())
+
+    val revealedPoints = mutableListOf(points.first())
+    val revealedPressures = if (pressures.size == points.size) mutableListOf(pressures.first()) else null
+    var coveredLength = 0f
+    for (index in 1 until points.size) {
+        val start = points[index - 1]
+        val end = points[index]
+        val segmentLength = kotlin.math.hypot((end.x - start.x).toDouble(), (end.y - start.y).toDouble()).toFloat()
+        if (coveredLength + segmentLength >= targetLength && segmentLength > 0f) {
+            val segmentFraction = ((targetLength - coveredLength) / segmentLength).coerceIn(0f, 1f)
+            revealedPoints += Offset(
+                start.x + (end.x - start.x) * segmentFraction,
+                start.y + (end.y - start.y) * segmentFraction
+            )
+            if (revealedPressures != null) {
+                val startPressure = pressures[index - 1]
+                val endPressure = pressures[index]
+                revealedPressures += startPressure + (endPressure - startPressure) * segmentFraction
+            }
+            break
+        }
+        revealedPoints += end
+        if (revealedPressures != null) revealedPressures += pressures[index]
+        coveredLength += segmentLength
+    }
+    return copy(
+        points = revealedPoints,
+        pressures = revealedPressures ?: pressures,
+        boundingBox = DrawnStroke.calculateBounds(revealedPoints)
+    )
+}
+
 private fun DrawScope.drawAllCanvasContent(
     layers: List<com.example.drawingo.model.DrawingLayer>,
     activeStrokes: List<DrawnStroke>,
@@ -1814,6 +1994,7 @@ private fun DrawScope.drawAllCanvasContent(
     currentFrameIndex: Int,
     onionSkinEnabled: Boolean,
     activePresets: Set<DrawingViewModel.QuickMagicPreset>,
+    strokeRevealFractions: Map<Long, Float>? = null,
     selectedStrokeIds: Set<Long> = emptySet(),
     lassoTransform: Offset = Offset.Zero,
     timeMs: Long
@@ -1870,7 +2051,7 @@ private fun DrawScope.drawAllCanvasContent(
         // Draw onion skin (previous frame)
         if (onionSkinEnabled && currentFrameIndex > 0) {
             val prevFrame = layer.frames.getOrNull(currentFrameIndex - 1)
-            prevFrame?.strokes?.forEach { stroke ->
+            prevFrame?.strokes?.sortedBy { if (it.tool == DrawingTool.FILL) 0 else 1 }?.forEach { stroke ->
                 val ghostStroke = stroke.copy(alpha = stroke.alpha * layerAlpha * 0.3f)
                 drawSingleStroke(ghostStroke)
             }
@@ -1878,7 +2059,12 @@ private fun DrawScope.drawAllCanvasContent(
         
         // Draw current frame
         val currentFrame = layer.frames.getOrNull(currentFrameIndex)
-        currentFrame?.strokes?.forEach { stroke ->
+        currentFrame?.strokes?.filter { it.tool == DrawingTool.FILL }?.forEach { stroke ->
+            drawSingleStroke(stroke.copy(alpha = stroke.alpha * layerAlpha))
+        }
+        currentFrame?.strokes?.filter { it.tool != DrawingTool.FILL }?.forEach { stroke ->
+            val revealFraction = strokeRevealFractions?.get(stroke.id)
+            if (strokeRevealFractions != null && revealFraction == null) return@forEach
             var finalStroke = stroke
             
             // Apply visual transform if this stroke is currently selected by the lasso
@@ -1888,17 +2074,20 @@ private fun DrawScope.drawAllCanvasContent(
             }
             
             val strokeWithAlpha = finalStroke.copy(alpha = finalStroke.alpha * layerAlpha)
+            val replayStroke = if (strokeRevealFractions != null) {
+                strokeWithAlpha.revealedTo(revealFraction ?: 0f)
+            } else strokeWithAlpha
             
             if (activePresets.isNotEmpty()) {
                 // Animate only if no strokes are selected, OR if this specific stroke is selected
                 if (selectedStrokeIds.isEmpty() || stroke.id in selectedStrokeIds) {
-                    val magicStroke = processMagicStroke(strokeWithAlpha, activePresets, timeMs, groupCenter, groupBounds, size)
+                    val magicStroke = processMagicStroke(replayStroke, activePresets, timeMs, groupCenter, groupBounds, size)
                     if (magicStroke != null) drawSingleStroke(magicStroke)
                 } else {
-                    drawSingleStroke(strokeWithAlpha)
+                    drawSingleStroke(replayStroke)
                 }
             } else {
-                drawSingleStroke(strokeWithAlpha)
+                drawSingleStroke(replayStroke)
             }
             
             // Draw selection highlight bounding box only if no animation is currently active
@@ -1926,6 +2115,16 @@ private fun DrawScope.drawAllCanvasContent(
 
 private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
     if (stroke.points.isEmpty()) return
+
+    if (stroke.tool == DrawingTool.FILL) {
+        val fillPath = Path().apply {
+            moveTo(stroke.points.first().x, stroke.points.first().y)
+            stroke.points.drop(1).forEach { lineTo(it.x, it.y) }
+            close()
+        }
+        drawPath(fillPath, stroke.color.copy(alpha = stroke.alpha))
+        return
+    }
     
     // Normalize single point strokes into a tiny segment so cap=Round draws a perfect circle
     val s = if (stroke.points.size == 1) {

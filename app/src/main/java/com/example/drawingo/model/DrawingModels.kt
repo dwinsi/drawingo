@@ -11,6 +11,7 @@ enum class DrawingTool {
     BRUSH,
     WATERCOLOR,
     CRAYON,
+    FILL,
     TEXT
 }
 
@@ -92,7 +93,7 @@ object DrawingoPalette {
     )
 
     // Stroke width presets for the drawing tools.
-    val strokeSizes = listOf(6f, 12f, 20f, 32f, 48f, 68f, 92f)
+    val strokeSizes = listOf(6f, 12f, 20f, 32f, 48f, 68f, 92f, 112f, 136f, 160f)
 }
 
 /**

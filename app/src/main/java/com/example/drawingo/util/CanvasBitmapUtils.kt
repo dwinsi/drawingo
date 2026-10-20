@@ -69,7 +69,7 @@ object CanvasBitmapUtils {
             strokeJoin = Paint.Join.ROUND
         }
 
-        for (stroke in strokes) {
+        for (stroke in strokes.filter { it.tool == DrawingTool.FILL } + strokes.filter { it.tool != DrawingTool.FILL }) {
             if (stroke.points.size < 2) continue
 
             val color = stroke.color.toArgb()
@@ -82,6 +82,18 @@ object CanvasBitmapUtils {
             }
 
             val tool = stroke.tool
+
+            if (tool == DrawingTool.FILL) {
+                val fillPath = Path().apply {
+                    moveTo(stroke.points.first().x, stroke.points.first().y)
+                    stroke.points.drop(1).forEach { lineTo(it.x, it.y) }
+                    close()
+                }
+                paint.style = Paint.Style.FILL
+                canvas.drawPath(fillPath, paint)
+                paint.style = Paint.Style.STROKE
+                continue
+            }
 
             // Variable width logic for stylus pressure
             if ((tool == DrawingTool.PEN || tool == DrawingTool.BRUSH) && stroke.pressures.size == stroke.points.size) {
