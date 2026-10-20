@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.mutableFloatStateOf
 import kotlin.math.roundToInt
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
@@ -1001,8 +1000,7 @@ private fun StudioToolDock(
 
     Surface(
         modifier = modifier
-            .shadow(12.dp, RoundedCornerShape(24.dp))
-            .animateContentSize(),
+            .shadow(12.dp, RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
         color = Color(0xFFFCFBF8),
         border = BorderStroke(1.dp, Color(0x1A423B32))
@@ -1017,11 +1015,7 @@ private fun StudioToolDock(
             // This row remains anchored directly below the drawer handle in both states.
             PrimaryColorRow(selectedColor, onColorSelected)
 
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
+            if (isExpanded) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
