@@ -14,6 +14,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,7 +32,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.drawingo.model.DrawingLayer
@@ -73,8 +79,8 @@ fun LayersBottomSheet(
                     fontWeight = FontWeight.ExtraBold,
                     color = StudioText
                 )
-                IconButton(onClick = onAddLayer) {
-                    Text("➕", style = MaterialTheme.typography.titleLarge)
+                IconButton(onClick = onAddLayer, modifier = Modifier.semantics { contentDescription = "Add layer" }) {
+                    Icon(Icons.Rounded.Add, contentDescription = null, tint = StudioAccent)
                 }
             }
 
@@ -103,9 +109,15 @@ fun LayersBottomSheet(
                                 ) {
                                     IconButton(
                                         onClick = { onToggleVisibility(layer.id) },
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.semantics {
+                                            contentDescription = if (layer.isVisible) "Hide ${layer.name}" else "Show ${layer.name}"
+                                        }
                                     ) {
-                                        Text(if (layer.isVisible) "👁️" else "🔒", style = MaterialTheme.typography.bodyLarge)
+                                        Icon(
+                                            imageVector = if (layer.isVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
+                                            contentDescription = null,
+                                            tint = if (layer.isVisible) StudioText else StudioMutedText
+                                        )
                                     }
                                     Text(
                                         text = layer.name,
@@ -116,9 +128,9 @@ fun LayersBottomSheet(
                                 if (layers.size > 1) {
                                     IconButton(
                                         onClick = { onDeleteLayer(layer.id) },
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.semantics { contentDescription = "Delete ${layer.name}" }
                                     ) {
-                                        Text("🗑️")
+                                        Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = StudioMutedText)
                                     }
                                 }
                             }

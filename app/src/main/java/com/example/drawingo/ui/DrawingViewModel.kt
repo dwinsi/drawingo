@@ -91,23 +91,23 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _onionSkinEnabled = MutableStateFlow(true)
     val onionSkinEnabled: StateFlow<Boolean> = _onionSkinEnabled.asStateFlow()
 
-    enum class QuickMagicPreset(val label: String, val icon: String) { 
-        WIGGLE("Wiggle", "〰️"), 
-        PULSE("Pulse", "💓"), 
-        FLOAT("Float", "☁️"), 
-        SHIMMER("Shimmer", "✨"), 
-        SPIN("Spin", "🔄"), 
-        WANDER("Wander", "🧭"), 
-        FLIP("Flip", "🪞"), 
-        TRANSLATE("Translate", "↔️"), 
-        RANDOM("Random", "🎲"),
-        BOUNCE("Bounce", "🦘"),
-        WAVE("Wave", "🌊"),
-        SWING("Swing", "🪅"),
-        JITTER("Jitter", "⚡"),
-        HEARTBEAT("Heartbeat", "💗"),
-        SPIRAL("Spiral", "🌀"),
-        COLOR_CYCLE("Color", "🌈")
+    enum class QuickMagicPreset(val label: String) {
+        WIGGLE("Wiggle"),
+        PULSE("Pulse"),
+        FLOAT("Float"),
+        SHIMMER("Shimmer"),
+        SPIN("Spin"),
+        WANDER("Wander"),
+        FLIP("Flip"),
+        TRANSLATE("Translate"),
+        RANDOM("Random"),
+        BOUNCE("Bounce"),
+        WAVE("Wave"),
+        SWING("Swing"),
+        JITTER("Jitter"),
+        HEARTBEAT("Heartbeat"),
+        SPIRAL("Spiral"),
+        COLOR_CYCLE("Color")
     }
     
     private val _activePresets = MutableStateFlow<Set<QuickMagicPreset>>(emptySet())

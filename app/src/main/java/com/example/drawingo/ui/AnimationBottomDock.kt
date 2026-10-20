@@ -19,6 +19,31 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Casino
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Flare
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Flip
+import androidx.compose.material.icons.rounded.Loop
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.OpenWith
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Replay
+import androidx.compose.material.icons.rounded.SportsBasketball
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.Water
+import androidx.compose.material.icons.rounded.Waves
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.Slider
 import androidx.compose.runtime.Composable
@@ -30,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -106,10 +132,16 @@ fun AnimationBottomDock(
                         .size(48.dp)
                         .clip(CircleShape)
                         .background(if (isPlaying) ActiveToolHighlight else DockIconBackground)
-                        .clickable { onTogglePlayback() },
+                        .clickable { onTogglePlayback() }
+                        .semantics { contentDescription = if (isPlaying) "Pause flipbook" else "Play flipbook" },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(if (isPlaying) "⏸" else "▶️", fontSize = 20.sp)
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                        tint = StudioAccent,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
 
                 // Onion Skin Toggle
@@ -118,10 +150,16 @@ fun AnimationBottomDock(
                         .size(40.dp)
                         .clip(CircleShape)
                         .background(if (onionSkinEnabled) StudioAccentSoft else DockIconBackground)
-                        .clickable { onToggleOnionSkin() },
+                        .clickable { onToggleOnionSkin() }
+                        .semantics { contentDescription = if (onionSkinEnabled) "Turn onion skin off" else "Turn onion skin on" },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("🧅", fontSize = 16.sp)
+                    Icon(
+                        imageVector = Icons.Rounded.Layers,
+                        contentDescription = null,
+                        tint = if (onionSkinEnabled) StudioAccent else StudioMutedText,
+                        modifier = Modifier.size(21.dp)
+                    )
                 }
                 
                 // Timeline
@@ -152,10 +190,11 @@ fun AnimationBottomDock(
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(DockIconBackground)
-                                .clickable { onAddFrame() },
+                                .clickable { onAddFrame() }
+                                .semantics { contentDescription = "Add frame" },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("➕", fontSize = 20.sp)
+                            Icon(Icons.Rounded.Add, contentDescription = null, tint = StudioText)
                         }
                     }
                     
@@ -166,10 +205,11 @@ fun AnimationBottomDock(
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(DockIconBackground)
-                                .clickable { onDuplicateFrame() },
+                                .clickable { onDuplicateFrame() }
+                                .semantics { contentDescription = "Duplicate current frame" },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("👯", fontSize = 20.sp)
+                            Icon(Icons.Rounded.ContentCopy, contentDescription = null, tint = StudioText)
                         }
                     }
                 }
@@ -214,7 +254,12 @@ fun AnimationBottomDock(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(if (isReplayPlaying) "Ⅱ" else "▶", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Icon(
+                        imageVector = if (isReplayPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                        tint = StudioAccent,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -240,7 +285,7 @@ fun AnimationBottomDock(
                         .semantics { contentDescription = "Restart stroke replay" },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("↺", fontSize = 22.sp)
+                    Icon(Icons.Rounded.Replay, contentDescription = null, tint = StudioText)
                 }
             }
         } else {
@@ -254,7 +299,7 @@ fun AnimationBottomDock(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Spacer(modifier = Modifier.width(8.dp))
-                PresetButton("Clear", "🚫", activePresets.isEmpty()) { onClearPresets() }
+                PresetButton("Clear", Icons.Rounded.Block, activePresets.isEmpty()) { onClearPresets() }
                 QuickMagicPreset.entries.forEach { preset ->
                     PresetButton(preset.label, preset.icon, activePresets.contains(preset)) { onTogglePreset(preset) }
                 }
@@ -283,23 +328,24 @@ private fun AnimationTab(text: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PresetButton(label: String, icon: String, selected: Boolean, onClick: () -> Unit) {
+private fun PresetButton(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
             .clickable { onClick() }
+            .semantics { contentDescription = if (selected) "$label effect enabled" else "$label effect" }
             .padding(8.dp)
     ) {
         Box(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(if (selected) ActiveToolHighlight else DockIconBackground),
+                .background(if (selected) StudioAccentSoft else DockIconBackground),
             contentAlignment = Alignment.Center
         ) {
-            Text(icon, fontSize = 24.sp)
+            Icon(icon, contentDescription = null, tint = if (selected) StudioAccent else StudioText, modifier = Modifier.size(24.dp))
         }
         Text(
             label,
@@ -309,3 +355,23 @@ private fun PresetButton(label: String, icon: String, selected: Boolean, onClick
         )
     }
 }
+
+private val QuickMagicPreset.icon: ImageVector
+    get() = when (this) {
+        QuickMagicPreset.WIGGLE -> Icons.Rounded.Waves
+        QuickMagicPreset.PULSE -> Icons.Rounded.FavoriteBorder
+        QuickMagicPreset.FLOAT -> Icons.Rounded.Cloud
+        QuickMagicPreset.SHIMMER -> Icons.Rounded.Flare
+        QuickMagicPreset.SPIN -> Icons.Rounded.Refresh
+        QuickMagicPreset.WANDER -> Icons.Rounded.Explore
+        QuickMagicPreset.FLIP -> Icons.Rounded.Flip
+        QuickMagicPreset.TRANSLATE -> Icons.Rounded.OpenWith
+        QuickMagicPreset.RANDOM -> Icons.Rounded.Casino
+        QuickMagicPreset.BOUNCE -> Icons.Rounded.SportsBasketball
+        QuickMagicPreset.WAVE -> Icons.Rounded.Water
+        QuickMagicPreset.SWING -> Icons.Rounded.Sync
+        QuickMagicPreset.JITTER -> Icons.Rounded.Bolt
+        QuickMagicPreset.HEARTBEAT -> Icons.Rounded.Favorite
+        QuickMagicPreset.SPIRAL -> Icons.Rounded.Loop
+        QuickMagicPreset.COLOR_CYCLE -> Icons.Rounded.Palette
+    }
