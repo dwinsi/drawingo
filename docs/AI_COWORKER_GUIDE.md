@@ -24,7 +24,8 @@ Read the source before relying on this list; the app is changing quickly and `do
 - Native Android app written in Kotlin with Jetpack Compose and Material 3.
 - Drawing canvas with pen, brush, eraser, lasso, fill for closed loops, watercolor, crayon, and text tools; color palette and mixer; size selection; undo/redo; pan and zoom.
 - The expanded bottom dock keeps the primary colors visible, places all remaining colors in a second horizontally scrollable row, and scrolls the tool row horizontally.
-- Watercolor and crayon use dedicated stroke rendering. Keep canvas and export rendering consistent when changing drawing tools.
+- Drawing controls share warm-white surfaces, fine neutral outlines, ink-colored icons, and a restrained purple selection accent; keep the canvas pure white and the dock expansion immediate.
+- Watercolor and crayon use dedicated stroke rendering, and their live previews show the material marks. Watercolor uses one renderer for the live canvas and exported bitmap so the appearance stays consistent.
 - Stroke replay, flipbook playback, and motion effects are implemented locally. Do not describe these as ML Kit processing unless the current source actually invokes an on-device ML Kit API.
 - Cloud-generation controls, the Android client and payload logger, the backend source, and its deployment workflow have been removed from the repository. The app manifest no longer requests Internet access. This removes the app's known network path; do not reintroduce remote generation or drawing uploads.
 - The privacy policy is in `docs/privacy-policy.md` and is published from `site/`. Keep product behavior, data-flow documentation, and policy aligned.

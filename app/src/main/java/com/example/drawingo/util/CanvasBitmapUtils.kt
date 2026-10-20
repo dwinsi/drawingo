@@ -4,8 +4,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RadialGradient
-import android.graphics.Shader
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
 import com.example.drawingo.model.DrawingTool
@@ -176,13 +174,7 @@ object CanvasBitmapUtils {
 
             when (stroke.tool) {
                 DrawingTool.WATERCOLOR -> {
-                    paint.alpha = (stroke.alpha * 0.24f * 255).toInt().coerceIn(0, 255)
-                    paint.strokeWidth = baseWidth * 1.7f
-                    canvas.drawPath(path, paint)
-                    paint.alpha = (stroke.alpha * 0.32f * 255).toInt().coerceIn(0, 255)
-                    paint.strokeWidth = baseWidth * 1.12f
-                    canvas.drawPath(path, paint)
-                    drawWatercolorBlooms(canvas, stroke, offsetX, offsetY, scale, color)
+                    WatercolorRenderer.draw(canvas, stroke, scale, offsetX, offsetY)
                 }
                 DrawingTool.CRAYON -> {
                     CrayonRenderer.drawCrayonStroke(canvas, stroke, scale, offsetX, offsetY)
@@ -193,30 +185,4 @@ object CanvasBitmapUtils {
 
         return bitmap
     }
-
-    private fun drawWatercolorBlooms(
-        canvas: Canvas, stroke: DrawnStroke, offsetX: Float, offsetY: Float,
-        scale: Float, color: Int
-    ) {
-        val stride = (stroke.points.size / 32).coerceAtLeast(1)
-        val bloomPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-        stroke.points.indices.step(stride).forEach { index ->
-            val point = stroke.points[index]
-            val seed = stroke.id xor (index.toLong() * 31L)
-            val offset = (((seed ushr 8) and 15).toFloat() - 7.5f) * stroke.strokeWidth * 0.09f * scale
-            val radius = (stroke.strokeWidth * scale * (0.22f + ((seed and 7).toFloat() * 0.025f))).coerceAtLeast(1f)
-            val centerX = point.x * scale + offsetX + offset
-            val centerY = point.y * scale + offsetY - offset
-            val pigment = (stroke.alpha * 0.24f * 255).toInt().coerceIn(0, 255)
-            bloomPaint.shader = RadialGradient(
-                centerX, centerY, radius,
-                color.withAlpha(pigment), color.withAlpha(0), Shader.TileMode.CLAMP
-            )
-            canvas.drawCircle(centerX, centerY, radius, bloomPaint)
-        }
-    }
-
-
-
-    private fun Int.withAlpha(alpha: Int): Int = (this and 0x00FFFFFF) or (alpha shl 24)
 }

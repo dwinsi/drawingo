@@ -7,8 +7,10 @@ Drawingo is a native Android drawing and animation app. Its direction is a calm,
 ### Drawing canvas
 
 - Freehand drawing with pen, brush, watercolor, crayon, fill for closed loops, eraser, lasso selection, and text tools.
+- Watercolor uses soft translucent washes and pigment blooms; crayon uses a textured wax stroke. Their size preview shows each material's stroke behavior.
 - A hue-organized color palette, custom color mixing with direct hex entry, and separate stroke and eraser size controls.
 - A unified bottom tool dock keeps the primary color row visible; its pull-up drawer adds a second horizontally scrollable row with the rest of the palette, plus horizontally scrollable tools and size controls.
+- Drawing controls use coordinated warm-white surfaces, quiet outlines, and a restrained purple selection accent around the white canvas.
 - Undo, redo, clear, canvas pan and zoom, and horizontal, vertical, or quad symmetry.
 - Canvas background choices: white, grid, ruled, and kraft; imported images can also be used as a background.
 - A focus mode that hides drawing controls.

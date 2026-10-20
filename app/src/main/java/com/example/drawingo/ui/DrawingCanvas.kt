@@ -129,6 +129,7 @@ import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
 import com.example.drawingo.util.CanvasBitmapUtils
 import com.example.drawingo.util.CrayonRenderer
+import com.example.drawingo.util.WatercolorRenderer
 import com.example.drawingo.theme.StudioAccent
 import com.example.drawingo.theme.StudioAccentSoft
 import com.example.drawingo.theme.StudioControl
@@ -753,13 +754,13 @@ fun TopKeepBar(
                 ) {
                     Text(
                         "Start a fresh picture?",
-                        color = Color(0xFF343849),
+                        color = StudioText,
                         fontWeight = FontWeight.ExtraBold,
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
                         "Your drawing will be cleared from the canvas.",
-                        color = Color(0xFF555866),
+                        color = StudioMutedText,
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Row(
@@ -987,58 +988,73 @@ fun LiveStrokePreview(
     color: Color,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    Canvas(
         modifier = modifier
             .size(48.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFFF1F2F6))
-            .border(1.dp, Color(0x18000000), RoundedCornerShape(12.dp)),
-        contentAlignment = Alignment.Center
+            .border(1.dp, Color(0x18000000), RoundedCornerShape(12.dp))
     ) {
-        val displaySize = (strokeWidth * 0.75f).coerceIn(4f, 38f).dp
+        val points = listOf(
+            Offset(size.width * 0.12f, size.height * 0.62f),
+            Offset(size.width * 0.32f, size.height * 0.34f),
+            Offset(size.width * 0.52f, size.height * 0.64f),
+            Offset(size.width * 0.72f, size.height * 0.36f),
+            Offset(size.width * 0.88f, size.height * 0.52f)
+        )
+        val sampleWidth = strokeWidth.coerceIn(2.dp.toPx(), 12.dp.toPx())
+        val sampleStroke = DrawnStroke(
+            id = 7L,
+            color = color,
+            strokeWidth = sampleWidth,
+            alpha = if (tool == DrawingTool.WATERCOLOR) 0.68f else 1f,
+            tool = tool,
+            points = points
+        )
+
         when (tool) {
-            DrawingTool.WATERCOLOR -> {
-                Box(
-                    modifier = Modifier
-                        .size(displaySize)
-                        .clip(CircleShape)
-                        .background(color.copy(alpha = 0.45f))
-                        .border(1.dp, color.copy(alpha = 0.85f), CircleShape)
-                )
-            }
-            DrawingTool.CRAYON -> {
-                Box(
-                    modifier = Modifier
-                        .size(displaySize)
-                        .clip(CircleShape)
-                        .background(color.copy(alpha = 0.85f))
-                        .border(1.5.dp, Color.White.copy(alpha = 0.6f), CircleShape)
-                )
-            }
-            DrawingTool.BRUSH -> {
-                Box(
-                    modifier = Modifier
-                        .size(displaySize)
-                        .clip(CircleShape)
-                        .background(color.copy(alpha = 0.90f))
-                )
-            }
+            DrawingTool.WATERCOLOR -> WatercolorRenderer.draw(drawContext.canvas.nativeCanvas, sampleStroke)
+            DrawingTool.CRAYON -> CrayonRenderer.drawCrayonStroke(drawContext.canvas.nativeCanvas, sampleStroke)
+            DrawingTool.FILL -> drawCircle(color.copy(alpha = 0.78f), radius = size.minDimension * 0.27f)
             DrawingTool.ERASER -> {
-                Box(
-                    modifier = Modifier
-                        .size(displaySize)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .border(1.5.dp, Color(0xFF6B7280), CircleShape)
+                val path = Path().apply {
+                    moveTo(points.first().x, points.first().y)
+                    points.drop(1).forEach { lineTo(it.x, it.y) }
+                }
+                drawPath(path, Color.White, style = Stroke(sampleWidth, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+            DrawingTool.LASSO -> {
+                val path = Path().apply {
+                    moveTo(points.first().x, points.first().y)
+                    points.drop(1).forEach { lineTo(it.x, it.y) }
+                }
+                drawPath(
+                    path,
+                    Color(0xFF69489B),
+                    style = Stroke(
+                        width = sampleWidth.coerceAtMost(2.dp.toPx()),
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                            floatArrayOf(4.dp.toPx(), 3.dp.toPx())
+                        )
+                    )
                 )
+            }
+            DrawingTool.TEXT -> {
+                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    this.color = color.toArgb()
+                    textSize = size.height * 0.48f
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                drawContext.canvas.nativeCanvas.drawText("Aa", size.width / 2f, size.height * 0.68f, paint)
             }
             else -> {
-                Box(
-                    modifier = Modifier
-                        .size(displaySize)
-                        .clip(CircleShape)
-                        .background(color)
-                )
+                val path = Path().apply {
+                    moveTo(points.first().x, points.first().y)
+                    points.drop(1).forEach { lineTo(it.x, it.y) }
+                }
+                val width = if (tool == DrawingTool.BRUSH) sampleWidth * 1.8f else sampleWidth
+                drawPath(path, color.copy(alpha = if (tool == DrawingTool.BRUSH) 0.85f else 1f), style = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
         }
     }
@@ -1728,7 +1744,7 @@ private fun ColorSwatch(
                 .size(swatchSize)
                 .clip(CircleShape)
                 .background(color)
-                .border(if (selected) 3.dp else 1.dp, if (selected) Color(0xFF25283A) else Color(0xFFCEC8BF), CircleShape),
+                .border(if (selected) 3.dp else 1.dp, if (selected) StudioAccent else Color(0xFFCEC8BF), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             if (selected) Text("✓", color = if (color == Color.White) Color.Black else Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
@@ -2205,10 +2221,7 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
     path.lineTo(previousX, previousY)
     when (s.tool) {
         DrawingTool.WATERCOLOR -> {
-            // A broad translucent wash with irregular pigment blooms reads as a wet medium.
-            drawPath(path, s.color.copy(alpha = s.alpha * 0.24f), style = Stroke(s.strokeWidth * 1.7f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawPath(path, s.color.copy(alpha = s.alpha * 0.32f), style = Stroke(s.strokeWidth * 1.12f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawWatercolorBlooms(s)
+            WatercolorRenderer.draw(drawContext.canvas.nativeCanvas, s)
         }
         DrawingTool.CRAYON -> {
             CrayonRenderer.drawCrayonStroke(drawContext.canvas.nativeCanvas, s)
@@ -2243,49 +2256,5 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
             color = s.color.copy(alpha = s.alpha),
             style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
-    }
-}
-
-private fun DrawScope.drawWatercolorBlooms(stroke: DrawnStroke) {
-    val stride = (stroke.points.size / 32).coerceAtLeast(1)
-    stroke.points.indices.step(stride).forEach { index ->
-        val point = stroke.points[index]
-        val seed = stroke.id xor (index.toLong() * 31L)
-        
-        val randRadiusMult = 0.4f + ((seed ushr 12 and 15).toFloat() / 15f) * 1.8f
-        val offset = (((seed ushr 8) and 15).toFloat() - 7.5f) * stroke.strokeWidth * 0.12f
-        val baseRadius = stroke.strokeWidth * (0.22f + ((seed and 7).toFloat() * 0.025f))
-        val radius = (baseRadius * randRadiusMult).coerceAtLeast(1f)
-        
-        val randAlphaMult = 0.5f + ((seed ushr 16 and 15).toFloat() / 15f) * 1.0f
-        val alpha = (stroke.alpha * 0.24f * randAlphaMult).coerceIn(0f, 1f)
-        
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(stroke.color.copy(alpha = alpha), stroke.color.copy(alpha = 0f)),
-                center = Offset(point.x + offset, point.y - offset),
-                radius = radius
-            ),
-            radius = radius,
-            center = Offset(point.x + offset, point.y - offset)
-        )
-        
-        // Random stray droplets for more realistic liquid spatter
-        if ((seed and 3L) == 0L) {
-            val dropRadiusMult = 0.2f + ((seed ushr 20 and 7).toFloat() / 7f) * 1.5f
-            val dropOffset = (((seed ushr 24) and 15).toFloat() - 7.5f) * stroke.strokeWidth * 0.35f
-            val dropRadius = (stroke.strokeWidth * 0.06f * dropRadiusMult).coerceAtLeast(0.5f)
-            val dropAlpha = (stroke.alpha * 0.35f).coerceIn(0f, 1f)
-            
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(stroke.color.copy(alpha = dropAlpha), stroke.color.copy(alpha = 0f)),
-                    center = Offset(point.x - dropOffset, point.y + dropOffset),
-                    radius = dropRadius
-                ),
-                radius = dropRadius,
-                center = Offset(point.x - dropOffset, point.y + dropOffset)
-            )
-        }
     }
 }
