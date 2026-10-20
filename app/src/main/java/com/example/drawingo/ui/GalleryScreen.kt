@@ -189,10 +189,13 @@ fun GalleryScreen(
                 }
                 if (projects.isNotEmpty()) {
                     Text(
-                        text = "${projects.size} ${if (projects.size == 1) "piece" else "pieces"}",
+                        text = "${projects.size} ${if (projects.size == 1) "drawing" else "drawings"}",
                         color = StudioMuted,
                         style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(bottom = 5.dp)
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color.White)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                 }
             }
@@ -262,9 +265,9 @@ fun GalleryScreen(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 156.dp),
-                    contentPadding = PaddingValues(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 100.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 100.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(projects, key = { it.id }) { project ->
                         Card(
@@ -274,29 +277,33 @@ fun GalleryScreen(
                                     viewModel.loadProject(project.id)
                                     onNavigateToCanvas()
                                 },
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White),
                             border = BorderStroke(1.dp, Color(0xFFE8E4DC)),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 ProjectThumbnail(
                                     path = project.thumbnailPath,
                                     description = "Preview of ${project.name}"
                                 )
-                                Text(
-                                    text = project.name,
-                                    maxLines = 1,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = StudioInk,
-                                    modifier = Modifier.padding(start = 5.dp, top = 12.dp, end = 5.dp)
-                                )
-                                Text(
-                                    text = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(project.updatedAt)),
-                                    fontSize = 12.sp,
-                                    color = StudioMuted,
-                                    modifier = Modifier.padding(start = 5.dp, top = 4.dp, bottom = 5.dp)
-                                )
+                                Column(
+                                    modifier = Modifier.padding(start = 4.dp, top = 14.dp, end = 4.dp, bottom = 4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Text(
+                                        text = project.name,
+                                        maxLines = 1,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = StudioInk,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = "Edited ${SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(project.updatedAt))}",
+                                        fontSize = 12.sp,
+                                        color = StudioMuted
+                                    )
+                                }
                             }
                         }
                     }
@@ -319,15 +326,16 @@ private fun ProjectThumbnail(path: String?, description: String) {
             .fillMaxWidth()
             .aspectRatio(1.15f)
             .clip(RoundedCornerShape(13.dp))
-            .background(Color(0xFFF3F1ED))
+            .background(Color.White)
+            .padding(8.dp)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center
     ) {
         if (bitmap != null) {
             Image(
                 bitmap = bitmap!!.asImageBitmap(),
-                contentDescription = description,
-                contentScale = ContentScale.Crop,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize()
             )
         } else {

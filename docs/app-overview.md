@@ -24,9 +24,9 @@ Drawingo is a native Android drawing and animation app. Its direction is a calm,
 
 ### Projects, image input, and output
 
-- A projects gallery backed by a local Room database. Projects store drawing strokes, layer metadata, and an optional background image path.
+- A projects gallery backed by a local Room database. Drawings with content are automatically saved as editable projects after changes settle and when the app leaves the foreground; the latest saved project opens on the next launch, and the canvas shows save status. **Save editable project** is also available in the canvas action menu. Projects store strokes, layer metadata, and an optional background image path.
 - Start a blank drawing or create a drawing with a photo selected from the gallery or captured through the system camera app.
-- Save drawings as PNG or JPEG to device media storage.
+- Save flattened previews as PNG or JPEG to device media storage. These image exports are not editable; reopen the saved project from the gallery to continue drawing with its layers and strokes.
 - MP4/time-lapse encoding utilities are present in source, but no current UI path to invoke them was found.
 
 ### Other controls

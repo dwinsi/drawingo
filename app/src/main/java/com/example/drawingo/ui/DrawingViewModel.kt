@@ -16,8 +16,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
 import java.io.File
@@ -37,7 +46,15 @@ import android.net.Uri
  * tool selection, 2-finger Pan/Scroll & Pinch-Zoom, Undo/Redo,
  * drawing tools, canvas gestures, local projects, and on-device drawing effects.
  */
+@OptIn(FlowPreview::class)
 class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
+
+    enum class ProjectSaveStatus { SAVING, SAVED, FAILED }
+
+    private val projectSaveMutex = Mutex()
+    private var applicationContext: Context? = null
+    private var isLoadingProject = false
+    private var projectEditRevision = 0L
 
     val allProjects = drawingDao.getAllProjects().stateIn(
         viewModelScope,
@@ -47,6 +64,12 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     private val _currentProjectId = MutableStateFlow<Long?>(null)
     val currentProjectId: StateFlow<Long?> = _currentProjectId.asStateFlow()
+
+    private val _projectSaveStatus = MutableStateFlow(ProjectSaveStatus.SAVED)
+    val projectSaveStatus: StateFlow<ProjectSaveStatus> = _projectSaveStatus.asStateFlow()
+
+    private val _canvasReady = MutableStateFlow(false)
+    val canvasReady: StateFlow<Boolean> = _canvasReady.asStateFlow()
 
     private val defaultInitialLayer = com.example.drawingo.model.DrawingLayer(id = System.currentTimeMillis(), name = "Layer 1")
     private val _layers = MutableStateFlow<List<com.example.drawingo.model.DrawingLayer>>(listOf(defaultInitialLayer))
@@ -117,7 +140,13 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     }
 
     fun loadProject(projectId: Long) {
-        viewModelScope.launch {
+        viewModelScope.launch { loadProjectFromStorage(projectId) }
+    }
+
+    private suspend fun loadProjectFromStorage(projectId: Long) {
+        val wasLoadingProject = isLoadingProject
+        isLoadingProject = true
+        try {
             _currentProjectId.value = projectId
             val project = drawingDao.getProjectById(projectId)
             if (project != null) {
@@ -162,59 +191,68 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             _undoStack.value = emptyList()
             _redoStack.value = emptyList()
             updateUndoRedoStates()
+            _projectSaveStatus.value = ProjectSaveStatus.SAVED
+        } finally {
+            isLoadingProject = wasLoadingProject
         }
     }
 
-    fun saveCurrentProject(name: String, context: Context) {
+    fun saveCurrentProject(name: String, context: Context, onSaved: (() -> Unit)? = null) {
+        val revision = ++projectEditRevision
+        _projectSaveStatus.value = ProjectSaveStatus.SAVING
         viewModelScope.launch {
-            val projectId = _currentProjectId.value
-            val currentBgPath = _backgroundImagePath.value
-            val newId = if (projectId == null) {
-                // Insert new project
-                val project = DrawingProject(name = name, backgroundImagePath = currentBgPath)
-                drawingDao.insertProject(project)
-            } else {
-                val project = drawingDao.getProjectById(projectId) ?: return@launch
-                drawingDao.updateProject(project.copy(name = name, updatedAt = System.currentTimeMillis(), backgroundImagePath = currentBgPath))
-                projectId
+            try {
+                persistProject(name, context, onSaved)
+                if (revision == projectEditRevision) _projectSaveStatus.value = ProjectSaveStatus.SAVED
+            } catch (error: Exception) {
+                if (revision == projectEditRevision) _projectSaveStatus.value = ProjectSaveStatus.FAILED
+                android.util.Log.e("DrawingViewModel", "Project save failed", error)
             }
-            _currentProjectId.value = newId
-            
-            // Rebuild layers and strokes
-            drawingDao.deleteLayersForProject(newId)
-            drawingDao.deleteStrokesForProject(newId)
-            
+        }
+    }
+
+    private suspend fun persistProject(name: String?, context: Context?, onSaved: (() -> Unit)? = null) {
+        projectSaveMutex.withLock {
+            val existingProject = _currentProjectId.value?.let { drawingDao.getProjectById(it) }
+            val currentBgPath = _backgroundImagePath.value
+            val project = existingProject?.copy(
+                name = name ?: existingProject.name,
+                updatedAt = System.currentTimeMillis(),
+                backgroundImagePath = currentBgPath
+            ) ?: DrawingProject(name = name ?: "Untitled drawing", backgroundImagePath = currentBgPath)
+
             val layerEntities = _layers.value.mapIndexed { index, layer ->
                 com.example.drawingo.data.LayerEntity(
-                    projectId = newId,
+                    projectId = 0,
                     name = layer.name,
                     isVisible = layer.isVisible,
                     opacity = layer.opacity,
                     orderIndex = index
                 )
             }
-            
-            // Insert layers and get their new IDs
-            val newLayerIds = drawingDao.insertLayers(layerEntities)
-            
-            // Now associate strokes with these new Layer IDs and Frame Indices
-            val allStrokeEntities = mutableListOf<com.example.drawingo.data.StrokeEntity>()
+            val strokeEntities = mutableListOf<com.example.drawingo.data.StrokeEntity>()
             _layers.value.forEachIndexed { layerIndex, layer ->
-                val assignedLayerId = newLayerIds[layerIndex]
-                layer.frames.forEachIndexed { frameIdx, frame ->
+                layer.frames.forEachIndexed { frameIndex, frame ->
                     frame.strokes.forEachIndexed { strokeIndex, stroke ->
-                        allStrokeEntities.add(StrokeMapper.toEntity(stroke, newId, assignedLayerId, frameIdx, strokeIndex))
+                        strokeEntities.add(
+                            StrokeMapper.toEntity(stroke, 0, layerIndex.toLong(), frameIndex, strokeIndex)
+                        )
                     }
                 }
             }
-            drawingDao.insertStrokes(allStrokeEntities)
 
-            val thumbnailPath = createProjectThumbnail(context, newId)
-            if (thumbnailPath != null) {
-                drawingDao.getProjectById(newId)?.let { project ->
-                    drawingDao.updateProject(project.copy(thumbnailPath = thumbnailPath))
+            val newId = drawingDao.saveProjectContent(project, layerEntities, strokeEntities)
+            _currentProjectId.value = newId
+
+            if (context != null) {
+                val thumbnailPath = createProjectThumbnail(context, newId)
+                if (thumbnailPath != null) {
+                    drawingDao.getProjectById(newId)?.let { savedProject ->
+                        drawingDao.updateProject(savedProject.copy(thumbnailPath = thumbnailPath))
+                    }
                 }
             }
+            onSaved?.invoke()
         }
     }
 
@@ -306,6 +344,73 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     
     private val _backgroundImagePath = MutableStateFlow<String?>(null)
     val backgroundImagePath: StateFlow<String?> = _backgroundImagePath.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            isLoadingProject = true
+            try {
+                drawingDao.getMostRecentProject()?.let { loadProjectFromStorage(it.id) }
+            } catch (error: Exception) {
+                android.util.Log.e("DrawingViewModel", "Could not restore the latest project", error)
+            } finally {
+                isLoadingProject = false
+                _canvasReady.value = true
+            }
+        }
+
+        viewModelScope.launch {
+            combine(_layers, _backgroundImagePath) { layers, backgroundPath -> layers to backgroundPath }
+                .drop(1)
+                .filter { !isLoadingProject }
+                .onEach { (layers, backgroundPath) ->
+                    if (hasProjectContent(layers, backgroundPath)) {
+                        projectEditRevision += 1
+                        _projectSaveStatus.value = ProjectSaveStatus.SAVING
+                    }
+                }
+                .debounce(750)
+                .collect {
+                    if (isLoadingProject) return@collect
+                    if (hasProjectContent(_layers.value, _backgroundImagePath.value)) saveAutomatically()
+                }
+        }
+    }
+
+    private fun hasProjectContent(
+        layers: List<com.example.drawingo.model.DrawingLayer>,
+        backgroundPath: String?
+    ): Boolean {
+        val hasDrawing = layers.any { layer -> layer.frames.any { it.strokes.isNotEmpty() } }
+        return _currentProjectId.value != null || hasDrawing || backgroundPath != null || layers.size > 1
+    }
+
+    fun setApplicationContext(context: Context) {
+        applicationContext = context.applicationContext
+    }
+
+    /** Flush meaningful canvas work when the app leaves the foreground. */
+    fun saveAutomaticallyNow() {
+        val layers = _layers.value
+        val hasDrawing = layers.any { layer -> layer.frames.any { it.strokes.isNotEmpty() } }
+        if (_currentProjectId.value != null || hasDrawing || _backgroundImagePath.value != null || layers.size > 1) {
+            saveAutomatically()
+        }
+    }
+
+    private fun saveAutomatically() {
+        val context = applicationContext ?: return
+        val revision = projectEditRevision
+        _projectSaveStatus.value = ProjectSaveStatus.SAVING
+        viewModelScope.launch {
+            try {
+                persistProject(name = null, context = context)
+                if (revision == projectEditRevision) _projectSaveStatus.value = ProjectSaveStatus.SAVED
+            } catch (error: Exception) {
+                if (revision == projectEditRevision) _projectSaveStatus.value = ProjectSaveStatus.FAILED
+                android.util.Log.e("DrawingViewModel", "Automatic project save failed", error)
+            }
+        }
+    }
 
     private val _symmetryMode = MutableStateFlow(com.example.drawingo.model.SymmetryMode.NONE)
     val symmetryMode: StateFlow<com.example.drawingo.model.SymmetryMode> = _symmetryMode.asStateFlow()

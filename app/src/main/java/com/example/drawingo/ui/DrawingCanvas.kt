@@ -158,6 +158,7 @@ fun DrawingCanvas(
     val canUndo by viewModel.canUndo.collectAsState()
     val canRedo by viewModel.canRedo.collectAsState()
     val selectedEraserWidth by viewModel.selectedEraserWidth.collectAsState()
+    val canvasReady by viewModel.canvasReady.collectAsState()
 
     val canvasScale by viewModel.canvasScale.collectAsState()
     val canvasOffsetX by viewModel.canvasOffsetX.collectAsState()
@@ -386,6 +387,12 @@ fun DrawingCanvas(
                 onZenModeClick = { isZenMode = true },
                 onLayersClick = { showLayersMenu = true },
                 onPaperStyleClick = { showPaperStyleMenu = true },
+                onSaveEditableProject = {
+                    val projectName = "Drawing ${System.currentTimeMillis() % 1000}"
+                    viewModel.saveCurrentProject(projectName, context) {
+                        android.widget.Toast.makeText(context, "Editable project saved", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                },
                 onExportClick = { format -> 
                     val flatStrokes = layers.flatMap { layer -> layer.frames.getOrNull(currentFrameIndex)?.strokes ?: emptyList() }
                     val bitmap = CanvasBitmapUtils.createBitmapFromStrokes(flatStrokes, viewModel.screenWidth.toInt(), viewModel.screenHeight.toInt(), backgroundImagePath = backgroundImagePath)
@@ -659,6 +666,18 @@ fun DrawingCanvas(
             )
         }
 
+        if (!canvasReady) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White)
+                    .clickable { },
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = StudioAccent)
+            }
+        }
+
     }
 }
 
@@ -675,6 +694,7 @@ fun TopKeepBar(
     onZenModeClick: () -> Unit = {},
     onLayersClick: () -> Unit,
     onPaperStyleClick: () -> Unit,
+    onSaveEditableProject: () -> Unit = {},
     onExportClick: (String) -> Unit,
     onGalleryClick: () -> Unit,
     viewModel: DrawingViewModel,
@@ -683,6 +703,8 @@ fun TopKeepBar(
     var actionsExpanded by remember { mutableStateOf(false) }
     var showClearConfirmation by remember { mutableStateOf(false) }
     val symmetryMode by viewModel.symmetryMode.collectAsState()
+    val currentProjectId by viewModel.currentProjectId.collectAsState()
+    val saveStatus by viewModel.projectSaveStatus.collectAsState()
 
     Row(
         modifier = modifier
@@ -729,12 +751,54 @@ fun TopKeepBar(
                     onClick = { actionsExpanded = false; onPaperStyleClick() }
                 )
                 DropdownMenuItem(
+                    text = { Text("Save editable project") },
+                    leadingIcon = { Icon(Icons.Rounded.Save, contentDescription = null) },
+                    onClick = { actionsExpanded = false; onSaveEditableProject() }
+                )
+                DropdownMenuItem(
                     text = { Text("Save as PNG") },
                     onClick = { actionsExpanded = false; onExportClick("PNG") }
                 )
                 DropdownMenuItem(
                     text = { Text("Save as JPEG") },
                     onClick = { actionsExpanded = false; onExportClick("JPEG") }
+                )
+            }
+        }
+        if (currentProjectId != null || saveStatus != DrawingViewModel.ProjectSaveStatus.SAVED) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                when (saveStatus) {
+                    DrawingViewModel.ProjectSaveStatus.SAVING -> CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        color = StudioAccent,
+                        strokeWidth = 2.dp
+                    )
+                    DrawingViewModel.ProjectSaveStatus.SAVED -> Icon(
+                        Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = StudioAccent,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    DrawingViewModel.ProjectSaveStatus.FAILED -> Icon(
+                        Icons.Rounded.ErrorOutline,
+                        contentDescription = null,
+                        tint = Color(0xFFB3261E),
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                Text(
+                    text = when (saveStatus) {
+                        DrawingViewModel.ProjectSaveStatus.SAVING -> "Saving"
+                        DrawingViewModel.ProjectSaveStatus.SAVED -> "Saved"
+                        DrawingViewModel.ProjectSaveStatus.FAILED -> "Save failed"
+                    },
+                    color = if (saveStatus == DrawingViewModel.ProjectSaveStatus.FAILED) Color(0xFFB3261E) else StudioMutedText,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }

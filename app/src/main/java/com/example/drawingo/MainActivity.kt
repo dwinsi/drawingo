@@ -24,6 +24,7 @@ import com.example.drawingo.ui.GalleryScreen
 class MainActivity : ComponentActivity() {
 
     private lateinit var soundManager: SoundManager
+    private lateinit var drawingViewModel: DrawingViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +42,8 @@ class MainActivity : ComponentActivity() {
             }
         }
         val viewModel: DrawingViewModel by viewModels { factory }
+        drawingViewModel = viewModel
+        viewModel.setApplicationContext(applicationContext)
 
         soundManager = SoundManager(this)
         viewModel.soundManager = soundManager
@@ -72,6 +75,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStop() {
+        if (::drawingViewModel.isInitialized) {
+            drawingViewModel.saveAutomaticallyNow()
+        }
+        super.onStop()
     }
 
     override fun onDestroy() {
