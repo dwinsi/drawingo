@@ -1,6 +1,6 @@
 ---
 name: drawingo-coworker
-description: Use when planning, implementing, reviewing, or documenting a Drawingo product feature or a cross-cutting Android change. Align the work with Drawingo's adult recreational drawing direction, privacy principles, and shared Codex/Gemini workflow.
+description: Use when planning, implementing, reviewing, or documenting a Drawingo product feature or a cross-cutting Android change. Align the work with Drawingo's universal recreational drawing direction, local-first privacy principles, and shared Codex/Gemini workflow.
 ---
 
 # Drawingo coworker workflow

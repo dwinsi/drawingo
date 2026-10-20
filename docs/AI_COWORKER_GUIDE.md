@@ -14,7 +14,7 @@ The current creative core is a freehand drawing canvas with multiple media and a
 - Make tools feel distinct through their appearance and behavior, not only their names or icons.
 - Keep choices inviting and reversible. Avoid scores, streak pressure, competitive leaderboards, guilt-based reminders, and forced sharing.
 - Make sound, motion, prompts, and guided sessions optional, with accessible controls and reduced-motion support where relevant.
-- Ensure 100% on-device, secure experiences. Standardize on Google ML Kit for on-device AI; cloud video/image generation features are deprecated.
+- Ensure 100% on-device, secure experiences. Do not add network-dependent AI or upload drawings. Use Google ML Kit only when a concrete on-device AI feature needs it; the current local drawing effects do not require AI.
 - Keep the UI universally appealing. Ensure icons, typography, and colors are polished and elegant, rather than overly playful or emoji-heavy.
 
 ## Current implementation
@@ -22,10 +22,11 @@ The current creative core is a freehand drawing canvas with multiple media and a
 Read the source before relying on this list; the app is changing quickly and `docs/app-overview.md` may lag behind a recent feature change.
 
 - Native Android app written in Kotlin with Jetpack Compose and Material 3.
-- Drawing canvas with pen, marker, brush, eraser, lasso, watercolor, and crayon tools; color palette; size selection; undo/redo; pan and zoom.
-- Watercolor and crayon use separate stroke rendering on canvas and in the bitmap sent to the animation analysis flow.
-- Drawing animation is powered purely by local on-device ML Kit processing. Cloud backends and remote Veo/Gemini generation have been completely removed.
-- Interactions are logged to app-private local storage, respecting user privacy.
+- Drawing canvas with pen, brush, eraser, lasso, watercolor, crayon, and text tools; color palette and mixer; size selection; undo/redo; pan and zoom.
+- Watercolor and crayon use dedicated stroke rendering. Keep canvas and export rendering consistent when changing drawing tools.
+- Flipbook playback and Quick Magic effects are implemented locally. Do not describe these as ML Kit processing unless the current source actually invokes an on-device ML Kit API.
+- Legacy cloud code has not yet been removed: the Android source contains a cloud video client, a default Cloud Run URL, cloud settings, and a local request log viewer. No visible video-generation action was found in the current canvas UI. Treat this as a cleanup gap, not as supported product direction; do not expand or invoke these pathways. Remove them and validate network behavior before claiming that the app is strictly local-only.
+- Local interaction logging remains in source for the legacy network client and can include full request details, including encoded drawing content. Do not add payload logging to local drawing features. Remove the legacy logger with the cloud code.
 - The privacy policy is in `docs/privacy-policy.md` and is published from `site/`. Keep product behavior, data-flow documentation, and policy aligned.
 
 The overview in `docs/app-overview.md` currently describes the older tool set; update it when editing product documentation or when a task changes user-visible behavior.
@@ -54,8 +55,8 @@ If tools or earlier instructions conflict, follow the current user request and r
 
 ## Privacy and security rules
 
-- The app operates entirely locally. Do not embed external credentials or attempt network connections for generation.
-- Never add microphone, camera, location, account, analytics, ad, or social collection without a specific product request and a review of permissions, consent, retention, policy, and backend handling.
+- The product requirement is local-only processing. The current source still contains legacy network-generation code; do not use or extend it. Do not embed external credentials or add network connections for generation.
+- The app currently launches the system camera and photo picker for user-selected drawing backgrounds. Do not add in-app camera capture, microphone, location, account, analytics, ads, or social collection. Any change to system-mediated image selection still requires privacy-policy review.
 - Treat user drawings as private content.
 - Keep `docs/privacy-policy.md` accurate when data collection, network transfer, logging, or retention changes.
 

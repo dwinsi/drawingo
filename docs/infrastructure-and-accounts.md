@@ -1,162 +1,30 @@
-# Drawingo — Cloud Infrastructure & Accounts Documentation
+# Legacy cloud infrastructure notes
 
-This document records the Google Cloud Platform (GCP) configurations, service accounts, Workload Identity Federation (WIF) setup, and GitHub Actions CI/CD pipeline powering the Drawingo backend.
+> **Status: legacy / not part of the intended product architecture.** Drawingo's repository-level requirements prohibit cloud uploads and require local-first behavior. These notes describe infrastructure and source that remain in the repository; they do not confirm that any service, account, permission, or deployment is currently active. Do not deploy, enable, or grant access based on this document.
 
----
+## What remains in the repository
 
-## 1. Project Information
+- `functions/` contains a Node.js HTTP backend with drawing-analysis and Veo video-generation routes.
+- Android source contains `AdcBackendClient`, a default Cloud Run URL, settings for an optional cloud backend, and an app-private interaction logger.
+- `functions/index.js` gates video generation behind `ENABLE_VEO_GENERATION`; that source-level flag does not prove the deployed service is configured the same way.
+- The Android canvas currently exposes settings and API/cloud logs. No visible canvas action invoking the video-generation method was found during the source review.
 
-| Property | Value |
-| :--- | :--- |
-| **GCP Project ID** | `project-2154682a-9280-4a32-a72` |
-| **GCP Project Number** | `357002186662` |
-| **Primary Region** | `us-central1` |
-| **GitHub Repository** | `dwinsi/drawingo` (Branch: `main`) |
+These components conflict with the current product requirements and should be removed before a release is described as strictly local-only. This document is retained only as a migration/removal aid.
 
----
+## Historical deployment record
 
-## 2. Cloud Run Service (Production Backend)
+Older versions of this document recorded a Google Cloud project, a Cloud Run service, service accounts, Workload Identity Federation, and a GitHub Actions deployment workflow. Those values are intentionally not treated here as current operational facts. Before any account cleanup, access review, or resource deletion, an authorized project owner must inspect the Google Cloud Console, IAM policy, GitHub repository settings, and deployment history directly.
 
-The Drawingo backend runs on **Google Cloud Run** as a fully managed serverless container.
+No service-account credentials, API keys, or other secrets should be placed in the repository. Do not restore long-lived service-account keys to GitHub Actions; if a separately authorized infrastructure project is ever approved, use narrowly scoped federation and review IAM permissions first.
 
-- **Service Name:** `drawingo-backend`
-- **Live URL:** `https://drawingo-backend-357002186662.us-central1.run.app`
-- **Runtime Environment:** Node.js 20 (Express)
-- **Authentication:** ADC (Application Default Credentials) via Compute Service Account
-- **Memory / CPU:** 512 MiB / 1 vCPU
-- **Concurrency / Scaling:** Auto-scales from 0 instances (serverless cost optimization)
+## Local source inspection
 
-### Production Endpoints
+The legacy backend source is under `functions/`. The Android client and settings are under `app/src/main/java/com/example/drawingo/net/`, `AppPreferences.kt`, and `ui/AppSettingsDialog.kt`. This section is a repository map, not instructions to start or deploy the backend.
 
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/health` | `GET` | Service liveness and ADC status check |
-| `/analyzeDrawing` | `POST` | Classifies a submitted drawing for animation using Gemini |
-| `/generateVideo` | `POST` | Starts an opt-in Veo image-to-video operation; returns 503 unless `ENABLE_VEO_GENERATION=true` |
-| `/videoStatus` | `POST` | Polls an existing Veo operation and returns video bytes when complete; also gated by `ENABLE_VEO_GENERATION=true` |
+## Removal checklist
 
-The Android app no longer uses the former stock-sketch catalog or its Cloud Storage bucket. The bucket, if it still exists in the GCP project, is a legacy resource and is not modified by this code change.
-
-### AI Models & SDK
-- **SDK:** Google Gen AI SDK (`@google/genai@2.27.0`)
-- **Primary Model:** `gemini-2.5-flash` (Vertex AI / Enterprise mode)
-- **Fallback Model:** `gemini-2.5-pro`
-- **Video model:** `veo-3.1-lite-generate-001` (4-second, 720p, silent image-to-video; disabled by default)
-
-> Do not enable Veo on the current public Cloud Run service until the service has authentication, per-user rate limits, and spending controls. Veo uses a paid model and public, unauthenticated generation routes can be abused. Configure `ENABLE_VEO_GENERATION=true` only on a secured test backend.
-
----
-
-## 3. Service Accounts & IAM Roles
-
-### A. Cloud Run Runtime Service Account
-Runs the backend container in production and calls Vertex AI / Cloud TTS:
-- **Email:** `357002186662-compute@developer.gserviceaccount.com`
-- **Key IAM Roles:**
-  - `roles/aiplatform.user` — Access to Gemini 2.5 models on Vertex AI
-  - `roles/logging.logWriter` — Cloud Logging access
-  - `roles/storage.admin` — Cloud Storage access
-
-### B. CI/CD Deployment Service Account
-Used by GitHub Actions to build and deploy updates:
-- **Email:** `drawingo-cicd@project-2154682a-9280-4a32-a72.iam.gserviceaccount.com`
-- **Display Name:** `Drawingo GitHub Actions CI/CD`
-- **Key IAM Roles:**
-  - `roles/run.admin` — Deploy and manage Cloud Run revisions
-  - `roles/artifactregistry.writer` — Push build artifacts
-  - `roles/cloudbuild.builds.editor` — Execute Cloud Build for containerization
-  - `roles/storage.objectAdmin` — Stage source packages in Cloud Storage
-  - `roles/iam.serviceAccountUser` — Deploy service acting as the compute runtime SA
-  - `roles/iam.workloadIdentityUser` — Impersonated by GitHub Actions via OIDC token
-
----
-
-## 4. Workload Identity Federation (Keyless GitHub Actions Auth)
-
-To ensure maximum security and avoid long-lived JSON service account keys, GitHub Actions authenticates using **Workload Identity Federation (OIDC)**:
-
-- **Workload Identity Pool:**
-  `projects/357002186662/locations/global/workloadIdentityPools/github-pool`
-- **Identity Provider:**
-  `projects/357002186662/locations/global/workloadIdentityPools/github-pool/providers/github-provider`
-- **OIDC Issuer:** `https://token.actions.githubusercontent.com`
-- **Attribute Condition:**
-  `assertion.repository == 'dwinsi/Agentic-Cinema' || assertion.repository == 'dwinsi/drawingo'`
-- **Principal Set Bound:**
-  `principalSet://iam.googleapis.com/projects/357002186662/locations/global/workloadIdentityPools/github-pool/attribute.repository/dwinsi/drawingo`
-
-> **Note:** Because WIF is bound directly to the `dwinsi/drawingo` repository, developers do **not** need to manually generate or paste any secret keys into GitHub Secrets.
-
----
-
-## 5. GitHub Actions Pipeline
-
-- **Workflow File:** `.github/workflows/backend-ci-cd.yml`
-- **Trigger Conditions:**
-  - Push to `main` modifying files in `functions/**`
-  - Pull request targeting `main` modifying `functions/**`
-  - Manual trigger via GitHub Actions UI (`workflow_dispatch`)
-
-### Workflow Stages:
-1. **`test-and-build`:** Sets up Node.js 20, installs dependencies with `npm ci`, and validates code syntax with `npm test`.
-2. **`deploy-cloud-run`:** Authenticates to Google Cloud via WIF, deploys to Cloud Run with `gcloud run deploy`, and pings `/health` to verify live status.
-
----
-
-## 6. Local Development & Useful Commands
-
-### Local Server
-Run backend locally on `http://localhost:8080`:
-```bash
-cd functions
-npm install
-npm start
-```
-
-### ADB Reverse for Android Testing (Physical Device over USB)
-```bash
-adb reverse tcp:8080 tcp:8080
-```
-
-### Manual Cloud Deployment
-```bash
-cd functions
-./deploy.sh
-```
-
-### View Live Logs in Cloud Run
-```bash
-gcloud beta run services logs read drawingo-backend \
-  --project=project-2154682a-9280-4a32-a72 \
-  --region=us-central1 \
-  --limit=50
-```
-
-### Quick Verification via cURL
-```bash
-# Health Check
-curl -s https://drawingo-backend-357002186662.us-central1.run.app/health
-
-# Drawing Analysis
-curl -s -X POST https://drawingo-backend-357002186662.us-central1.run.app/analyzeDrawing \
-  -H "Content-Type: application/json" \
-  -d '{"imageBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "mimeType": "image/png"}'
-```
-
----
-
-## 7. How the Android App Connects to the Cloud Backend
-
-The Android app communicates with the Cloud Run backend automatically via `AdcBackendClient.kt`:
-
-1. **Optional Cloud Processing:**
-   - Cloud drawing analysis is disabled by default and can be enabled in app Settings. The app uses a configured HTTPS backend URL, or the production Cloud Run endpoint when no custom URL is set.
-   - If cloud analysis is disabled or unavailable, the app uses a local animation preview. There is no direct Gemini SDK or API key in the Android app.
-   - When cloud analysis is enabled, the drawing is sent to the backend and forwarded to Gemini for scene classification and a short subject label.
-
-2. **Network Security & Timeouts:**
-   - Backend requests are sent over HTTPS (`android.permission.INTERNET`); manifest cleartext traffic is disabled. Configured backend URLs are validated as HTTPS.
-   - Timeouts are set to **10s connect / 15s read** to gracefully handle serverless container cold starts and multimodal AI inference.
-
-3. **Backend URL:**
-   - The app's Settings screen allows an HTTPS backend URL override for development or deployment configuration.
+1. Remove the Android network client, cloud-AI preferences and settings UI, cloud logging screen/logger, and any manifest network permission that is no longer needed.
+2. Remove backend routes and deployment automation if no approved product use remains.
+3. Search the full repository for backend URLs, Gemini/Veo references, service-account identifiers, and cloud deployment workflows.
+4. Verify the built app has no unexpected network behavior and update the privacy policy only after reviewing the resulting release build.
+5. Have the project owner independently verify and clean up any remote cloud resources or IAM grants. Repository changes do not remove remote resources.
