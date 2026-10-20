@@ -1,35 +1,34 @@
 package com.example.drawingo.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 
-// ==========================================
-// Drawingo Elegant Universal Palette
-// ==========================================
-
-// Obsidian Gold & Midnight Indigo Theme
+// Base colors used by the studio's dark Material theme.
 val ObsidianBlack = Color(0xFF0A0A0C)
 val MidnightIndigo = Color(0xFF16182B)
-val IndigoGloss = Color(0xFF23253F)
-val SoftIndigo = Color(0xFF35395E)
-
-val LuxGold = Color(0xFFFFD700)
-val GoldVariant = Color(0xFFC5A000)
-val SoftGold = Color(0xFFFFF2B2)
 
 val CloudWhite = Color(0xFFFFFFFF)
-val MilkyGlass = Color(0x33FFFFFF)
-val MutedSlate = Color(0xFF8E919C)
 
-// Shared surfaces and accents for the drawing studio controls.
-val StudioSurface = Color(0xFFFCFBF8)
-val StudioOutline = Color(0xFFE8E2D9)
-val StudioText = Color(0xFF343849)
-val StudioMutedText = Color(0xFF72747B)
-val StudioControl = Color(0xFFF1F0ED)
+// Shared studio tokens follow the active Material theme. The drawing surface itself
+// remains controlled by the selected paper style.
+@get:Composable
+val StudioSurface: Color get() = MaterialTheme.colorScheme.surface
+@get:Composable
+val StudioOutline: Color get() = MaterialTheme.colorScheme.outlineVariant
+@get:Composable
+val StudioText: Color get() = MaterialTheme.colorScheme.onSurface
+@get:Composable
+val StudioMutedText: Color get() = MaterialTheme.colorScheme.onSurfaceVariant
+@get:Composable
+val StudioControl: Color get() = MaterialTheme.colorScheme.surfaceVariant
 val StudioAccent = Color(0xFF69489B)
-val StudioAccentSoft = Color(0xFFE9E1F2)
+@get:Composable
+val StudioAccentUi: Color get() = MaterialTheme.colorScheme.primary
+@get:Composable
+val StudioAccentSoft: Color get() = MaterialTheme.colorScheme.primaryContainer
 
 // Material theme aliases for the shared studio palette.
 val PrimaryDrawingo = StudioAccent
-val SecondaryDrawingo = StudioText
-val TertiaryDrawingo = StudioMutedText
+val SecondaryDrawingo = Color(0xFF343849)
+val TertiaryDrawingo = Color(0xFF72747B)

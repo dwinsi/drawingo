@@ -7,6 +7,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -16,6 +20,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.drawingo.audio.SoundManager
 import com.example.drawingo.data.DrawingDatabase
 import com.example.drawingo.theme.DrawingoTheme
+import com.example.drawingo.theme.DrawingoThemeMode
 import com.example.drawingo.ui.DrawingCanvas
 import com.example.drawingo.ui.DrawingViewModel
 import com.example.drawingo.ui.GalleryScreen
@@ -50,7 +55,18 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            DrawingoTheme {
+            val preferences = remember {
+                getSharedPreferences("drawingo_preferences", MODE_PRIVATE)
+            }
+            var themeMode by remember {
+                mutableStateOf(
+                    preferences.getString("theme_mode", DrawingoThemeMode.SYSTEM.name)
+                        ?.let { runCatching { DrawingoThemeMode.valueOf(it) }.getOrNull() }
+                        ?: DrawingoThemeMode.SYSTEM
+                )
+            }
+
+            DrawingoTheme(themeMode = themeMode) {
                 val navController = rememberNavController()
                 
                 NavHost(navController = navController, startDestination = "canvas") {
@@ -61,7 +77,12 @@ class MainActivity : ComponentActivity() {
                                 viewModel.saveCurrentProject("Drawing ${System.currentTimeMillis() % 1000}", this@MainActivity)
                                 navController.navigate("gallery")
                             },
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            themeMode = themeMode,
+                            onThemeModeChange = { mode ->
+                                themeMode = mode
+                                preferences.edit().putString("theme_mode", mode.name).apply()
+                            }
                         )
                     }
                     composable("gallery") {

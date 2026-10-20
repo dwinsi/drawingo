@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.window.Dialog
-import com.example.drawingo.theme.StudioAccent
+import com.example.drawingo.theme.StudioAccentUi
 import com.example.drawingo.theme.StudioControl
 import com.example.drawingo.theme.StudioMutedText
 import com.example.drawingo.theme.StudioOutline
@@ -134,7 +134,7 @@ fun ColorMixerDialog(
                     Button(
                         onClick = { onColorMixed(hexColor ?: Color(red, green, blue)) },
                         enabled = hexInput.isBlank() || hexColor != null,
-                        colors = ButtonDefaults.buttonColors(containerColor = StudioAccent)
+                        colors = ButtonDefaults.buttonColors(containerColor = StudioAccentUi)
                     ) { Text("Apply") }
                 }
             }
@@ -168,8 +168,8 @@ private fun ColorSlider(label: String, value: Float, onValueChange: (Float) -> U
             onValueChange = onValueChange,
             valueRange = 0f..1f,
             colors = SliderDefaults.colors(
-                thumbColor = StudioAccent,
-                activeTrackColor = StudioAccent.copy(alpha = 0.72f),
+                thumbColor = StudioAccentUi,
+                activeTrackColor = StudioAccentUi.copy(alpha = 0.72f),
                 inactiveTrackColor = StudioControl
             )
         )

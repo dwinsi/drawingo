@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Casino
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Flare
 import androidx.compose.material.icons.rounded.Favorite
@@ -63,7 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import com.example.drawingo.ui.DrawingViewModel.QuickMagicPreset
-import com.example.drawingo.theme.StudioAccent
+import com.example.drawingo.theme.StudioAccentUi
 import com.example.drawingo.theme.StudioAccentSoft
 import com.example.drawingo.theme.StudioMutedText
 import com.example.drawingo.theme.StudioOutline
@@ -100,7 +101,7 @@ fun AnimationBottomDock(
     Column(
         modifier = modifier
             .padding(horizontal = 10.dp, vertical = 6.dp)
-            .border(1.dp, Color(0xFFE8E2D9), RoundedCornerShape(26.dp))
+            .border(1.dp, StudioOutline, RoundedCornerShape(26.dp))
             .clip(RoundedCornerShape(26.dp))
             .background(ToolDockBackgroundColor)
             .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -139,7 +140,7 @@ fun AnimationBottomDock(
                     Icon(
                         imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = null,
-                        tint = StudioAccent,
+                        tint = StudioAccentUi,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -157,7 +158,7 @@ fun AnimationBottomDock(
                     Icon(
                         imageVector = Icons.Rounded.Layers,
                         contentDescription = null,
-                        tint = if (onionSkinEnabled) StudioAccent else StudioMutedText,
+                        tint = if (onionSkinEnabled) StudioAccentUi else StudioMutedText,
                         modifier = Modifier.size(21.dp)
                     )
                 }
@@ -175,11 +176,11 @@ fun AnimationBottomDock(
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(if (isSelected) StudioAccentSoft else StudioSurface)
-                                .border(2.dp, if (isSelected) StudioAccent else StudioOutline, RoundedCornerShape(8.dp))
+                                .border(2.dp, if (isSelected) StudioAccentUi else StudioOutline, RoundedCornerShape(8.dp))
                                 .clickable { onFrameSelect(index) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("${index + 1}", fontWeight = FontWeight.Bold, color = if (isSelected) StudioAccent else StudioText)
+                            Text("${index + 1}", fontWeight = FontWeight.Bold, color = if (isSelected) StudioAccentUi else StudioText)
                         }
                     }
                     
@@ -210,6 +211,25 @@ fun AnimationBottomDock(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Rounded.ContentCopy, contentDescription = null, tint = StudioText)
+                        }
+                    }
+
+                    item {
+                        val canDeleteFrame = frameCount > 1
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(DockIconBackground)
+                                .clickable(enabled = canDeleteFrame) { onDeleteFrame(currentFrameIndex) }
+                                .semantics { contentDescription = "Delete current frame" },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Rounded.DeleteOutline,
+                                contentDescription = null,
+                                tint = if (canDeleteFrame) StudioMutedText else StudioMutedText.copy(alpha = 0.45f)
+                            )
                         }
                     }
                 }
@@ -257,7 +277,7 @@ fun AnimationBottomDock(
                     Icon(
                         imageVector = if (isReplayPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         contentDescription = null,
-                        tint = StudioAccent,
+                        tint = StudioAccentUi,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -345,12 +365,12 @@ private fun PresetButton(label: String, icon: ImageVector, selected: Boolean, on
                 .background(if (selected) StudioAccentSoft else DockIconBackground),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = if (selected) StudioAccent else StudioText, modifier = Modifier.size(24.dp))
+            Icon(icon, contentDescription = null, tint = if (selected) StudioAccentUi else StudioText, modifier = Modifier.size(24.dp))
         }
         Text(
             label,
             fontWeight = FontWeight.Bold,
-            color = if (selected) StudioAccent else StudioText,
+            color = if (selected) StudioAccentUi else StudioText,
             fontSize = 12.sp
         )
     }

@@ -64,14 +64,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RadioButton
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,6 +94,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -133,25 +138,36 @@ import com.example.drawingo.util.CrayonRenderer
 import com.example.drawingo.util.WatercolorRenderer
 import com.example.drawingo.theme.StudioAccent
 import com.example.drawingo.theme.StudioAccentSoft
+import com.example.drawingo.theme.StudioAccentUi
+import com.example.drawingo.theme.DrawingoThemeMode
 import com.example.drawingo.theme.StudioControl
 import com.example.drawingo.theme.StudioMutedText
 import com.example.drawingo.theme.StudioOutline
 import com.example.drawingo.theme.StudioSurface
 import com.example.drawingo.theme.StudioText
 
-val ToolDockBackgroundColor = StudioSurface
-val DockIconBackground = StudioControl
-val ActiveToolHighlight = StudioAccentSoft
+@get:Composable
+val ToolDockBackgroundColor: Color get() = StudioSurface
+@get:Composable
+val DockIconBackground: Color get() = StudioControl
+@get:Composable
+val ActiveToolHighlight: Color get() = StudioAccentSoft
 val DockShadow = Color(0x33000000)
 
 @Composable
 fun DrawingCanvas(
     viewModel: DrawingViewModel,
     onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    themeMode: DrawingoThemeMode = DrawingoThemeMode.SYSTEM,
+    onThemeModeChange: (DrawingoThemeMode) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val caddyPreferences = remember {
+        context.getSharedPreferences("drawingo_preferences", android.content.Context.MODE_PRIVATE)
+    }
     val selectedTool by viewModel.selectedTool.collectAsState()
+    val recentTools by viewModel.recentTools.collectAsState()
     val selectedColor by viewModel.selectedColor.collectAsState()
     val selectedStrokeWidth by viewModel.selectedStrokeWidth.collectAsState()
     val selectedPaperStyle by viewModel.selectedPaperStyle.collectAsState()
@@ -175,6 +191,21 @@ fun DrawingCanvas(
     )
 
     var isToolDrawerExpanded by remember { mutableStateOf(false) }
+    var toolDockHeightPx by remember { mutableIntStateOf(0) }
+    var canvasBoundsPx by remember { mutableStateOf(IntSize.Zero) }
+    var toolCaddySizePx by remember { mutableStateOf(IntSize.Zero) }
+    var toolCaddyOffsetXDp by remember {
+        mutableFloatStateOf(caddyPreferences.getFloat("tool_caddy_offset_x_dp", 0f))
+    }
+    var toolCaddyOffsetYDp by remember {
+        mutableFloatStateOf(caddyPreferences.getFloat("tool_caddy_offset_y_dp", 0f))
+    }
+    var toolCaddyOnLeft by remember {
+        mutableStateOf(
+            caddyPreferences.getBoolean("tool_caddy_on_left", false)
+        )
+    }
+    var isToolCaddyExpanded by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(isDrawing) {
@@ -245,6 +276,7 @@ fun DrawingCanvas(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .onSizeChanged { canvasBoundsPx = it }
         .background(Color.White)
     ) {
         // Main Interactive Canvas & Animation Scene
@@ -283,7 +315,7 @@ fun DrawingCanvas(
                                         viewModel.onPointerMove(pointerId, position, pressure)
                                         change.consume()
                                     } else if (change.changedToUp()) {
-                                        viewModel.onPointerUp(pointerId)
+                                        viewModel.onPointerUp(pointerId, position)
                                         change.consume()
                                     }
                                 }
@@ -401,7 +433,20 @@ fun DrawingCanvas(
                 },
                 onGalleryClick = onNavigateBack,
                 viewModel = viewModel,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                themeMode = themeMode,
+                onThemeModeChange = onThemeModeChange,
+                toolCaddyOnLeft = toolCaddyOnLeft,
+                onToggleToolCaddySide = {
+                    toolCaddyOnLeft = !toolCaddyOnLeft
+                    toolCaddyOffsetXDp = 0f
+                    toolCaddyOffsetYDp = 0f
+                    caddyPreferences.edit()
+                        .putBoolean("tool_caddy_on_left", toolCaddyOnLeft)
+                        .putFloat("tool_caddy_offset_x_dp", 0f)
+                        .putFloat("tool_caddy_offset_y_dp", 0f)
+                        .apply()
+                }
             )
         }
         
@@ -422,6 +467,61 @@ fun DrawingCanvas(
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .onSizeChanged { toolDockHeightPx = it.height }
+                    .graphicsLayer { alpha = controlsAlpha }
+            )
+        }
+
+        if ((isZenMode || !showAnimationDock) && toolDockHeightPx > 0 && recentTools.isNotEmpty()) {
+            val density = LocalDensity.current.density
+            val toolDockHeight = toolDockHeightPx / density
+            val caddyWidth = toolCaddySizePx.width / density
+            val caddyHeight = toolCaddySizePx.height / density
+            val canvasWidth = canvasBoundsPx.width / density
+            val canvasHeight = canvasBoundsPx.height / density
+            val baseX = if (toolCaddyOnLeft) 20f else canvasWidth - caddyWidth - 20f
+            val baseY = canvasHeight - toolDockHeight - caddyHeight - 12f
+            val minX = 12f
+            val maxX = (canvasWidth - caddyWidth - 12f).coerceAtLeast(minX)
+            val minY = 48f
+            val maxY = (canvasHeight - toolDockHeight - caddyHeight - 12f).coerceAtLeast(minY)
+            val caddyX = (baseX + toolCaddyOffsetXDp).coerceIn(minX, maxX)
+            val caddyY = (baseY + toolCaddyOffsetYDp).coerceIn(minY, maxY)
+            val effectiveOffsetX = caddyX - baseX
+            val effectiveOffsetY = caddyY - baseY
+            RecentToolCaddy(
+                tools = recentTools,
+                selectedTool = selectedTool,
+                isExpanded = isToolCaddyExpanded,
+                onToggleExpanded = { isToolCaddyExpanded = !isToolCaddyExpanded },
+                onToolSelected = {
+                    viewModel.setTool(it)
+                    isToolCaddyExpanded = false
+                },
+                isOnLeft = toolCaddyOnLeft,
+                onDrag = { dragAmount ->
+                    val nextX = (caddyX + dragAmount.x / density).coerceIn(minX, maxX)
+                    val nextY = (caddyY + dragAmount.y / density).coerceIn(minY, maxY)
+                    toolCaddyOffsetXDp = nextX - baseX
+                    toolCaddyOffsetYDp = nextY - baseY
+                },
+                onDragFinished = {
+                    caddyPreferences.edit()
+                        .putFloat("tool_caddy_offset_x_dp", toolCaddyOffsetXDp)
+                        .putFloat("tool_caddy_offset_y_dp", toolCaddyOffsetYDp)
+                        .apply()
+                },
+                modifier = Modifier
+                    .align(if (toolCaddyOnLeft) Alignment.BottomStart else Alignment.BottomEnd)
+                    .offset(
+                        x = effectiveOffsetX.dp,
+                        y = -(toolDockHeight.dp + 12.dp) + effectiveOffsetY.dp
+                    )
+                    .padding(
+                        start = if (toolCaddyOnLeft) 20.dp else 0.dp,
+                        end = if (toolCaddyOnLeft) 0.dp else 20.dp
+                    )
+                    .onSizeChanged { toolCaddySizePx = it }
                     .graphicsLayer { alpha = controlsAlpha }
             )
         }
@@ -486,7 +586,7 @@ fun DrawingCanvas(
                     Icon(
                         Icons.Rounded.CenterFocusWeak,
                         contentDescription = "Exit Focus Mode",
-                        tint = StudioAccent,
+                        tint = StudioAccentUi,
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
@@ -510,9 +610,9 @@ fun DrawingCanvas(
                             viewModel.clearCanvas()
                             showClearConfirmDialog = false
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = StudioAccent)
+                        colors = ButtonDefaults.buttonColors(containerColor = StudioAccentUi)
                     ) {
-                        Text("Clear", color = Color.White)
+                        Text("Clear", color = MaterialTheme.colorScheme.onPrimary)
                     }
                 },
                 dismissButton = {
@@ -644,7 +744,7 @@ fun DrawingCanvas(
                                     Text(
                                         name,
                                         fontWeight = if (style == selectedPaperStyle) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (style == selectedPaperStyle) StudioAccent else StudioText
+                                        color = if (style == selectedPaperStyle) StudioAccentUi else StudioText
                                     )
                                 }
                             }
@@ -699,10 +799,15 @@ fun TopKeepBar(
     onExportClick: (String) -> Unit,
     onGalleryClick: () -> Unit,
     viewModel: DrawingViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    themeMode: DrawingoThemeMode = DrawingoThemeMode.SYSTEM,
+    onThemeModeChange: (DrawingoThemeMode) -> Unit = {},
+    toolCaddyOnLeft: Boolean = false,
+    onToggleToolCaddySide: () -> Unit = {}
 ) {
     var actionsExpanded by remember { mutableStateOf(false) }
     var showClearConfirmation by remember { mutableStateOf(false) }
+    var showAppearanceDialog by remember { mutableStateOf(false) }
     val symmetryMode by viewModel.symmetryMode.collectAsState()
     val currentProjectId by viewModel.currentProjectId.collectAsState()
     val saveStatus by viewModel.projectSaveStatus.collectAsState()
@@ -752,6 +857,21 @@ fun TopKeepBar(
                     onClick = { actionsExpanded = false; onPaperStyleClick() }
                 )
                 DropdownMenuItem(
+                    text = { Text("Appearance: ${themeMode.label}") },
+                    onClick = {
+                        actionsExpanded = false
+                        showAppearanceDialog = true
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Move tool caddy to ${if (toolCaddyOnLeft) "right" else "left"}") },
+                    leadingIcon = { Icon(Icons.Rounded.SwapHoriz, contentDescription = null) },
+                    onClick = {
+                        actionsExpanded = false
+                        onToggleToolCaddySide()
+                    }
+                )
+                DropdownMenuItem(
                     text = { Text("Save editable project") },
                     leadingIcon = { Icon(Icons.Rounded.Save, contentDescription = null) },
                     onClick = { actionsExpanded = false; onSaveEditableProject() }
@@ -775,13 +895,13 @@ fun TopKeepBar(
                 when (saveStatus) {
                     DrawingViewModel.ProjectSaveStatus.SAVING -> CircularProgressIndicator(
                         modifier = Modifier.size(14.dp),
-                        color = StudioAccent,
+                        color = StudioAccentUi,
                         strokeWidth = 2.dp
                     )
                     DrawingViewModel.ProjectSaveStatus.SAVED -> Icon(
                         Icons.Rounded.Check,
                         contentDescription = null,
-                        tint = StudioAccent,
+                        tint = StudioAccentUi,
                         modifier = Modifier.size(15.dp)
                     )
                     DrawingViewModel.ProjectSaveStatus.FAILED -> Icon(
@@ -803,6 +923,47 @@ fun TopKeepBar(
                 )
             }
         }
+    }
+
+    if (showAppearanceDialog) {
+        AlertDialog(
+            onDismissRequest = { showAppearanceDialog = false },
+            title = { Text("Appearance") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    DrawingoThemeMode.values().forEach { mode ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    onThemeModeChange(mode)
+                                    showAppearanceDialog = false
+                                }
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = themeMode == mode,
+                                onClick = {
+                                    onThemeModeChange(mode)
+                                    showAppearanceDialog = false
+                                }
+                            )
+                            Text(mode.label, color = StudioText)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAppearanceDialog = false }) {
+                    Text("Close")
+                }
+            },
+            containerColor = StudioSurface,
+            titleContentColor = StudioText,
+            textContentColor = StudioText
+        )
     }
 
     if (showClearConfirmation) {
@@ -849,8 +1010,8 @@ fun TopKeepBar(
                             },
                             shape = CircleShape,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = StudioAccent,
-                                contentColor = Color.White
+                                containerColor = StudioAccentUi,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
                             ),
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                         ) { Text("Clear drawing", fontWeight = FontWeight.Bold) }
@@ -874,7 +1035,7 @@ private fun CompactAction(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(when { selected -> StudioAccentSoft; enabled -> StudioControl; else -> Color(0xFFE6E3DE) })
+            .background(when { selected -> StudioAccentSoft; enabled -> StudioControl; else -> StudioControl.copy(alpha = 0.6f) })
             .clickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center
@@ -882,7 +1043,7 @@ private fun CompactAction(
         Icon(
             icon,
             contentDescription = null,
-            tint = when { selected -> StudioAccent; enabled -> StudioText; else -> StudioMutedText },
+            tint = when { selected -> StudioAccentUi; enabled -> StudioText; else -> StudioMutedText },
             modifier = Modifier.size(20.dp)
         )
     }
@@ -979,7 +1140,7 @@ private fun EraserPopoverCard(
                         modifier = Modifier
                             .size((selectedEraserWidth * 0.28f).coerceIn(8f, 38f).dp)
                             .clip(CircleShape)
-                            .border(1.5.dp, StudioAccent, CircleShape)
+                            .border(1.5.dp, StudioAccentUi, CircleShape)
                             .background(Color(0x1E000000))
                     )
                 }
@@ -1012,7 +1173,7 @@ private fun EraserPopoverCard(
                             label,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) StudioAccent else StudioText
+                            color = if (isSelected) StudioAccentUi else StudioText
                         )
                     }
                 }
@@ -1127,6 +1288,140 @@ fun LiveStrokePreview(
 }
 
 @Composable
+private fun RecentToolCaddy(
+    tools: List<DrawingTool>,
+    selectedTool: DrawingTool,
+    isExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onToolSelected: (DrawingTool) -> Unit,
+    isOnLeft: Boolean,
+    onDrag: (Offset) -> Unit,
+    onDragFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    val currentOnDragFinished by rememberUpdatedState(onDragFinished)
+    val dragModifier = Modifier.pointerInput(Unit) {
+        detectDragGestures(
+            onDragEnd = { currentOnDragFinished() },
+            onDragCancel = { currentOnDragFinished() },
+            onDrag = { change, dragAmount ->
+                change.consume()
+                currentOnDrag(dragAmount)
+            }
+        )
+    }
+    Box(modifier = modifier.width(68.dp).height(228.dp), contentAlignment = Alignment.Center) {
+        if (isExpanded) {
+            Surface(
+                modifier = Modifier.shadow(8.dp, RoundedCornerShape(28.dp)),
+                shape = RoundedCornerShape(28.dp),
+                color = StudioSurface,
+                border = BorderStroke(1.dp, StudioOutline)
+            ) {
+                Column(
+                    modifier = Modifier.padding(5.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.size(48.dp, 28.dp).then(dragModifier)
+                            .semantics { contentDescription = "Drag tool caddy" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Rounded.DragHandle, contentDescription = null,
+                            tint = StudioMutedText, modifier = Modifier.size(20.dp))
+                    }
+                    tools.take(3).forEach { tool ->
+                val selected = selectedTool == tool
+                val icon = when (tool) {
+                    DrawingTool.PEN -> Icons.Rounded.Edit
+                    DrawingTool.BRUSH -> Icons.Rounded.Brush
+                    DrawingTool.WATERCOLOR -> Icons.Rounded.WaterDrop
+                    DrawingTool.CRAYON -> Icons.Rounded.Draw
+                    DrawingTool.FILL -> Icons.Rounded.FormatColorFill
+                    DrawingTool.ERASER -> Icons.Rounded.AutoFixOff
+                    DrawingTool.TEXT -> Icons.Rounded.TextFields
+                    DrawingTool.LASSO -> Icons.Rounded.SelectAll
+                }
+                val label = when (tool) {
+                    DrawingTool.PEN -> "Pen"
+                    DrawingTool.BRUSH -> "Brush"
+                    DrawingTool.WATERCOLOR -> "Watercolor"
+                    DrawingTool.CRAYON -> "Crayon"
+                    DrawingTool.FILL -> "Fill"
+                    DrawingTool.ERASER -> "Eraser"
+                    DrawingTool.TEXT -> "Text"
+                    DrawingTool.LASSO -> "Select"
+                }
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(if (selected) StudioAccentSoft else StudioControl)
+                        .border(
+                            width = if (selected) 1.5.dp else 1.dp,
+                            color = if (selected) StudioAccentUi else StudioOutline,
+                            shape = CircleShape
+                        )
+                        .clickable { onToolSelected(tool) }
+                        .semantics {
+                            contentDescription = if (selected) "$label tool, selected" else "$label tool"
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (selected) StudioAccentUi else StudioText,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                    }
+                    Box(
+                        modifier = Modifier.size(48.dp, 28.dp).clip(CircleShape)
+                            .clickable(onClick = onToggleExpanded)
+                            .semantics { contentDescription = "Hide recent tools" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isOnLeft) Icons.Rounded.ChevronLeft else Icons.Rounded.ChevronRight,
+                            contentDescription = null,
+                            tint = StudioMutedText,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+            }
+        } else {
+            Surface(
+                modifier = Modifier
+                    .align(if (isOnLeft) Alignment.CenterStart else Alignment.CenterEnd)
+                    .size(width = 24.dp, height = 64.dp)
+                    .shadow(8.dp, RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(StudioSurface)
+                    .border(1.dp, StudioOutline, RoundedCornerShape(16.dp))
+                    .clickable(onClick = onToggleExpanded)
+                    .then(dragModifier)
+                    .semantics { contentDescription = "Show recent tools; drag to move" },
+                color = StudioSurface,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (isOnLeft) Icons.Rounded.ChevronRight else Icons.Rounded.ChevronLeft,
+                        contentDescription = null,
+                        tint = StudioMutedText,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun StudioToolDock(
     selectedTool: DrawingTool,
     selectedStrokeWidth: Float,
@@ -1212,7 +1507,7 @@ private fun StudioToolDock(
                                     .background(if (selected) StudioAccentSoft else StudioControl)
                                     .border(
                                         width = 1.dp,
-                                        color = if (selected) StudioAccent.copy(alpha = 0.55f) else StudioOutline,
+                                        color = if (selected) StudioAccentUi.copy(alpha = 0.55f) else StudioOutline,
                                         shape = RoundedCornerShape(12.dp)
                                     )
                                     .clickable { onToolSelected(tool) }
@@ -1232,7 +1527,7 @@ private fun StudioToolDock(
                                     Icon(
                                         imageVector = icon,
                                         contentDescription = null,
-                                        tint = if (selected) StudioAccent else StudioText,
+                                        tint = if (selected) StudioAccentUi else StudioText,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -1338,7 +1633,7 @@ private fun ToolsPopoverCard(
                         Icon(
                             icon,
                             contentDescription = label,
-                            tint = if (isSelected) StudioAccent else StudioText,
+                            tint = if (isSelected) StudioAccentUi else StudioText,
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
@@ -1411,7 +1706,7 @@ private fun ToolsPopoverCard(
                             label,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) StudioAccent else StudioText
+                            color = if (isSelected) StudioAccentUi else StudioText
                         )
                     }
                 }
@@ -1513,10 +1808,10 @@ fun FloatingToolRail(
                                 .size(50.dp)
                                 .shadow(4.dp, CircleShape)
                                 .clip(CircleShape)
-                                .background(if (isEraserActive) ActiveToolHighlight else Color(0xF8FFFFFF))
+                                .background(if (isEraserActive) ActiveToolHighlight else StudioSurface)
                                 .border(
                                     if (isEraserActive) 2.dp else 1.2.dp,
-                                    if (isEraserActive) StudioAccent else StudioOutline,
+                                    if (isEraserActive) StudioAccentUi else StudioOutline,
                                     CircleShape
                                 )
                                 .pointerInput(Unit) {
@@ -1529,7 +1824,7 @@ fun FloatingToolRail(
                             contentAlignment = Alignment.Center
                         ) {
                             EraserIcon(
-                                tint = if (isEraserActive) StudioAccent else StudioText,
+                                tint = if (isEraserActive) StudioAccentUi else StudioText,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -1554,7 +1849,7 @@ fun FloatingToolRail(
                                 .background(if (isToolActive) StudioSurface else StudioControl)
                                 .border(
                                     if (isToolActive) 1.8.dp else 1.dp,
-                                    if (isToolActive) StudioAccent else StudioOutline,
+                                    if (isToolActive) StudioAccentUi else StudioOutline,
                                     CircleShape
                                 )
                                 .pointerInput(Unit) {
@@ -1568,7 +1863,7 @@ fun FloatingToolRail(
                             Icon(
                                 imageVector = currentIcon,
                                 contentDescription = toolLabel,
-                                tint = if (isToolActive) StudioAccent else StudioMutedText,
+                                tint = if (isToolActive) StudioAccentUi else StudioMutedText,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -1652,8 +1947,8 @@ fun FloatingColorPalette(
                             .size(50.dp)
                             .shadow(4.dp, CircleShape)
                             .clip(CircleShape)
-                            .background(Color(0xF8FFFFFF))
-                            .border(1.2.dp, Color(0x22000000), CircleShape)
+                            .background(StudioSurface)
+                            .border(1.2.dp, StudioOutline, CircleShape)
                             .pointerInput(Unit) {
                                 detectTapGestures(
                                     onTap = { onToggleExpanded() }
@@ -1834,7 +2129,7 @@ private fun ColorSwatch(
                 .size(swatchSize)
                 .clip(CircleShape)
                 .background(color)
-                .border(if (selected) 3.dp else 1.dp, if (selected) StudioAccent else Color(0xFFCEC8BF), CircleShape),
+                .border(if (selected) 3.dp else 1.dp, if (selected) StudioAccentUi else StudioOutline, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             if (selected) Text("✓", color = if (color == Color.White) Color.Black else Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
@@ -1920,8 +2215,8 @@ private fun StrokeSizeRow(
             valueRange = valueRange,
             modifier = Modifier.weight(1f),
             colors = SliderDefaults.colors(
-                thumbColor = StudioAccent,
-                activeTrackColor = StudioAccent,
+                thumbColor = StudioAccentUi,
+                activeTrackColor = StudioAccentUi,
                 inactiveTrackColor = StudioOutline
             )
         )

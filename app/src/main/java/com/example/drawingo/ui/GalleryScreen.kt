@@ -62,8 +62,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.example.drawingo.ui.DrawingViewModel
-import com.example.drawingo.theme.StudioAccent
+import com.example.drawingo.theme.StudioAccentUi
 import com.example.drawingo.theme.StudioAccentSoft
+import com.example.drawingo.theme.StudioControl
 import com.example.drawingo.theme.StudioMutedText
 import com.example.drawingo.theme.StudioOutline
 import com.example.drawingo.theme.StudioSurface
@@ -112,8 +113,8 @@ fun GalleryScreen(
             Box {
                 FloatingActionButton(
                     onClick = { fabMenuExpanded = true },
-                    containerColor = StudioAccent,
-                    contentColor = Color.White,
+                    containerColor = StudioAccentUi,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
                     shape = CircleShape
                 ) {
                     Icon(Icons.Rounded.Add, contentDescription = "Create a drawing")
@@ -176,7 +177,7 @@ fun GalleryScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = "DRAWINGO STUDIO",
-                        color = StudioAccent,
+                        color = StudioAccentUi,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.8.sp
@@ -236,7 +237,7 @@ fun GalleryScreen(
                                 Icon(
                                     Icons.Rounded.Brush,
                                     contentDescription = null,
-                                    tint = StudioAccent,
+                                    tint = StudioAccentUi,
                                     modifier = Modifier.size(34.dp)
                                 )
                             }
@@ -258,7 +259,7 @@ fun GalleryScreen(
                                 text = "Tap to start drawing",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = StudioAccent
+                                color = StudioAccentUi
                             )
                         }
                     }
@@ -327,7 +328,7 @@ private fun ProjectThumbnail(path: String?, description: String) {
             .fillMaxWidth()
             .aspectRatio(1.15f)
             .clip(RoundedCornerShape(13.dp))
-            .background(Color.White)
+            .background(StudioControl)
             .padding(8.dp)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center
@@ -343,7 +344,7 @@ private fun ProjectThumbnail(path: String?, description: String) {
             Icon(
                 Icons.Rounded.Brush,
                 contentDescription = null,
-                tint = Color(0xFFB8B5AE),
+                tint = StudioMutedText,
                 modifier = Modifier.size(36.dp)
             )
         }

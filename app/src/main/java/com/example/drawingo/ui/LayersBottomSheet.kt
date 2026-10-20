@@ -37,7 +37,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.drawingo.model.DrawingLayer
-import com.example.drawingo.theme.StudioAccent
+import com.example.drawingo.theme.StudioAccentUi
 import com.example.drawingo.theme.StudioAccentSoft
 import com.example.drawingo.theme.StudioMutedText
 import com.example.drawingo.theme.StudioSurface
@@ -80,7 +80,7 @@ fun LayersBottomSheet(
                     color = StudioText
                 )
                 IconButton(onClick = onAddLayer, modifier = Modifier.semantics { contentDescription = "Add layer" }) {
-                    Icon(Icons.Rounded.Add, contentDescription = null, tint = StudioAccent)
+                    Icon(Icons.Rounded.Add, contentDescription = null, tint = StudioAccentUi)
                 }
             }
 
@@ -147,8 +147,8 @@ fun LayersBottomSheet(
                                         onValueChange = { onOpacityChange(layer.id, it) },
                                         valueRange = 0f..1f,
                                         colors = SliderDefaults.colors(
-                                            thumbColor = StudioAccent,
-                                            activeTrackColor = StudioAccent
+                                            thumbColor = StudioAccentUi,
+                                            activeTrackColor = StudioAccentUi
                                         )
                                     )
                                 }
