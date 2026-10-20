@@ -42,14 +42,15 @@ fun AnimationBottomDock(
     frameCount: Int,
     isPlaying: Boolean,
     onionSkinEnabled: Boolean,
-    activePreset: QuickMagicPreset,
+    activePresets: Set<QuickMagicPreset>,
     onFrameSelect: (Int) -> Unit,
     onAddFrame: () -> Unit,
     onDuplicateFrame: () -> Unit,
     onDeleteFrame: (Int) -> Unit,
     onTogglePlayback: () -> Unit,
     onToggleOnionSkin: () -> Unit,
-    onSelectPreset: (QuickMagicPreset) -> Unit,
+    onTogglePreset: (QuickMagicPreset) -> Unit,
+    onClearPresets: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableStateOf(0) } // 0 = Flipbook, 1 = Quick Magic
@@ -167,16 +168,10 @@ fun AnimationBottomDock(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Spacer(modifier = Modifier.width(8.dp))
-                PresetButton("None", "🚫", activePreset == QuickMagicPreset.NONE) { onSelectPreset(QuickMagicPreset.NONE) }
-                PresetButton("Wiggle", "〰️", activePreset == QuickMagicPreset.WIGGLE) { onSelectPreset(QuickMagicPreset.WIGGLE) }
-                PresetButton("Pulse", "💓", activePreset == QuickMagicPreset.PULSE) { onSelectPreset(QuickMagicPreset.PULSE) }
-                PresetButton("Float", "☁️", activePreset == QuickMagicPreset.FLOAT) { onSelectPreset(QuickMagicPreset.FLOAT) }
-                PresetButton("Shimmer", "✨", activePreset == QuickMagicPreset.SHIMMER) { onSelectPreset(QuickMagicPreset.SHIMMER) }
-                PresetButton("Spin", "🔄", activePreset == QuickMagicPreset.SPIN) { onSelectPreset(QuickMagicPreset.SPIN) }
-                PresetButton("Wander", "🧭", activePreset == QuickMagicPreset.WANDER) { onSelectPreset(QuickMagicPreset.WANDER) }
-                PresetButton("Flip", "🪞", activePreset == QuickMagicPreset.FLIP) { onSelectPreset(QuickMagicPreset.FLIP) }
-                PresetButton("Translate", "↔️", activePreset == QuickMagicPreset.TRANSLATE) { onSelectPreset(QuickMagicPreset.TRANSLATE) }
-                PresetButton("Random", "🎲", activePreset == QuickMagicPreset.RANDOM) { onSelectPreset(QuickMagicPreset.RANDOM) }
+                PresetButton("Clear", "🚫", activePresets.isEmpty()) { onClearPresets() }
+                QuickMagicPreset.entries.forEach { preset ->
+                    PresetButton(preset.label, preset.icon, activePresets.contains(preset)) { onTogglePreset(preset) }
+                }
                 Spacer(modifier = Modifier.width(8.dp))
             }
         }

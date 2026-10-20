@@ -19,8 +19,33 @@ enum class ParticleType {
     BUBBLE,
     STAR_DUST,
     SMOKE_PUFF,
-    RAINBOW_SPARKLE
+    RAINBOW_SPARKLE,
+    CLOUD,
+    STAR
 }
+
+enum class AnimationCategory(
+    val id: String,
+    val title: String,
+    val icon: String,
+    val defaultParticleType: ParticleType = ParticleType.STAR_DUST,
+    val defaultBackgroundColor: String = "#F0F4FF"
+) {
+    FLOAT("FLOAT", "Float", "☁️", ParticleType.STAR_DUST, "#F0F4FF"),
+    ROTATE("ROTATE", "Rotate", "🔄", ParticleType.RAINBOW_SPARKLE, "#F7F0FF"),
+    SPIN("SPIN", "Spin", "💫", ParticleType.STAR, "#0D1117"),
+    FLIP("FLIP", "Flip", "🪞", ParticleType.CLOUD, "#E8F4FD"),
+    TRANSLATE("TRANSLATE", "Translate", "↔️", ParticleType.SMOKE_PUFF, "#F0FFF4"),
+    BOUNCE("BOUNCE", "Bounce", "🏀", ParticleType.BUBBLE, "#FFF8F0"),
+    PULSE("PULSE", "Pulse", "💓", ParticleType.RAINBOW_SPARKLE, "#FFF0F5"),
+    WIGGLE("WIGGLE", "Wiggle", "〰️", ParticleType.STAR_DUST, "#F5F0FF")
+}
+
+data class DynamicSceneConfig(
+    val backgroundColor: String,
+    val particleType: String,
+    val animationStyle: String
+)
 
 data class Particle(
     val id: Long,
@@ -43,7 +68,8 @@ data class AnimatedDrawingEntity(
     var scale: Float = 1.0f,
     var rotation: Float = 0f,
     var offsetX: Float = 0f,
-    var offsetY: Float = 0f
+    var offsetY: Float = 0f,
+    val dynamicSceneConfig: DynamicSceneConfig? = null
 )
 
 data class AnimationSceneResult(

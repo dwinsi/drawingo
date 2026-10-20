@@ -124,6 +124,71 @@ object ParticleEngine {
         return list
     }
 
+    fun createClouds(x: Float, y: Float, count: Int = 1): List<Particle> {
+        val list = mutableListOf<Particle>()
+        for (i in 0 until count) {
+            list.add(
+                Particle(
+                    id = particleIdGen.getAndIncrement(),
+                    x = x,
+                    y = y,
+                    vx = -0.5f - Random.nextFloat() * 1.5f, // Drift left
+                    vy = (Random.nextFloat() - 0.5f) * 0.2f,
+                    color = Color(0xF2FFFFFF),
+                    size = 40f + Random.nextFloat() * 60f,
+                    type = ParticleType.CLOUD,
+                    maxLifeMs = (4000 + Random.nextInt(2000)).toLong()
+                )
+            )
+        }
+        return list
+    }
+
+    fun createStars(x: Float, y: Float, count: Int = 2): List<Particle> {
+        val list = mutableListOf<Particle>()
+        for (i in 0 until count) {
+            list.add(
+                Particle(
+                    id = particleIdGen.getAndIncrement(),
+                    x = x,
+                    y = y,
+                    vx = 0f,
+                    vy = 3f + Random.nextFloat() * 8f, // Fall straight down quickly
+                    color = Color.White,
+                    size = 2f + Random.nextFloat() * 4f,
+                    type = ParticleType.STAR,
+                    maxLifeMs = (1500 + Random.nextInt(1000)).toLong()
+                )
+            )
+        }
+        return list
+    }
+
+    fun createRainbowSparkles(x: Float, y: Float, count: Int = 4): List<Particle> {
+        val list = mutableListOf<Particle>()
+        for (i in 0 until count) {
+            val angle = Random.nextFloat() * 6.28f
+            val speed = 1f + Random.nextFloat() * 3f
+            // Pick a random vibrant color
+            val color = listOf(Color.Red, Color.Yellow, Color.Green, Color.Blue, Color(0xFFFF00FF)).random()
+
+            list.add(
+                Particle(
+                    id = particleIdGen.getAndIncrement(),
+                    x = x,
+                    y = y,
+                    vx = cos(angle) * speed,
+                    vy = sin(angle) * speed,
+                    color = color,
+                    size = 4f + Random.nextFloat() * 8f,
+                    type = ParticleType.RAINBOW_SPARKLE,
+                    maxLifeMs = (800 + Random.nextInt(500)).toLong()
+                )
+            )
+        }
+        return list
+    }
+
     fun updateParticles(particles: List<Particle>, deltaMs: Long): List<Particle> {
         val deltaSec = deltaMs / 1000f
         val alive = mutableListOf<Particle>()
@@ -157,6 +222,12 @@ object ParticleEngine {
                     }
                     ParticleType.RAINBOW_SPARKLE -> {
                         p.vy += 0.1f
+                    }
+                    ParticleType.CLOUD -> {
+                        p.size += 0.1f // Very slow expansion
+                    }
+                    ParticleType.STAR -> {
+                        // Just fall
                     }
                 }
 

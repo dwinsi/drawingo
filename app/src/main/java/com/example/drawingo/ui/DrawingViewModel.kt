@@ -36,10 +36,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import android.net.Uri
 import android.util.Log
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.label.ImageLabeling
-import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
-import kotlinx.coroutines.tasks.await
 
 /**
  * Lightweight MVVM ViewModel managing the Drawingo canvas,
@@ -57,10 +53,11 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _currentProjectId = MutableStateFlow<Long?>(null)
     val currentProjectId: StateFlow<Long?> = _currentProjectId.asStateFlow()
 
-    private val _layers = MutableStateFlow<List<com.example.drawingo.model.DrawingLayer>>(emptyList())
+    private val defaultInitialLayer = com.example.drawingo.model.DrawingLayer(id = System.currentTimeMillis(), name = "Layer 1")
+    private val _layers = MutableStateFlow<List<com.example.drawingo.model.DrawingLayer>>(listOf(defaultInitialLayer))
     val layers: StateFlow<List<com.example.drawingo.model.DrawingLayer>> = _layers.asStateFlow()
 
-    private val _selectedLayerId = MutableStateFlow<Long?>(null)
+    private val _selectedLayerId = MutableStateFlow<Long?>(defaultInitialLayer.id)
     val selectedLayerId: StateFlow<Long?> = _selectedLayerId.asStateFlow()
 
     private val _currentFrameIndex = MutableStateFlow(0)
@@ -75,14 +72,34 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _onionSkinEnabled = MutableStateFlow(true)
     val onionSkinEnabled: StateFlow<Boolean> = _onionSkinEnabled.asStateFlow()
 
-    enum class QuickMagicPreset { NONE, WIGGLE, PULSE, FLOAT, SHIMMER, SPIN, WANDER, FLIP, TRANSLATE, RANDOM }
+    enum class QuickMagicPreset(val label: String, val icon: String) { 
+        WIGGLE("Wiggle", "〰️"), 
+        PULSE("Pulse", "💓"), 
+        FLOAT("Float", "☁️"), 
+        SHIMMER("Shimmer", "✨"), 
+        SPIN("Spin", "🔄"), 
+        WANDER("Wander", "🧭"), 
+        FLIP("Flip", "🪞"), 
+        TRANSLATE("Translate", "↔️"), 
+        RANDOM("Random", "🎲"),
+        BOUNCE("Bounce", "🦘"),
+        WAVE("Wave", "🌊"),
+        SWING("Swing", "🪅"),
+        JITTER("Jitter", "⚡"),
+        HEARTBEAT("Heartbeat", "💗"),
+        SPIRAL("Spiral", "🌀"),
+        COLOR_CYCLE("Color", "🌈")
+    }
     
-    private val _activePreset = MutableStateFlow(QuickMagicPreset.NONE)
-    val activePreset: StateFlow<QuickMagicPreset> = _activePreset.asStateFlow()
+    private val _activePresets = MutableStateFlow<Set<QuickMagicPreset>>(emptySet())
+    val activePresets: StateFlow<Set<QuickMagicPreset>> = _activePresets.asStateFlow()
 
     // Text Tool State
     private val _showTextPrompt = MutableStateFlow(false)
     val showTextPrompt: StateFlow<Boolean> = _showTextPrompt.asStateFlow()
+
+    private val _dynamicSceneConfig = MutableStateFlow<com.example.drawingo.model.DynamicSceneConfig?>(null)
+    val dynamicSceneConfig: StateFlow<com.example.drawingo.model.DynamicSceneConfig?> = _dynamicSceneConfig.asStateFlow()
 
     private var pointerDownCanvasPos: Offset? = null
 
@@ -97,7 +114,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         _selectedLayerId.value = initialLayer.id
         _currentFrameIndex.value = 0
         _isPlayingLocalAnimation.value = false
-        _activePreset.value = QuickMagicPreset.NONE
+        _activePresets.value = emptySet()
         _backgroundImagePath.value = null
         
         _completedStrokes.value = emptyList() // We can keep this for flat drawing or replace it. Actually we should remove it and use layers.strokes.
@@ -147,7 +164,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             _selectedLayerId.value = _layers.value.first().id
             _currentFrameIndex.value = 0
             _isPlayingLocalAnimation.value = false
-            _activePreset.value = QuickMagicPreset.NONE
+            _activePresets.value = emptySet()
             
             _activeStrokes.value = emptyMap()
             _undoStack.value = emptyList()
@@ -412,8 +429,18 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         animationLoopJob?.cancel()
     }
 
-    fun setQuickMagicPreset(preset: QuickMagicPreset) {
-        _activePreset.value = preset
+    fun toggleQuickMagicPreset(preset: QuickMagicPreset) {
+        val current = _activePresets.value.toMutableSet()
+        if (current.contains(preset)) {
+            current.remove(preset)
+        } else {
+            current.add(preset)
+        }
+        _activePresets.value = current
+    }
+
+    fun clearQuickMagicPresets() {
+        _activePresets.value = emptySet()
     }
 
     fun setBackgroundImage(context: Context, uri: Uri) {
@@ -453,6 +480,9 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     private val _animationStatus = MutableStateFlow<String?>(null)
     val animationStatus: StateFlow<String?> = _animationStatus.asStateFlow()
+
+    private val _selectedAnimationCategory = MutableStateFlow(com.example.drawingo.model.AnimationCategory.FLOAT)
+    val selectedAnimationCategory: StateFlow<com.example.drawingo.model.AnimationCategory> = _selectedAnimationCategory.asStateFlow()
 
     private val _animationSubject = MutableStateFlow("Your drawing")
     val animationSubject: StateFlow<String> = _animationSubject.asStateFlow()
@@ -574,7 +604,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     fun clearCanvas() {
         if (_layers.value.any { layer -> layer.frames.any { it.strokes.isNotEmpty() } }) {
-            stopAnimation()
+
             _selectedStrokes.value = emptySet()
             _lassoTransform.value = Offset.Zero
             
@@ -628,7 +658,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val strokeWidth = when (tool) {
             DrawingTool.PEN -> _selectedStrokeWidth.value
             DrawingTool.BRUSH -> _selectedStrokeWidth.value * 1.8f
-            DrawingTool.ERASER -> 120f // Fixed single biggest size
+            DrawingTool.ERASER -> _selectedEraserWidth.value
             DrawingTool.LASSO -> 4f
             DrawingTool.WATERCOLOR -> _selectedStrokeWidth.value * 2.2f
             DrawingTool.CRAYON -> _selectedStrokeWidth.value * 1.25f
@@ -841,176 +871,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         _selectedStrokes.value = emptySet()
     }
 
-    /**
-     * Triggers local ML Kit Image Labeler to detect what the user drew and sets the animation scene.
-     */
-    fun triggerDrawingAnimation(context: Context, canvasBitmap: Bitmap, allowCloudAi: Boolean) {
-        val selectedIds = _selectedStrokes.value
-        val currentLassoTransform = _lassoTransform.value
-
-        var strokes = _layers.value.flatMap { layer -> 
-            val frame = layer.frames.getOrNull(_currentFrameIndex.value)
-            frame?.strokes ?: emptyList()
-        }
-
-        // If user has a selection, only animate the selected strokes, and apply their dragged offset
-        if (selectedIds.isNotEmpty()) {
-            strokes = strokes.filter { it.id in selectedIds }.map { stroke ->
-                val shiftedPoints = stroke.points.map { Offset(it.x + currentLassoTransform.x, it.y + currentLassoTransform.y) }
-                stroke.copy(points = shiftedPoints)
-            }
-        }
-
-        if (strokes.isEmpty() && _backgroundImagePath.value == null) return
-
-        viewModelScope.launch {
-            _isGeminiLoading.value = true
-            _animationStatus.value = null
-            currentGeminiInteractionId = UUID.randomUUID().toString()
-            soundManager?.playChimeTwinkle()
-
-            var sceneType = AnimationSceneType.ABSTRACT_FLOW
-            var subjectName = "Your drawing"
-
-            try {
-                val image = InputImage.fromBitmap(canvasBitmap, 0)
-                val labeler = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
-                val labels = labeler.process(image).await()
-
-                if (labels.isNotEmpty()) {
-                    val topLabel = labels.first().text
-                    subjectName = topLabel
-                    Log.d(TAG, "ML Kit detected: $topLabel (Confidence: ${labels.first().confidence})")
-
-                    // Simple mapping based on labels
-                    val lowerLabel = topLabel.lowercase()
-                    sceneType = when {
-                        lowerLabel.contains("water") || lowerLabel.contains("fish") || lowerLabel.contains("marine") || lowerLabel.contains("ocean") || lowerLabel.contains("sea") || lowerLabel.contains("dolphin") -> AnimationSceneType.OCEAN_LEAP
-                        lowerLabel.contains("sky") || lowerLabel.contains("bird") || lowerLabel.contains("fly") || lowerLabel.contains("cloud") || lowerLabel.contains("airplane") -> AnimationSceneType.SKY_FLIGHT
-                        lowerLabel.contains("space") || lowerLabel.contains("star") || lowerLabel.contains("moon") || lowerLabel.contains("planet") || lowerLabel.contains("rocket") -> AnimationSceneType.SPACE_LAUNCH
-                        lowerLabel.contains("animal") || lowerLabel.contains("tree") || lowerLabel.contains("plant") || lowerLabel.contains("grass") || lowerLabel.contains("land") || lowerLabel.contains("cat") || lowerLabel.contains("dog") -> AnimationSceneType.LAND_SAFARI
-                        else -> AnimationSceneType.ABSTRACT_FLOW
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "ML Kit image labeling failed", e)
-                _animationStatus.value = "Image analysis failed. Showing a local animation preview."
-            }
-
-            _isGeminiLoading.value = false
-            _animationSubject.value = subjectName
-            _showGeminiDialog.value = true
-            _activeAnimationScene.value = sceneType
-
-            var minX = Float.POSITIVE_INFINITY
-            var minY = Float.POSITIVE_INFINITY
-            var maxX = Float.NEGATIVE_INFINITY
-            var maxY = Float.NEGATIVE_INFINITY
-            for (s in strokes) {
-                for (p in s.points) {
-                    if (p.x < minX) minX = p.x
-                    if (p.x > maxX) maxX = p.x
-                    if (p.y < minY) minY = p.y
-                    if (p.y > maxY) maxY = p.y
-                }
-            }
-            val bounds = Rect(minX, minY, maxX, maxY)
-            _animatedEntity.value = AnimatedDrawingEntity(strokes = strokes, bounds = bounds)
-
-            startAnimationLoop()
-        }
-    }
-
-    private fun startAnimationLoop() {
-        animationLoopJob?.cancel()
-        _isAnimationActive.value = true
-        _animationProgress.value = 0f
-        _particles.value = emptyList()
-
-        animationLoopJob = viewModelScope.launch {
-            val totalDurationMs = 5000L
-            val stepMs = 16L
-            var elapsedMs = 0L
-            var splashTriggered = false
-
-            while (_isAnimationActive.value) {
-                delay(stepMs)
-                elapsedMs += stepMs
-                val progress = (elapsedMs.toFloat() % totalDurationMs) / totalDurationMs
-                _animationProgress.value = progress
-
-                val scene = _activeAnimationScene.value
-                val newParticles = mutableListOf<Particle>()
-
-                when (scene) {
-                    AnimationSceneType.OCEAN_LEAP -> {
-                        if ((progress in 0.06f..0.12f || progress in 0.88f..0.94f) && !splashTriggered) {
-                            splashTriggered = true
-                            soundManager?.playBubblePop()
-                            newParticles.addAll(ParticleEngine.createWaterSplash(x = 400f, y = 600f, count = 16))
-                        } else if (progress > 0.15f && progress < 0.85f) {
-                            splashTriggered = false
-                        }
-                        if (Random.nextFloat() < 0.18f) {
-                            newParticles.addAll(ParticleEngine.createBubbles(x = Random.nextFloat() * 800f, y = 700f, count = 2))
-                        }
-                    }
-                    AnimationSceneType.SPACE_LAUNCH -> {
-                        if (Random.nextFloat() < 0.35f) {
-                            newParticles.addAll(ParticleEngine.createSmokePuffs(x = 300f + progress * 400f, y = 600f - progress * 400f, count = 2))
-                        }
-                    }
-                    AnimationSceneType.SKY_FLIGHT, AnimationSceneType.ABSTRACT_FLOW -> {
-                        if (Random.nextFloat() < 0.25f) {
-                            newParticles.addAll(ParticleEngine.createStarDust(x = 200f + progress * 600f, y = 300f + sin(progress * 10f) * 100f, count = 3))
-                        }
-                    }
-                    else -> {}
-                }
-
-                val currentParticles = _particles.value + newParticles
-                _particles.value = ParticleEngine.updateParticles(currentParticles, stepMs)
-            }
-        }
-    }
-
-    fun stopAnimation() {
-        _isAnimationActive.value = false
-        _activeAnimationScene.value = null
-        _animatedEntity.value = null
-        _particles.value = emptyList()
-        animationLoopJob?.cancel()
-    }
-
-    fun closeGeminiDialog() {
-        _showGeminiDialog.value = false
-    }
-
-    fun generateVideo(context: Context, canvasBitmap: Bitmap, prompt: String, aspectRatio: String = "16:9") {
-        if (_isVideoGenerating.value) return
-        viewModelScope.launch {
-            _isVideoGenerating.value = true
-            _videoError.value = null
-            _generatedVideo.value?.delete()
-            _generatedVideo.value = null
-            val result = AdcBackendClient.generateVideo(context, canvasBitmap, prompt, aspectRatio)
-            _generatedVideo.value = result.file
-            if (result.file == null) {
-                _videoError.value = result.errorMessage ?: "Could not create the video. Check the backend setup and try again."
-            }
-            _isVideoGenerating.value = false
-        }
-    }
-
-    fun closeGeneratedVideo() {
-        _generatedVideo.value?.delete()
-        _generatedVideo.value = null
-    }
-
-    fun closeQuickMenu() {
-        // Removed
-    }
-
     fun onPointerCancel(pointerId: Long) {
         pointerDownCanvasPos = null
         _activeStrokes.value = _activeStrokes.value - pointerId
@@ -1018,7 +878,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        stopAnimation()
         _generatedVideo.value?.delete()
         _generatedVideo.value = null
         soundManager?.release()

@@ -38,7 +38,7 @@ class QuickMagicRendererTest {
         // Phase 0: Forward (+X), at peak (progress = 0.5 within phase 0 -> t = 0.5 * 1500 = 750ms)
         val forwardStroke = QuickMagicRenderer.processMagicStroke(
             stroke = stroke,
-            preset = QuickMagicPreset.TRANSLATE,
+            presets = setOf(QuickMagicPreset.TRANSLATE),
             timeMs = 750L,
             groupBounds = bounds,
             canvasSize = canvasSize
@@ -52,7 +52,7 @@ class QuickMagicRendererTest {
         // Phase 1: Backward (-X), at peak (t = 1500 + 750 = 2250ms)
         val backwardStroke = QuickMagicRenderer.processMagicStroke(
             stroke = stroke,
-            preset = QuickMagicPreset.TRANSLATE,
+            presets = setOf(QuickMagicPreset.TRANSLATE),
             timeMs = 2250L,
             groupBounds = bounds,
             canvasSize = canvasSize
@@ -66,7 +66,7 @@ class QuickMagicRendererTest {
         // Phase 2: Up (-Y), at peak (t = 3000 + 750 = 3750ms)
         val upStroke = QuickMagicRenderer.processMagicStroke(
             stroke = stroke,
-            preset = QuickMagicPreset.TRANSLATE,
+            presets = setOf(QuickMagicPreset.TRANSLATE),
             timeMs = 3750L,
             groupBounds = bounds,
             canvasSize = canvasSize
@@ -80,7 +80,7 @@ class QuickMagicRendererTest {
         // Phase 3: Down (+Y), at peak (t = 4500 + 750 = 5250ms)
         val downStroke = QuickMagicRenderer.processMagicStroke(
             stroke = stroke,
-            preset = QuickMagicPreset.TRANSLATE,
+            presets = setOf(QuickMagicPreset.TRANSLATE),
             timeMs = 5250L,
             groupBounds = bounds,
             canvasSize = canvasSize
@@ -108,7 +108,7 @@ class QuickMagicRendererTest {
         for (second in 0..30) {
             val roamed = QuickMagicRenderer.processMagicStroke(
                 stroke = stroke,
-                preset = QuickMagicPreset.RANDOM,
+                presets = setOf(QuickMagicPreset.RANDOM),
                 timeMs = second * 1000L,
                 groupCenter = center,
                 groupBounds = bounds,

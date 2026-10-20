@@ -9,7 +9,7 @@ android {
     compileSdk = 37
     defaultConfig {
         applicationId = "com.example.drawingo"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -88,9 +88,4 @@ dependencies {
 
   // Serialization
   implementation(libs.gson)
-
-  // ML Kit
-  implementation(libs.mlkit.objectdetection)
-  implementation(libs.mlkit.imagelabeling)
-  implementation(libs.kotlinx.coroutines.play.services)
 }

@@ -104,16 +104,17 @@ class DrawingViewModelTest {
 
     @Test
     fun `quick magic preset can be updated to translate and random`() {
-        assertEquals(DrawingViewModel.QuickMagicPreset.NONE, viewModel.activePreset.value)
+        assertEquals(emptySet<DrawingViewModel.QuickMagicPreset>(), viewModel.activePresets.value)
 
-        viewModel.setQuickMagicPreset(DrawingViewModel.QuickMagicPreset.TRANSLATE)
-        assertEquals(DrawingViewModel.QuickMagicPreset.TRANSLATE, viewModel.activePreset.value)
+        viewModel.toggleQuickMagicPreset(DrawingViewModel.QuickMagicPreset.TRANSLATE)
+        assertTrue(viewModel.activePresets.value.contains(DrawingViewModel.QuickMagicPreset.TRANSLATE))
 
-        viewModel.setQuickMagicPreset(DrawingViewModel.QuickMagicPreset.RANDOM)
-        assertEquals(DrawingViewModel.QuickMagicPreset.RANDOM, viewModel.activePreset.value)
+        viewModel.toggleQuickMagicPreset(DrawingViewModel.QuickMagicPreset.RANDOM)
+        assertTrue(viewModel.activePresets.value.contains(DrawingViewModel.QuickMagicPreset.RANDOM))
+        assertTrue(viewModel.activePresets.value.contains(DrawingViewModel.QuickMagicPreset.TRANSLATE))
 
         viewModel.createNewProject()
-        assertEquals(DrawingViewModel.QuickMagicPreset.NONE, viewModel.activePreset.value)
+        assertEquals(emptySet<DrawingViewModel.QuickMagicPreset>(), viewModel.activePresets.value)
     }
 }
 

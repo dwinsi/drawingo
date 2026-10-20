@@ -51,23 +51,23 @@ class MainActivity : ComponentActivity() {
             DrawingoTheme {
                 val navController = rememberNavController()
                 
-                NavHost(navController = navController, startDestination = "gallery") {
-                    composable("gallery") {
-                        GalleryScreen(
-                            viewModel = viewModel,
-                            onNavigateToCanvas = { navController.navigate("canvas") }
-                        )
-                    }
+                NavHost(navController = navController, startDestination = "canvas") {
                     composable("canvas") {
                         DrawingCanvas(
                             viewModel = viewModel,
                             onNavigateBack = {
-                                if (navController.currentBackStackEntry?.destination?.route == "canvas") {
-                                    viewModel.saveCurrentProject("Drawing ${System.currentTimeMillis() % 1000}")
-                                    navController.popBackStack()
-                                }
+                                viewModel.saveCurrentProject("Drawing ${System.currentTimeMillis() % 1000}")
+                                navController.navigate("gallery")
                             },
                             modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    composable("gallery") {
+                        GalleryScreen(
+                            viewModel = viewModel,
+                            onNavigateToCanvas = {
+                                navController.popBackStack("canvas", inclusive = false)
+                            }
                         )
                     }
                 }

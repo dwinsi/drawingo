@@ -13,26 +13,165 @@ object QuickMagicRenderer {
     
     fun processMagicStroke(
         stroke: DrawnStroke,
-        preset: QuickMagicPreset,
+        presets: Set<QuickMagicPreset>,
         timeMs: Long,
         groupCenter: Offset? = null,
         groupBounds: Rect? = null,
         canvasSize: Size? = null
     ): DrawnStroke? {
-        if (stroke.points.size < 2) return stroke
+        if (stroke.points.size < 2 || presets.isEmpty()) return stroke
 
-        return when (preset) {
-            QuickMagicPreset.NONE -> stroke
-            QuickMagicPreset.WIGGLE -> wiggleStroke(stroke, timeMs)
-            QuickMagicPreset.PULSE -> pulseStroke(stroke, timeMs)
-            QuickMagicPreset.FLOAT -> floatStroke(stroke, timeMs)
-            QuickMagicPreset.SHIMMER -> shimmerStroke(stroke, timeMs)
-            QuickMagicPreset.SPIN -> spinStroke(stroke, timeMs, groupCenter)
-            QuickMagicPreset.WANDER -> wanderStroke(stroke, timeMs)
-            QuickMagicPreset.FLIP -> flipStroke(stroke, timeMs, groupCenter)
-            QuickMagicPreset.TRANSLATE -> translateStroke(stroke, timeMs, groupBounds, canvasSize)
-            QuickMagicPreset.RANDOM -> randomRoamStroke(stroke, timeMs, groupCenter, groupBounds, canvasSize)
+        var currentStroke = stroke
+
+        // Apply point-level distortions first
+        if (presets.contains(QuickMagicPreset.WIGGLE)) currentStroke = wiggleStroke(currentStroke, timeMs)
+        if (presets.contains(QuickMagicPreset.WAVE)) currentStroke = waveStroke(currentStroke, timeMs)
+        if (presets.contains(QuickMagicPreset.JITTER)) currentStroke = jitterStroke(currentStroke, timeMs)
+        if (presets.contains(QuickMagicPreset.SHIMMER)) currentStroke = shimmerStroke(currentStroke, timeMs)
+
+        // Apply scale/alpha effects
+        if (presets.contains(QuickMagicPreset.PULSE)) currentStroke = pulseStroke(currentStroke, timeMs)
+        if (presets.contains(QuickMagicPreset.HEARTBEAT)) currentStroke = heartbeatStroke(currentStroke, timeMs)
+        if (presets.contains(QuickMagicPreset.COLOR_CYCLE)) currentStroke = colorCycleStroke(currentStroke, timeMs)
+
+        // Apply rotations
+        if (presets.contains(QuickMagicPreset.SPIN)) currentStroke = spinStroke(currentStroke, timeMs, groupCenter)
+        if (presets.contains(QuickMagicPreset.FLIP)) currentStroke = flipStroke(currentStroke, timeMs, groupCenter)
+        if (presets.contains(QuickMagicPreset.SWING)) currentStroke = swingStroke(currentStroke, timeMs, groupCenter, groupBounds)
+        if (presets.contains(QuickMagicPreset.SPIRAL)) currentStroke = spiralStroke(currentStroke, timeMs, groupCenter)
+
+        // Apply translations last
+        if (presets.contains(QuickMagicPreset.FLOAT)) currentStroke = floatStroke(currentStroke, timeMs)
+        if (presets.contains(QuickMagicPreset.BOUNCE)) currentStroke = bounceStroke(currentStroke, timeMs, groupBounds)
+        if (presets.contains(QuickMagicPreset.WANDER)) currentStroke = wanderStroke(currentStroke, timeMs)
+        if (presets.contains(QuickMagicPreset.TRANSLATE)) currentStroke = translateStroke(currentStroke, timeMs, groupBounds, canvasSize)
+        if (presets.contains(QuickMagicPreset.RANDOM)) currentStroke = randomRoamStroke(currentStroke, timeMs, groupCenter, groupBounds, canvasSize)
+
+        return currentStroke
+    }
+
+    private fun bounceStroke(stroke: DrawnStroke, timeMs: Long, groupBounds: Rect?): DrawnStroke {
+        if (stroke.points.isEmpty()) return stroke
+        val timeSec = (timeMs % 100000L) / 1000f
+        
+        // Bounce frequency
+        val freq = 2.5f
+        // Absolute value of sine gives a bounce effect
+        val bounceCurve = kotlin.math.abs(sin(timeSec * freq * PI.toFloat()))
+        
+        val bounceHeight = 80f
+        val dy = -bounceCurve * bounceHeight // move up
+        
+        // Squash and stretch
+        val squash = if (bounceCurve < 0.1f) {
+            1f + (0.1f - bounceCurve) * 2f
+        } else {
+            1f
         }
+        val stretch = 1f / squash
+        
+        val cy = groupBounds?.bottom ?: stroke.points.maxOf { it.y }
+
+        val bouncedPoints = stroke.points.map { p ->
+            val stretchedY = cy + (p.y - cy) * stretch
+            Offset(p.x, stretchedY + dy)
+        }
+        return stroke.copy(points = bouncedPoints)
+    }
+
+    private fun waveStroke(stroke: DrawnStroke, timeMs: Long): DrawnStroke {
+        if (stroke.points.isEmpty()) return stroke
+        val timeSec = (timeMs % 100000L) / 1000f
+        val wavePoints = stroke.points.mapIndexed { index, p ->
+            val phase = index * 0.1f - timeSec * 5f
+            val dy = sin(phase) * (stroke.strokeWidth * 0.8f)
+            Offset(p.x, p.y + dy)
+        }
+        return stroke.copy(points = wavePoints)
+    }
+
+    private fun swingStroke(stroke: DrawnStroke, timeMs: Long, groupCenter: Offset?, groupBounds: Rect?): DrawnStroke {
+        if (stroke.points.isEmpty()) return stroke
+        val timeSec = (timeMs % 100000L) / 1000f
+        
+        // Anchor point is the top of the artwork
+        val anchorX = groupCenter?.x ?: stroke.points.map { it.x }.average().toFloat()
+        val anchorY = groupBounds?.top ?: stroke.points.minOf { it.y }
+        
+        val angle = sin(timeSec * 2f) * 0.3f // Swing +/- ~17 degrees
+        val cosA = cos(angle)
+        val sinA = sin(angle)
+        
+        val swungPoints = stroke.points.map { p ->
+            val dx = p.x - anchorX
+            val dy = p.y - anchorY
+            val nx = dx * cosA - dy * sinA
+            val ny = dx * sinA + dy * cosA
+            Offset(nx + anchorX, ny + anchorY)
+        }
+        return stroke.copy(points = swungPoints)
+    }
+
+    private fun jitterStroke(stroke: DrawnStroke, timeMs: Long): DrawnStroke {
+        val seed = timeMs / 50L // change every 50ms
+        val random = kotlin.random.Random(seed)
+        val amp = stroke.strokeWidth * 0.3f
+        
+        val jitteredPoints = stroke.points.map { p ->
+            Offset(
+                p.x + (random.nextFloat() - 0.5f) * amp,
+                p.y + (random.nextFloat() - 0.5f) * amp
+            )
+        }
+        return stroke.copy(points = jitteredPoints)
+    }
+
+    private fun heartbeatStroke(stroke: DrawnStroke, timeMs: Long): DrawnStroke {
+        val timeSec = (timeMs % 100000L) / 1000f
+        val beat = (timeSec * 1.5f) % 1f
+        // Thump thump...
+        val scale = when {
+            beat < 0.1f -> 1f + (beat / 0.1f) * 0.15f
+            beat < 0.2f -> 1.15f - ((beat - 0.1f) / 0.1f) * 0.15f
+            beat < 0.3f -> 1f + ((beat - 0.2f) / 0.1f) * 0.15f
+            beat < 0.4f -> 1.15f - ((beat - 0.3f) / 0.1f) * 0.15f
+            else -> 1f
+        }
+        return stroke.copy(strokeWidth = stroke.strokeWidth * scale)
+    }
+
+    private fun spiralStroke(stroke: DrawnStroke, timeMs: Long, groupCenter: Offset?): DrawnStroke {
+        if (stroke.points.isEmpty()) return stroke
+        val timeSec = (timeMs % 100000L) / 1000f
+        
+        val cx = groupCenter?.x ?: stroke.points.map { it.x }.average().toFloat()
+        val cy = groupCenter?.y ?: stroke.points.map { it.y }.average().toFloat()
+        
+        val radiusExpand = sin(timeSec * 2f) * 30f
+        val angleOffset = timeSec * 1.5f
+        val cosA = cos(angleOffset)
+        val sinA = sin(angleOffset)
+        
+        val spiralPoints = stroke.points.map { p ->
+            var dx = p.x - cx
+            var dy = p.y - cy
+            val len = kotlin.math.sqrt(dx*dx + dy*dy)
+            if (len > 0.1f) {
+                dx += (dx / len) * radiusExpand
+                dy += (dy / len) * radiusExpand
+            }
+            val nx = dx * cosA - dy * sinA
+            val ny = dx * sinA + dy * cosA
+            Offset(nx + cx, ny + cy)
+        }
+        return stroke.copy(points = spiralPoints)
+    }
+
+    private fun colorCycleStroke(stroke: DrawnStroke, timeMs: Long): DrawnStroke {
+        val timeSec = (timeMs % 100000L) / 1000f
+        val h = (timeSec * 50f) % 360f
+        val color = androidx.compose.ui.graphics.Color.hsv(h, 0.8f, 1f)
+        return stroke.copy(color = color)
     }
 
     private fun spinStroke(stroke: DrawnStroke, timeMs: Long, groupCenter: Offset?): DrawnStroke {
