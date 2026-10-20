@@ -164,7 +164,14 @@ fun DrawingCanvas(
 ) {
     val context = LocalContext.current
     val caddyPreferences = remember {
-        context.getSharedPreferences("drawingo_preferences", android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences("drawingo_preferences", android.content.Context.MODE_PRIVATE).also { preferences ->
+            if (preferences.getInt("tool_caddy_layout_version", 0) < 4) {
+                preferences.edit()
+                    .putInt("tool_caddy_layout_version", 4)
+                    .putFloat("tool_caddy_offset_y_dp", 0f)
+                    .apply()
+            }
+        }
     }
     val selectedTool by viewModel.selectedTool.collectAsState()
     val recentTools by viewModel.recentTools.collectAsState()
@@ -193,10 +200,6 @@ fun DrawingCanvas(
     var isToolDrawerExpanded by remember { mutableStateOf(false) }
     var toolDockHeightPx by remember { mutableIntStateOf(0) }
     var canvasBoundsPx by remember { mutableStateOf(IntSize.Zero) }
-    var toolCaddySizePx by remember { mutableStateOf(IntSize.Zero) }
-    var toolCaddyOffsetXDp by remember {
-        mutableFloatStateOf(caddyPreferences.getFloat("tool_caddy_offset_x_dp", 0f))
-    }
     var toolCaddyOffsetYDp by remember {
         mutableFloatStateOf(caddyPreferences.getFloat("tool_caddy_offset_y_dp", 0f))
     }
@@ -439,11 +442,9 @@ fun DrawingCanvas(
                 toolCaddyOnLeft = toolCaddyOnLeft,
                 onToggleToolCaddySide = {
                     toolCaddyOnLeft = !toolCaddyOnLeft
-                    toolCaddyOffsetXDp = 0f
                     toolCaddyOffsetYDp = 0f
                     caddyPreferences.edit()
                         .putBoolean("tool_caddy_on_left", toolCaddyOnLeft)
-                        .putFloat("tool_caddy_offset_x_dp", 0f)
                         .putFloat("tool_caddy_offset_y_dp", 0f)
                         .apply()
                 }
@@ -475,19 +476,12 @@ fun DrawingCanvas(
         if ((isZenMode || !showAnimationDock) && toolDockHeightPx > 0 && recentTools.isNotEmpty()) {
             val density = LocalDensity.current.density
             val toolDockHeight = toolDockHeightPx / density
-            val caddyWidth = toolCaddySizePx.width / density
-            val caddyHeight = toolCaddySizePx.height / density
-            val canvasWidth = canvasBoundsPx.width / density
             val canvasHeight = canvasBoundsPx.height / density
-            val baseX = if (toolCaddyOnLeft) 20f else canvasWidth - caddyWidth - 20f
+            val caddyHeight = 196f
             val baseY = canvasHeight - toolDockHeight - caddyHeight - 12f
-            val minX = 12f
-            val maxX = (canvasWidth - caddyWidth - 12f).coerceAtLeast(minX)
             val minY = 48f
             val maxY = (canvasHeight - toolDockHeight - caddyHeight - 12f).coerceAtLeast(minY)
-            val caddyX = (baseX + toolCaddyOffsetXDp).coerceIn(minX, maxX)
             val caddyY = (baseY + toolCaddyOffsetYDp).coerceIn(minY, maxY)
-            val effectiveOffsetX = caddyX - baseX
             val effectiveOffsetY = caddyY - baseY
             RecentToolCaddy(
                 tools = recentTools,
@@ -500,24 +494,19 @@ fun DrawingCanvas(
                 },
                 isOnLeft = toolCaddyOnLeft,
                 onDrag = { dragAmount ->
-                    val nextX = (caddyX + dragAmount.x / density).coerceIn(minX, maxX)
                     val nextY = (caddyY + dragAmount.y / density).coerceIn(minY, maxY)
-                    toolCaddyOffsetXDp = nextX - baseX
                     toolCaddyOffsetYDp = nextY - baseY
                 },
                 onDragFinished = {
                     caddyPreferences.edit()
-                        .putFloat("tool_caddy_offset_x_dp", toolCaddyOffsetXDp)
                         .putFloat("tool_caddy_offset_y_dp", toolCaddyOffsetYDp)
                         .apply()
                 },
                 modifier = Modifier
                     .align(if (toolCaddyOnLeft) Alignment.BottomStart else Alignment.BottomEnd)
                     .offset(
-                        x = effectiveOffsetX.dp,
                         y = -(toolDockHeight.dp + 12.dp) + effectiveOffsetY.dp
                     )
-                    .onSizeChanged { toolCaddySizePx = it }
                     .graphicsLayer { alpha = controlsAlpha }
             )
         }
