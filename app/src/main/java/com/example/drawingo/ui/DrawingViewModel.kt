@@ -7,40 +7,35 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.drawingo.animation.ParticleEngine
 import com.example.drawingo.audio.SoundManager
-import com.example.drawingo.model.AnimatedDrawingEntity
-import com.example.drawingo.model.AnimationSceneType
 import com.example.drawingo.model.DrawingTool
 import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
-import com.example.drawingo.model.Particle
-import com.example.drawingo.net.AdcBackendClient
-import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
-import java.util.UUID
-import kotlin.math.sin
-import kotlin.random.Random
+import java.io.File
+import java.io.FileOutputStream
 
 import com.example.drawingo.data.DrawingDao
 import com.example.drawingo.data.DrawingProject
 import com.example.drawingo.util.ImageUtils
+import com.example.drawingo.util.CanvasBitmapUtils
 import com.example.drawingo.util.StrokeMapper
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import android.net.Uri
-import android.util.Log
 
 /**
  * Lightweight MVVM ViewModel managing the Drawingo canvas,
  * tool selection, 2-finger Pan/Scroll & Pinch-Zoom, Undo/Redo,
- * drawing tools, canvas gestures, and optional cloud-assisted drawing animation.
+ * drawing tools, canvas gestures, local projects, and on-device drawing effects.
  */
 class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
@@ -97,9 +92,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     // Text Tool State
     private val _showTextPrompt = MutableStateFlow(false)
     val showTextPrompt: StateFlow<Boolean> = _showTextPrompt.asStateFlow()
-
-    private val _dynamicSceneConfig = MutableStateFlow<com.example.drawingo.model.DynamicSceneConfig?>(null)
-    val dynamicSceneConfig: StateFlow<com.example.drawingo.model.DynamicSceneConfig?> = _dynamicSceneConfig.asStateFlow()
 
     private var pointerDownCanvasPos: Offset? = null
 
@@ -173,7 +165,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         }
     }
 
-    fun saveCurrentProject(name: String) {
+    fun saveCurrentProject(name: String, context: Context) {
         viewModelScope.launch {
             val projectId = _currentProjectId.value
             val currentBgPath = _backgroundImagePath.value
@@ -216,6 +208,63 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
                 }
             }
             drawingDao.insertStrokes(allStrokeEntities)
+
+            val thumbnailPath = createProjectThumbnail(context, newId)
+            if (thumbnailPath != null) {
+                drawingDao.getProjectById(newId)?.let { project ->
+                    drawingDao.updateProject(project.copy(thumbnailPath = thumbnailPath))
+                }
+            }
+        }
+    }
+
+    private suspend fun createProjectThumbnail(context: Context, projectId: Long): String? {
+        val width = screenWidth.toInt().coerceAtLeast(1)
+        val height = screenHeight.toInt().coerceAtLeast(1)
+        val frameIndex = _currentFrameIndex.value
+        val visibleStrokes = _layers.value
+            .filter { it.isVisible }
+            .flatMap { layer ->
+                layer.frames.getOrNull(frameIndex)?.strokes.orEmpty().map { stroke ->
+                    stroke.copy(alpha = stroke.alpha * layer.opacity.coerceIn(0f, 1f))
+                }
+            }
+
+        val fullBitmap = withContext(Dispatchers.Default) {
+            CanvasBitmapUtils.createBitmapFromStrokes(
+                strokes = visibleStrokes,
+                screenWidth = width,
+                screenHeight = height,
+                backgroundImagePath = _backgroundImagePath.value
+            )
+        }
+
+        return withContext(Dispatchers.IO) {
+            var thumbnail: Bitmap? = null
+            try {
+                val scale = minOf(1f, 512f / maxOf(fullBitmap.width, fullBitmap.height))
+                val thumbnailBitmap = if (scale < 1f) {
+                    Bitmap.createScaledBitmap(
+                        fullBitmap,
+                        (fullBitmap.width * scale).toInt().coerceAtLeast(1),
+                        (fullBitmap.height * scale).toInt().coerceAtLeast(1),
+                        true
+                    )
+                } else fullBitmap
+                thumbnail = thumbnailBitmap
+                val directory = File(context.filesDir, "thumbnails")
+                if (!directory.exists() && !directory.mkdirs()) return@withContext null
+                val file = File(directory, "drawing-$projectId.jpg")
+                val saved = FileOutputStream(file).use {
+                    thumbnailBitmap.compress(Bitmap.CompressFormat.JPEG, 88, it)
+                }
+                file.takeIf { saved }?.absolutePath
+            } catch (_: Exception) {
+                null
+            } finally {
+                thumbnail?.takeIf { it !== fullBitmap && !it.isRecycled }?.recycle()
+                if (!fullBitmap.isRecycled) fullBitmap.recycle()
+            }
         }
     }
 
@@ -471,50 +520,10 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _activeStrokes = MutableStateFlow<Map<Long, DrawnStroke>>(emptyMap())
     val activeStrokes: StateFlow<Map<Long, DrawnStroke>> = _activeStrokes.asStateFlow()
 
-    // Drawing analysis status
-    private val _isGeminiLoading = MutableStateFlow(false)
-    val isGeminiLoading: StateFlow<Boolean> = _isGeminiLoading.asStateFlow()
-
-    private val _showGeminiDialog = MutableStateFlow(false)
-    val showGeminiDialog: StateFlow<Boolean> = _showGeminiDialog.asStateFlow()
-
-    private val _animationStatus = MutableStateFlow<String?>(null)
-    val animationStatus: StateFlow<String?> = _animationStatus.asStateFlow()
-
-    private val _selectedAnimationCategory = MutableStateFlow(com.example.drawingo.model.AnimationCategory.FLOAT)
-    val selectedAnimationCategory: StateFlow<com.example.drawingo.model.AnimationCategory> = _selectedAnimationCategory.asStateFlow()
-
-    private val _animationSubject = MutableStateFlow("Your drawing")
-    val animationSubject: StateFlow<String> = _animationSubject.asStateFlow()
-    private val _isVideoGenerating = MutableStateFlow(false)
-    val isVideoGenerating: StateFlow<Boolean> = _isVideoGenerating.asStateFlow()
-    private val _generatedVideo = MutableStateFlow<File?>(null)
-    val generatedVideo: StateFlow<File?> = _generatedVideo.asStateFlow()
-    private val _videoError = MutableStateFlow<String?>(null)
-    val videoError: StateFlow<String?> = _videoError.asStateFlow()
-    private var currentGeminiInteractionId: String = ""
-
-    // Drawing-to-Animation Core State
-    private val _isAnimationActive = MutableStateFlow(false)
-    val isAnimationActive: StateFlow<Boolean> = _isAnimationActive.asStateFlow()
-
-    private val _activeAnimationScene = MutableStateFlow<AnimationSceneType?>(null)
-    val activeAnimationScene: StateFlow<AnimationSceneType?> = _activeAnimationScene.asStateFlow()
-
-    private val _animatedEntity = MutableStateFlow<AnimatedDrawingEntity?>(null)
-    val animatedEntity: StateFlow<AnimatedDrawingEntity?> = _animatedEntity.asStateFlow()
-
-    private val _particles = MutableStateFlow<List<Particle>>(emptyList())
-    val particles: StateFlow<List<Particle>> = _particles.asStateFlow()
-
-    private val _animationProgress = MutableStateFlow(0f)
-    val animationProgress: StateFlow<Float> = _animationProgress.asStateFlow()
-
     private var animationLoopJob: Job? = null
 
     companion object {
         private const val MAX_STORED_STROKES = 250
-        private const val TAG = "DrawingViewModel"
     }
 
     fun setTool(tool: DrawingTool) {
@@ -878,8 +887,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        _generatedVideo.value?.delete()
-        _generatedVideo.value = null
         soundManager?.release()
         soundManager = null
     }

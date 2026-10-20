@@ -25,8 +25,7 @@ Read the source before relying on this list; the app is changing quickly and `do
 - Drawing canvas with pen, brush, eraser, lasso, watercolor, crayon, and text tools; color palette and mixer; size selection; undo/redo; pan and zoom.
 - Watercolor and crayon use dedicated stroke rendering. Keep canvas and export rendering consistent when changing drawing tools.
 - Flipbook playback and Quick Magic effects are implemented locally. Do not describe these as ML Kit processing unless the current source actually invokes an on-device ML Kit API.
-- Legacy cloud code has not yet been removed: the Android source contains a cloud video client, a default Cloud Run URL, cloud settings, and a local request log viewer. No visible video-generation action was found in the current canvas UI. Treat this as a cleanup gap, not as supported product direction; do not expand or invoke these pathways. Remove them and validate network behavior before claiming that the app is strictly local-only.
-- Local interaction logging remains in source for the legacy network client and can include full request details, including encoded drawing content. Do not add payload logging to local drawing features. Remove the legacy logger with the cloud code.
+- Cloud-generation controls, the Android client and payload logger, the backend source, and its deployment workflow have been removed from the repository. The app manifest no longer requests Internet access. This removes the app's known network path; do not reintroduce remote generation or drawing uploads.
 - The privacy policy is in `docs/privacy-policy.md` and is published from `site/`. Keep product behavior, data-flow documentation, and policy aligned.
 
 The overview in `docs/app-overview.md` currently describes the older tool set; update it when editing product documentation or when a task changes user-visible behavior.
@@ -55,7 +54,7 @@ If tools or earlier instructions conflict, follow the current user request and r
 
 ## Privacy and security rules
 
-- The product requirement is local-only processing. The current source still contains legacy network-generation code; do not use or extend it. Do not embed external credentials or add network connections for generation.
+- The app is local-first and the current Android source contains no network-generation client or Internet permission. Do not embed external credentials or add network connections for generation.
 - The app currently launches the system camera and photo picker for user-selected drawing backgrounds. Do not add in-app camera capture, microphone, location, account, analytics, ads, or social collection. Any change to system-mediated image selection still requires privacy-policy review.
 - Treat user drawings as private content.
 - Keep `docs/privacy-policy.md` accurate when data collection, network transfer, logging, or retention changes.

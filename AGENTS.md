@@ -24,5 +24,5 @@ These instructions are the shared starting point for Codex and Gemini in Android
 - Product and data-flow overview: `docs/app-overview.md`
 - Shared product, privacy, architecture, and collaboration guidance: `docs/AI_COWORKER_GUIDE.md`
 - Android app: `app/src/main/java/com/example/drawingo/`
-- Legacy Gemini/Veo backend code (not part of the intended product architecture): `functions/`
+- No remote AI backend is part of the app; keep drawing and effects on-device.
 - Privacy policy: `docs/privacy-policy.md` and `site/`

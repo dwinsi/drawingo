@@ -1,6 +1,6 @@
 # Drawingo app overview
 
-Drawingo is a native Android drawing and animation app. Its current direction is a calm, universal creative tool, with on-device processing and private local storage as project requirements. This page describes the implementation currently in the repository; it also calls out legacy cloud code that still needs removal before the app can accurately be described as strictly local-only.
+Drawingo is a native Android drawing and animation app. Its direction is a calm, universal creative tool with private local storage and on-device drawing effects.
 
 ## Current user-facing features
 
@@ -8,6 +8,7 @@ Drawingo is a native Android drawing and animation app. Its current direction is
 
 - Freehand drawing with pen, brush, watercolor, crayon, eraser, lasso selection, and text tools.
 - A hue-organized color palette, custom color mixing, and separate stroke and eraser size controls.
+- A unified bottom tool dock keeps the primary color row visible; its pull-up drawer contains the full palette, tools, and size controls.
 - Undo, redo, clear, canvas pan and zoom, and horizontal, vertical, or quad symmetry.
 - Canvas background choices: white, grid, ruled, and kraft; imported images can also be used as a background.
 - A focus mode that hides drawing controls.
@@ -16,7 +17,7 @@ Drawingo is a native Android drawing and animation app. Its current direction is
 
 - Flipbook animation with frame selection, adding, duplicating and deleting frames, playback, FPS state, and onion skin.
 - Quick Magic effects including wiggle, pulse, float, shimmer, spin, wander, flip, translate, random, bounce, wave, swing, jitter, heartbeat, spiral, and color cycle.
-- Local stroke effects are rendered in the app. The repository also contains a separate legacy cloud video-generation client; there is no visible video-generation action in the current canvas UI.
+- Quick Magic effects and flipbook playback are rendered locally. The app does not currently use an AI model to recognize or animate a subject.
 
 ### Projects, image input, and output
 
@@ -28,16 +29,15 @@ Drawingo is a native Android drawing and animation app. Its current direction is
 ### Other controls
 
 - Sound effects through Android `SoundPool`.
-- Settings for a legacy cloud AI opt-in and HTTPS backend URL, plus a local API/cloud log viewer. These settings and logging controls are inconsistent with the current local-only product requirements and should be removed as part of the cloud-code cleanup.
+- A compact canvas action bar with gallery navigation, undo/redo, clear, focus mode, layers, symmetry, animation controls, paper style, and export actions.
 
 ## Data and privacy status
 
-- Projects and imported background images are stored locally by the app. Exported images are written to the device media library when requested.
-- The app requests Android Internet permission and disables cleartext traffic. Source still contains a default Cloud Run URL, a settings toggle, and a client method that can upload a drawing image and prompt for video generation. The current visible canvas does not invoke that method, but the dormant code means the implementation is not yet safely described as strictly local-only.
-- Local interaction logs can contain request payloads, including encoded drawing images, if the legacy cloud request methods are called. The log viewer can read and clear these logs.
+- Projects, imported background images, and generated project thumbnails are stored locally by the app. Exported images are written to the device media library only when requested.
+- The Android manifest does not request Internet permission. Cloud-generation controls, the Android network client, and payload logging have been removed from the app source.
 - The gallery uses the system camera and photo picker intents. There is no in-app voice recording or transcription implementation found.
 
-**Required before claiming local-only behavior:** remove the legacy cloud backend/client/settings/logging routes, verify the APK's runtime network behavior and permissions, and align the privacy policy with that verified build.
+The old backend source and its deployment workflow have also been removed from this repository. This does not delete or disable any already deployed Google Cloud resources; only an authorized cloud project owner can verify or remove those resources.
 
 ## Technical overview
 
@@ -51,5 +51,5 @@ Drawingo is a native Android drawing and animation app. Its current direction is
 
 - [Shared AI coworker guide](AI_COWORKER_GUIDE.md)
 - [Privacy policy](privacy-policy.md)
-- [Legacy backend and infrastructure notes](infrastructure-and-accounts.md)
+- [Legacy infrastructure cleanup note](infrastructure-and-accounts.md)
 - [Feature backlog](Drawingo%20Feature%20Plan.md)

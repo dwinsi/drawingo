@@ -1,8 +1,6 @@
 package com.example.drawingo.ui
 
 import android.net.Uri
-import android.widget.MediaController
-import android.widget.VideoView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -11,6 +9,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.mutableFloatStateOf
 import kotlin.math.roundToInt
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
@@ -126,7 +125,6 @@ import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.Icon
 import com.example.drawingo.R
-import com.example.drawingo.AppPreferences
 import com.example.drawingo.model.DrawingTool
 import com.example.drawingo.model.DrawingoPalette
 import com.example.drawingo.model.DrawnStroke
@@ -167,18 +165,12 @@ fun DrawingCanvas(
         label = "controlsAlpha"
     )
 
-    var showToolsPopover by remember { mutableStateOf(false) }
-    var showPalettePopover by remember { mutableStateOf(false) }
-    var showEraserPopover by remember { mutableStateOf(false) }
+    var isToolDrawerExpanded by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
-    var isLeftHanded by remember { mutableStateOf(false) }
-    var lastDrawingTool by remember { mutableStateOf(if (selectedTool != DrawingTool.ERASER) selectedTool else DrawingTool.PEN) }
 
     LaunchedEffect(isDrawing) {
         if (isDrawing) {
-            showToolsPopover = false
-            showPalettePopover = false
-            showEraserPopover = false
+            isToolDrawerExpanded = false
         }
     }
     
@@ -188,14 +180,6 @@ fun DrawingCanvas(
     val selectedStrokes by viewModel.selectedStrokes.collectAsState()
     val lassoTransform by viewModel.lassoTransform.collectAsState()
 
-    // Animation States
-    val activeAnimationScene by viewModel.activeAnimationScene.collectAsState()
-    val animatedEntity by viewModel.animatedEntity.collectAsState()
-    val particles by viewModel.particles.collectAsState()
-    val animationProgress by viewModel.animationProgress.collectAsState()
-
-    var showAppSettings by remember { mutableStateOf(false) }
-    var showApiLogsPage by remember { mutableStateOf(false) }
     var showPaperStyleMenu by remember { mutableStateOf(false) }
     var showLayersMenu by remember { mutableStateOf(false) }
     var showAnimationDock by remember { mutableStateOf(false) }
@@ -370,76 +354,28 @@ fun DrawingCanvas(
                     com.example.drawingo.util.ExportUtils.saveBitmapToGallery(context, bitmap, "Drawingo_${System.currentTimeMillis()}", format == "PNG")
                 },
                 onGalleryClick = onNavigateBack,
-                onSettingsClick = { showAppSettings = true },
-                onApiLogsClick = { showApiLogsPage = true },
                 viewModel = viewModel,
                 modifier = Modifier.fillMaxWidth()
             )
         }
         
         if (!isZenMode) {
-            FloatingColorPalette(
-                selectedColor = selectedColor,
-                onColorSelected = { viewModel.setColor(it) },
-                isExpanded = showPalettePopover,
-                onToggleExpanded = {
-                    showPalettePopover = !showPalettePopover
-                    if (showPalettePopover) {
-                        showToolsPopover = false
-                        showEraserPopover = false
-                    }
-                },
-                isLeftHanded = isLeftHanded,
-                modifier = Modifier
-                    .align(if (isLeftHanded) Alignment.CenterEnd else Alignment.CenterStart)
-                    .padding(horizontal = 16.dp)
-                    .graphicsLayer { alpha = controlsAlpha }
-            )
-
-            FloatingToolRail(
+            StudioToolDock(
                 selectedTool = selectedTool,
                 selectedStrokeWidth = selectedStrokeWidth,
                 selectedEraserWidth = selectedEraserWidth,
                 selectedColor = selectedColor,
-                isToolsExpanded = showToolsPopover,
-                isEraserExpanded = showEraserPopover,
-                isLeftHanded = isLeftHanded,
-                onToggleToolsExpanded = {
-                    showToolsPopover = !showToolsPopover
-                    if (showToolsPopover) {
-                        showPalettePopover = false
-                        showEraserPopover = false
-                        if (selectedTool == DrawingTool.ERASER) {
-                            viewModel.setTool(lastDrawingTool)
-                        }
-                    }
-                },
-                onToggleEraser = {
-                    if (selectedTool == DrawingTool.ERASER) {
-                        viewModel.setTool(lastDrawingTool)
-                        showEraserPopover = false
-                    } else {
-                        lastDrawingTool = selectedTool
-                        viewModel.setTool(DrawingTool.ERASER)
-                        showToolsPopover = false
-                    }
-                },
-                onLongPressEraser = {
-                    showEraserPopover = true
-                    showToolsPopover = false
-                    showPalettePopover = false
-                },
-                onToolSelected = { tool ->
-                    lastDrawingTool = tool
-                    viewModel.setTool(tool)
-                },
+                isExpanded = isToolDrawerExpanded,
+                onExpandedChange = { isToolDrawerExpanded = it },
+                onColorSelected = { viewModel.setColor(it) },
+                onToolSelected = { viewModel.setTool(it) },
                 onStrokeWidthSelected = { viewModel.setStrokeWidth(it) },
                 onEraserWidthSelected = { viewModel.setEraserWidth(it) },
-                onClearCanvasRequested = { showClearConfirmDialog = true },
-                onToggleHandedness = { isLeftHanded = !isLeftHanded },
                 modifier = Modifier
-                    .align(if (isLeftHanded) Alignment.CenterStart else Alignment.CenterEnd)
-                    .padding(horizontal = 16.dp)
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
                     .graphicsLayer { alpha = controlsAlpha }
             )
         }
@@ -655,25 +591,6 @@ fun DrawingCanvas(
             )
         }
 
-        if (showAppSettings) {
-            AppSettingsDialog(
-                cloudAiEnabled = AppPreferences.isCloudAiAllowed(context),
-                backendUrl = AppPreferences.getBackendUrl(context),
-                onCloudAiEnabledChanged = { AppPreferences.setCloudAiAllowed(context, it) },
-                onBackendUrlSaved = { AppPreferences.setBackendUrl(context, it) },
-                onOpenApiLogs = {
-                    showAppSettings = false
-                    showApiLogsPage = true
-                },
-                onDismiss = { showAppSettings = false }
-            )
-        }
-
-        if (showApiLogsPage) {
-            ApiLogsScreen(
-                onBack = { showApiLogsPage = false }
-            )
-        }
     }
 }
 
@@ -692,8 +609,6 @@ fun TopKeepBar(
     onPaperStyleClick: () -> Unit,
     onExportClick: (String) -> Unit,
     onGalleryClick: () -> Unit,
-    onSettingsClick: () -> Unit,
-    onApiLogsClick: () -> Unit,
     viewModel: DrawingViewModel,
     modifier: Modifier = Modifier
 ) {
@@ -703,66 +618,56 @@ fun TopKeepBar(
 
     Row(
         modifier = modifier
+            .horizontalScroll(rememberScrollState())
             .clip(RoundedCornerShape(24.dp))
             .background(ToolDockBackgroundColor)
             .border(1.dp, com.example.drawingo.theme.SoftIndigo, RoundedCornerShape(24.dp))
             .padding(horizontal = 6.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            CompactAction(Icons.Rounded.Close, "Hide menus", size = 44.dp, onClick = onHideMenuClick)
-            CompactAction(Icons.Rounded.Image, "Gallery", size = 44.dp, onClick = onGalleryClick)
-            CompactAction(
-                icon = Icons.Rounded.CenterFocusWeak,
-                label = "Focus Mode",
-                size = 44.dp,
-                onClick = onZenModeClick
-            )
-            CompactAction(
-                icon = Icons.Rounded.AutoAwesome,
-                label = "Animation",
-                selected = isAnimationDockVisible,
-                size = 44.dp,
-                onClick = onToggleAnimationDock
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(1.dp), verticalAlignment = Alignment.CenterVertically) {
-            CompactAction(Icons.Rounded.Layers, "Layers", size = 40.dp, onClick = onLayersClick)
-            CompactAction(Icons.AutoMirrored.Rounded.Undo, "Undo", enabled = canUndo, size = 40.dp, onClick = onUndo)
-            CompactAction(Icons.AutoMirrored.Rounded.Redo, "Redo", enabled = canRedo, size = 40.dp, onClick = onRedo)
-            CompactAction(
-                icon = Icons.Rounded.Flip, 
-                label = "Symmetry", 
-                selected = symmetryMode != com.example.drawingo.model.SymmetryMode.NONE,
-                size = 40.dp, 
-                onClick = { viewModel.toggleSymmetryMode() }
-            )
-            CompactAction(Icons.Rounded.Delete, "Clear drawing", size = 40.dp, onClick = { showClearConfirmation = true })
-            Box {
-                CompactAction(Icons.Rounded.MoreVert, "More actions", size = 40.dp, onClick = { actionsExpanded = true })
-                DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Paper style") },
-                        onClick = { actionsExpanded = false; onPaperStyleClick() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Save as PNG") },
-                        onClick = { actionsExpanded = false; onExportClick("PNG") }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Save as JPEG") },
-                        onClick = { actionsExpanded = false; onExportClick("JPEG") }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Settings") },
-                        onClick = { actionsExpanded = false; onSettingsClick() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("API & Cloud logs") },
-                        onClick = { actionsExpanded = false; onApiLogsClick() }
-                    )
-                }
+        CompactAction(Icons.Rounded.Close, "Hide menus", size = 40.dp, onClick = onHideMenuClick)
+        CompactAction(Icons.Rounded.Image, "Gallery", size = 40.dp, onClick = onGalleryClick)
+        CompactAction(
+            icon = Icons.Rounded.AutoAwesome,
+            label = "Animation",
+            selected = isAnimationDockVisible,
+            size = 40.dp,
+            onClick = onToggleAnimationDock
+        )
+        CompactAction(Icons.AutoMirrored.Rounded.Undo, "Undo", enabled = canUndo, size = 40.dp, onClick = onUndo)
+        CompactAction(Icons.AutoMirrored.Rounded.Redo, "Redo", enabled = canRedo, size = 40.dp, onClick = onRedo)
+        CompactAction(Icons.Rounded.Delete, "Clear drawing", size = 40.dp, onClick = { showClearConfirmation = true })
+        Box {
+            CompactAction(Icons.Rounded.MoreVert, "More actions", size = 40.dp, onClick = { actionsExpanded = true })
+            DropdownMenu(expanded = actionsExpanded, onDismissRequest = { actionsExpanded = false }) {
+                DropdownMenuItem(
+                    text = { Text("Focus mode") },
+                    leadingIcon = { Icon(Icons.Rounded.CenterFocusWeak, contentDescription = null) },
+                    onClick = { actionsExpanded = false; onZenModeClick() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Layers") },
+                    leadingIcon = { Icon(Icons.Rounded.Layers, contentDescription = null) },
+                    onClick = { actionsExpanded = false; onLayersClick() }
+                )
+                DropdownMenuItem(
+                    text = { Text(if (symmetryMode == com.example.drawingo.model.SymmetryMode.NONE) "Turn symmetry on" else "Change symmetry") },
+                    leadingIcon = { Icon(Icons.Rounded.Flip, contentDescription = null) },
+                    onClick = { actionsExpanded = false; viewModel.toggleSymmetryMode() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Paper style") },
+                    onClick = { actionsExpanded = false; onPaperStyleClick() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Save as PNG") },
+                    onClick = { actionsExpanded = false; onExportClick("PNG") }
+                )
+                DropdownMenuItem(
+                    text = { Text("Save as JPEG") },
+                    onClick = { actionsExpanded = false; onExportClick("JPEG") }
+                )
             }
         }
     }
@@ -1066,6 +971,134 @@ fun LiveStrokePreview(
                         .clip(CircleShape)
                         .background(color)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudioToolDock(
+    selectedTool: DrawingTool,
+    selectedStrokeWidth: Float,
+    selectedEraserWidth: Float,
+    selectedColor: Color,
+    isExpanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onColorSelected: (Color) -> Unit,
+    onToolSelected: (DrawingTool) -> Unit,
+    onStrokeWidthSelected: (Float) -> Unit,
+    onEraserWidthSelected: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showColorMixer by remember { mutableStateOf(false) }
+    if (showColorMixer) {
+        ColorMixerDialog(
+            initialColor = selectedColor,
+            onColorMixed = { onColorSelected(it); showColorMixer = false },
+            onDismiss = { showColorMixer = false }
+        )
+    }
+
+    Surface(
+        modifier = modifier
+            .shadow(12.dp, RoundedCornerShape(24.dp))
+            .animateContentSize(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFFFCFBF8),
+        border = BorderStroke(1.dp, Color(0x1A423B32))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            DrawerHandle(isExpanded, onExpandedChange)
+            // This row remains anchored directly below the drawer handle in both states.
+            PrimaryColorRow(selectedColor, onColorSelected)
+
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DrawingoPalette.grid.drop(1).forEachIndexed { index, colors ->
+                        ColorSwatchRow(colors, selectedColor, onColorSelected, firstColorIndex = index * 8 + 8)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        listOf(
+                            Triple(DrawingTool.PEN, Icons.Rounded.Edit, "Pen"),
+                            Triple(DrawingTool.BRUSH, Icons.Rounded.Brush, "Brush"),
+                            Triple(DrawingTool.WATERCOLOR, Icons.Rounded.WaterDrop, "Watercolor"),
+                            Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
+                            Triple(DrawingTool.ERASER, Icons.Rounded.AutoFixOff, "Eraser"),
+                            Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text"),
+                            Triple(DrawingTool.LASSO, Icons.Rounded.SelectAll, "Select")
+                        ).forEach { (tool, icon, label) ->
+                            val selected = selectedTool == tool
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (selected) Color(0xFFE9E1F2) else Color(0xFFF1F0ED))
+                                    .clickable { onToolSelected(tool) }
+                                    .padding(vertical = 7.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = label,
+                                    tint = if (selected) Color(0xFF69489B) else Color(0xFF4A4E55),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(label, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF373941), maxLines = 1)
+                            }
+                        }
+                    }
+
+                    if (selectedTool != DrawingTool.LASSO) {
+                        val eraserSelected = selectedTool == DrawingTool.ERASER
+                        val size = if (eraserSelected) selectedEraserWidth else selectedStrokeWidth
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(if (eraserSelected) "Eraser size" else "Stroke size", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF353843))
+                            Text("${size.toInt()} px", fontWeight = FontWeight.Medium, fontSize = 12.sp, color = Color(0xFF72747B))
+                        }
+                        StrokeSizeRow(
+                            selectedStrokeWidth = size,
+                            onWidthSelected = { if (eraserSelected) onEraserWidthSelected(it) else onStrokeWidthSelected(it) }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF1F0ED))
+                            .clickable { showColorMixer = true }
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Rounded.Colorize, contentDescription = null, tint = Color(0xFF4A4E55), modifier = Modifier.size(16.dp))
+                        Text("Mix a color", fontWeight = FontWeight.SemiBold, color = Color(0xFF4A4E55), fontSize = 11.sp)
+                    }
+                }
             }
         }
     }

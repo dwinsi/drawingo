@@ -4,7 +4,7 @@ This is an idea backlog, not a release commitment. The current product is a calm
 
 ## Current foundation
 
-The app already has a drawing canvas with multiple tools and colors, layers, a flipbook timeline, Quick Magic stroke effects, a local projects gallery, image backgrounds, and PNG/JPEG export. These existing features are summarized in the app overview; do not list them as planned work.
+The app already has a drawing canvas with multiple tools and colors, layers, a flipbook timeline, Quick Magic stroke effects, a local projects gallery with generated thumbnails, image backgrounds, and PNG/JPEG export. These existing features are summarized in the app overview; do not list them as planned work.
 
 ## Candidate improvements
 
@@ -25,7 +25,7 @@ Ideas below are not implemented unless the app overview says otherwise. Prioriti
 
 ### Projects and output
 
-- Real project thumbnails and clearer project rename/delete controls.
+- Clearer project rename/delete controls.
 - Optional replay of how a drawing was made.
 - Evaluate animated export only if it can be implemented reliably on-device and with clear storage controls.
 

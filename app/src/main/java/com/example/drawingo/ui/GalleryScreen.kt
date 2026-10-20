@@ -1,13 +1,21 @@
 package com.example.drawingo.ui
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,9 +27,17 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Brush
+import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -29,32 +45,34 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CameraAlt
-import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.Brush
 import androidx.core.content.FileProvider
+import com.example.drawingo.ui.DrawingViewModel
 import java.io.File
-import android.net.Uri
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+private val StudioBackground = Color(0xFFF5F3EF)
+private val StudioInk = Color(0xFF26283A)
+private val StudioMuted = Color(0xFF777987)
+private val StudioAccent = Color(0xFFB7954B)
 
 @Composable
 fun GalleryScreen(
@@ -93,20 +111,19 @@ fun GalleryScreen(
             Box {
                 FloatingActionButton(
                     onClick = { fabMenuExpanded = true },
-                    containerColor = com.example.drawingo.theme.LuxGold,
-                    contentColor = com.example.drawingo.theme.ObsidianBlack,
+                    containerColor = com.example.drawingo.theme.MidnightIndigo,
+                    contentColor = Color.White,
                     shape = CircleShape
                 ) {
-                    Icon(Icons.Rounded.Add, contentDescription = "New Drawing")
+                    Icon(Icons.Rounded.Add, contentDescription = "Create a drawing")
                 }
                 DropdownMenu(
                     expanded = fabMenuExpanded,
-                    onDismissRequest = { fabMenuExpanded = false },
-                    modifier = Modifier.background(com.example.drawingo.theme.MidnightIndigo)
+                    onDismissRequest = { fabMenuExpanded = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("New Blank Canvas", color = Color.White) },
-                        leadingIcon = { Icon(Icons.Rounded.Brush, contentDescription = null, tint = Color.White) },
+                        text = { Text("Blank canvas") },
+                        leadingIcon = { Icon(Icons.Rounded.Brush, contentDescription = null) },
                         onClick = {
                             fabMenuExpanded = false
                             viewModel.createNewProject()
@@ -114,19 +131,24 @@ fun GalleryScreen(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Import from Camera", color = Color.White) },
-                        leadingIcon = { Icon(Icons.Rounded.CameraAlt, contentDescription = null, tint = Color.White) },
+                        text = { Text("Take a reference photo") },
+                        leadingIcon = { Icon(Icons.Rounded.CameraAlt, contentDescription = null) },
                         onClick = {
                             fabMenuExpanded = false
-                            val tempFile = File.createTempFile("camera_temp", ".jpg", File(context.cacheDir, "camera_images").apply { mkdirs() })
-                            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
+                            val cameraDirectory = File(context.cacheDir, "camera_images").apply { mkdirs() }
+                            val imageFile = File.createTempFile("drawing-reference-", ".jpg", cameraDirectory)
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                imageFile
+                            )
                             cameraImageUri = uri
                             cameraLauncher.launch(uri)
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Import from Gallery", color = Color.White) },
-                        leadingIcon = { Icon(Icons.Rounded.Image, contentDescription = null, tint = Color.White) },
+                        text = { Text("Choose a reference image") },
+                        leadingIcon = { Icon(Icons.Rounded.Image, contentDescription = null) },
                         onClick = {
                             fabMenuExpanded = false
                             galleryLauncher.launch("image/*")
@@ -135,7 +157,7 @@ fun GalleryScreen(
                 }
             }
         },
-        containerColor = com.example.drawingo.theme.ObsidianBlack
+        containerColor = StudioBackground
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -143,19 +165,43 @@ fun GalleryScreen(
                 .padding(paddingValues)
                 .statusBarsPadding()
         ) {
-            Text(
-                text = "My Drawings",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.ExtraBold,
-                color = com.example.drawingo.theme.LuxGold,
-                modifier = Modifier.padding(24.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "DRAWINGO STUDIO",
+                        color = StudioAccent,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.8.sp
+                    )
+                    Text(
+                        text = "Your drawings",
+                        color = StudioInk,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                if (projects.isNotEmpty()) {
+                    Text(
+                        text = "${projects.size} ${if (projects.size == 1) "piece" else "pieces"}",
+                        color = StudioMuted,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(bottom = 5.dp)
+                    )
+                }
+            }
 
             if (projects.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(24.dp),
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Card(
@@ -165,57 +211,62 @@ fun GalleryScreen(
                                 viewModel.createNewProject()
                                 onNavigateToCanvas()
                             },
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = com.example.drawingo.theme.MidnightIndigo),
-                        border = BorderStroke(1.2.dp, com.example.drawingo.theme.SoftGold),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        shape = RoundedCornerShape(28.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, Color(0xFFE6E1D8)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                                .padding(horizontal = 30.dp, vertical = 40.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(72.dp)
+                                    .size(76.dp)
                                     .clip(CircleShape)
-                                    .background(com.example.drawingo.theme.IndigoGloss),
+                                    .background(Color(0xFFF4F0E7)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Rounded.Brush,
                                     contentDescription = null,
-                                    tint = com.example.drawingo.theme.LuxGold,
-                                    modifier = Modifier.size(38.dp)
+                                    tint = com.example.drawingo.theme.MidnightIndigo,
+                                    modifier = Modifier.size(34.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.height(20.dp))
+                            Spacer(Modifier.height(22.dp))
                             Text(
-                                text = "Start a Fresh Drawing",
+                                text = "A little space to create",
                                 style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                fontWeight = FontWeight.SemiBold,
+                                color = StudioInk
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(Modifier.height(8.dp))
                             Text(
-                                text = "Tap anywhere here to open a clean canvas and start creating your drawing.",
+                                text = "Start with a blank canvas, or bring a reference image into your studio.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = com.example.drawingo.theme.MutedSlate,
-                                modifier = Modifier.padding(horizontal = 8.dp)
+                                color = StudioMuted
+                            )
+                            Spacer(Modifier.height(20.dp))
+                            Text(
+                                text = "Tap to start drawing",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = com.example.drawingo.theme.MidnightIndigo
                             )
                         }
                     }
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    columns = GridCells.Adaptive(minSize = 156.dp),
+                    contentPadding = PaddingValues(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 100.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(projects) { project ->
+                    items(projects, key = { it.id }) { project ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -223,38 +274,69 @@ fun GalleryScreen(
                                     viewModel.loadProject(project.id)
                                     onNavigateToCanvas()
                                 },
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = com.example.drawingo.theme.MidnightIndigo),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = BorderStroke(1.dp, Color(0xFFE8E4DC)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                         ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .size(120.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(com.example.drawingo.theme.IndigoGloss),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Rounded.Brush, contentDescription = null, tint = com.example.drawingo.theme.SoftGold, modifier = Modifier.size(48.dp))
-                                }
-                                Text(
-                                    text = project.name,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(top = 12.dp)
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                ProjectThumbnail(
+                                    path = project.thumbnailPath,
+                                    description = "Preview of ${project.name}"
                                 )
                                 Text(
-                                    text = SimpleDateFormat("MMM dd, yyyy", java.util.Locale.US).format(Date(project.updatedAt)),
+                                    text = project.name,
+                                    maxLines = 1,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = StudioInk,
+                                    modifier = Modifier.padding(start = 5.dp, top = 12.dp, end = 5.dp)
+                                )
+                                Text(
+                                    text = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(project.updatedAt)),
                                     fontSize = 12.sp,
-                                    color = com.example.drawingo.theme.MutedSlate,
-                                    modifier = Modifier.padding(top = 4.dp)
+                                    color = StudioMuted,
+                                    modifier = Modifier.padding(start = 5.dp, top = 4.dp, bottom = 5.dp)
                                 )
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ProjectThumbnail(path: String?, description: String) {
+    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path) {
+        value = if (path.isNullOrBlank()) null else withContext(Dispatchers.IO) {
+            BitmapFactory.decodeFile(path)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1.15f)
+            .clip(RoundedCornerShape(13.dp))
+            .background(Color(0xFFF3F1ED))
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap!!.asImageBitmap(),
+                contentDescription = description,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                Icons.Rounded.Brush,
+                contentDescription = null,
+                tint = Color(0xFFB8B5AE),
+                modifier = Modifier.size(36.dp)
+            )
         }
     }
 }

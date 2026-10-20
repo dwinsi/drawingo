@@ -27,7 +27,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AppPreferences.removeLegacyClientApiKey(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         val database = DrawingDatabase.getDatabase(this)
@@ -56,7 +55,7 @@ class MainActivity : ComponentActivity() {
                         DrawingCanvas(
                             viewModel = viewModel,
                             onNavigateBack = {
-                                viewModel.saveCurrentProject("Drawing ${System.currentTimeMillis() % 1000}")
+                                viewModel.saveCurrentProject("Drawing ${System.currentTimeMillis() % 1000}", this@MainActivity)
                                 navController.navigate("gallery")
                             },
                             modifier = Modifier.fillMaxSize()

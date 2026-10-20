@@ -12,8 +12,7 @@ import com.example.drawingo.model.DrawingTool
 import com.example.drawingo.model.DrawnStroke
 
 /**
- * Renders Compose DrawnStrokes onto an in-memory Android Bitmap
- * to send to Google Gemini AI.
+ * Renders Compose DrawnStrokes onto an in-memory Android Bitmap for local exports and previews.
  */
 object CanvasBitmapUtils {
 
