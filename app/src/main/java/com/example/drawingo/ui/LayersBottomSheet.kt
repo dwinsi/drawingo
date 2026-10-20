@@ -27,11 +27,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.drawingo.model.DrawingLayer
+import com.example.drawingo.theme.StudioAccent
+import com.example.drawingo.theme.StudioAccentSoft
+import com.example.drawingo.theme.StudioMutedText
+import com.example.drawingo.theme.StudioSurface
+import com.example.drawingo.theme.StudioText
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,7 +54,7 @@ fun LayersBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFFF7F5F1)
+        containerColor = StudioSurface
     ) {
         Column(
             modifier = Modifier
@@ -67,7 +71,7 @@ fun LayersBottomSheet(
                     text = "Layers",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF343849)
+                    color = StudioText
                 )
                 IconButton(onClick = onAddLayer) {
                     Text("➕", style = MaterialTheme.typography.titleLarge)
@@ -83,7 +87,7 @@ fun LayersBottomSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (isSelected) Color(0xFFE9E2F0) else Color.White)
+                            .background(if (isSelected) StudioAccentSoft else StudioSurface)
                             .clickable { onSelectLayer(layer.id) }
                             .padding(12.dp)
                     ) {
@@ -106,7 +110,7 @@ fun LayersBottomSheet(
                                     Text(
                                         text = layer.name,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = Color(0xFF343849)
+                                        color = StudioText
                                     )
                                 }
                                 if (layers.size > 1) {
@@ -124,15 +128,15 @@ fun LayersBottomSheet(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(horizontal = 8.dp)
                                 ) {
-                                    Text("Opacity", style = MaterialTheme.typography.bodySmall, color = Color(0xFF8B8884))
+                                    Text("Opacity", style = MaterialTheme.typography.bodySmall, color = StudioMutedText)
                                     Spacer(modifier = Modifier.size(12.dp))
                                     Slider(
                                         value = layer.opacity,
                                         onValueChange = { onOpacityChange(layer.id, it) },
                                         valueRange = 0f..1f,
                                         colors = SliderDefaults.colors(
-                                            thumbColor = Color(0xFF69489B),
-                                            activeTrackColor = Color(0xFF69489B)
+                                            thumbColor = StudioAccent,
+                                            activeTrackColor = StudioAccent
                                         )
                                     )
                                 }

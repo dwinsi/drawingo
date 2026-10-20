@@ -62,17 +62,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.example.drawingo.ui.DrawingViewModel
+import com.example.drawingo.theme.StudioAccent
+import com.example.drawingo.theme.StudioAccentSoft
+import com.example.drawingo.theme.StudioMutedText
+import com.example.drawingo.theme.StudioOutline
+import com.example.drawingo.theme.StudioSurface
+import com.example.drawingo.theme.StudioText
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-private val StudioBackground = Color(0xFFF5F3EF)
-private val StudioInk = Color(0xFF26283A)
-private val StudioMuted = Color(0xFF777987)
-private val StudioAccent = Color(0xFFB7954B)
 
 @Composable
 fun GalleryScreen(
@@ -111,7 +112,7 @@ fun GalleryScreen(
             Box {
                 FloatingActionButton(
                     onClick = { fabMenuExpanded = true },
-                    containerColor = com.example.drawingo.theme.MidnightIndigo,
+                    containerColor = StudioAccent,
                     contentColor = Color.White,
                     shape = CircleShape
                 ) {
@@ -157,7 +158,7 @@ fun GalleryScreen(
                 }
             }
         },
-        containerColor = StudioBackground
+        containerColor = StudioSurface
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -182,7 +183,7 @@ fun GalleryScreen(
                     )
                     Text(
                         text = "Your drawings",
-                        color = StudioInk,
+                        color = StudioText,
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -190,11 +191,11 @@ fun GalleryScreen(
                 if (projects.isNotEmpty()) {
                     Text(
                         text = "${projects.size} ${if (projects.size == 1) "drawing" else "drawings"}",
-                        color = StudioMuted,
+                        color = StudioMutedText,
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .background(Color.White)
+                            .background(StudioSurface)
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                 }
@@ -215,8 +216,8 @@ fun GalleryScreen(
                                 onNavigateToCanvas()
                             },
                         shape = RoundedCornerShape(28.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = BorderStroke(1.dp, Color(0xFFE6E1D8)),
+                        colors = CardDefaults.cardColors(containerColor = StudioSurface),
+                        border = BorderStroke(1.dp, StudioOutline),
                         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
                         Column(
@@ -229,13 +230,13 @@ fun GalleryScreen(
                                 modifier = Modifier
                                     .size(76.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFFF4F0E7)),
+                                    .background(StudioAccentSoft),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Rounded.Brush,
                                     contentDescription = null,
-                                    tint = com.example.drawingo.theme.MidnightIndigo,
+                                    tint = StudioAccent,
                                     modifier = Modifier.size(34.dp)
                                 )
                             }
@@ -244,20 +245,20 @@ fun GalleryScreen(
                                 text = "A little space to create",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.SemiBold,
-                                color = StudioInk
+                                color = StudioText
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 text = "Start with a blank canvas, or bring a reference image into your studio.",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = StudioMuted
+                                color = StudioMutedText
                             )
                             Spacer(Modifier.height(20.dp))
                             Text(
                                 text = "Tap to start drawing",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = com.example.drawingo.theme.MidnightIndigo
+                                color = StudioAccent
                             )
                         }
                     }
@@ -278,8 +279,8 @@ fun GalleryScreen(
                                     onNavigateToCanvas()
                                 },
                             shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            border = BorderStroke(1.dp, Color(0xFFE8E4DC)),
+                            colors = CardDefaults.cardColors(containerColor = StudioSurface),
+                            border = BorderStroke(1.dp, StudioOutline),
                             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
@@ -295,13 +296,13 @@ fun GalleryScreen(
                                         text = project.name,
                                         maxLines = 1,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = StudioInk,
+                                        color = StudioText,
                                         style = MaterialTheme.typography.titleSmall
                                     )
                                     Text(
                                         text = "Edited ${SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(project.updatedAt))}",
                                         fontSize = 12.sp,
-                                        color = StudioMuted
+                                        color = StudioMutedText
                                     )
                                 }
                             }

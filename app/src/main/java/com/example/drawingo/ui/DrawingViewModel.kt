@@ -37,6 +37,7 @@ import com.example.drawingo.data.DrawingProject
 import com.example.drawingo.util.ImageUtils
 import com.example.drawingo.util.CanvasBitmapUtils
 import com.example.drawingo.util.StrokeMapper
+import com.example.drawingo.theme.StudioAccent
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import android.net.Uri
@@ -776,7 +777,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             DrawingTool.ERASER -> Color.White
             DrawingTool.PEN, DrawingTool.BRUSH,
             DrawingTool.WATERCOLOR, DrawingTool.CRAYON, DrawingTool.FILL, DrawingTool.TEXT -> _selectedColor.value
-            DrawingTool.LASSO -> Color(0xFF69489B) // Purple color for lasso line
+            DrawingTool.LASSO -> StudioAccent
         }
         val strokeWidth = when (tool) {
             DrawingTool.PEN -> _selectedStrokeWidth.value

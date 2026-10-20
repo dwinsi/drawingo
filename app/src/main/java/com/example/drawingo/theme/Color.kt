@@ -29,7 +29,7 @@ val StudioControl = Color(0xFFF1F0ED)
 val StudioAccent = Color(0xFF69489B)
 val StudioAccentSoft = Color(0xFFE9E1F2)
 
-// Aliases for Material Theme
-val PrimaryDrawingo = LuxGold
-val SecondaryDrawingo = MidnightIndigo
-val TertiaryDrawingo = GoldVariant
+// Material theme aliases for the shared studio palette.
+val PrimaryDrawingo = StudioAccent
+val SecondaryDrawingo = StudioText
+val TertiaryDrawingo = StudioMutedText

@@ -62,6 +62,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
@@ -138,9 +139,9 @@ import com.example.drawingo.theme.StudioOutline
 import com.example.drawingo.theme.StudioSurface
 import com.example.drawingo.theme.StudioText
 
-val ToolDockBackgroundColor = com.example.drawingo.theme.MidnightIndigo
-val DockIconBackground = com.example.drawingo.theme.IndigoGloss
-val ActiveToolHighlight = com.example.drawingo.theme.LuxGold
+val ToolDockBackgroundColor = StudioSurface
+val DockIconBackground = StudioControl
+val ActiveToolHighlight = StudioAccentSoft
 val DockShadow = Color(0x33000000)
 
 @Composable
@@ -473,8 +474,8 @@ fun DrawingCanvas(
             Surface(
                 onClick = { isZenMode = false },
                 shape = CircleShape,
-                color = ToolDockBackgroundColor.copy(alpha = 0.90f),
-                border = BorderStroke(1.dp, com.example.drawingo.theme.SoftGold.copy(alpha = 0.7f)),
+                color = ToolDockBackgroundColor.copy(alpha = 0.96f),
+                border = BorderStroke(1.dp, StudioOutline),
                 shadowElevation = 6.dp
             ) {
                 Row(
@@ -485,12 +486,12 @@ fun DrawingCanvas(
                     Icon(
                         Icons.Rounded.CenterFocusWeak,
                         contentDescription = "Exit Focus Mode",
-                        tint = com.example.drawingo.theme.LuxGold,
+                        tint = StudioAccent,
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
                         "Exit Focus Mode",
-                        color = Color.White,
+                        color = StudioText,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -509,7 +510,7 @@ fun DrawingCanvas(
                             viewModel.clearCanvas()
                             showClearConfirmDialog = false
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+                        colors = ButtonDefaults.buttonColors(containerColor = StudioAccent)
                     ) {
                         Text("Clear", color = Color.White)
                     }
@@ -612,7 +613,7 @@ fun DrawingCanvas(
                 Surface(
                     modifier = Modifier.width(320.dp),
                     shape = RoundedCornerShape(24.dp),
-                    color = Color(0xFFFFFEFA),
+                    color = StudioSurface,
                     shadowElevation = 8.dp
                 ) {
                     Column(
@@ -621,7 +622,7 @@ fun DrawingCanvas(
                     ) {
                         Text(
                             "Paper Style",
-                            color = Color(0xFF343849),
+                            color = StudioText,
                             fontWeight = FontWeight.ExtraBold,
                             style = MaterialTheme.typography.titleLarge
                         )
@@ -632,7 +633,7 @@ fun DrawingCanvas(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(if (style == selectedPaperStyle) Color(0xFFE9E2F0) else Color.Transparent)
+                                        .background(if (style == selectedPaperStyle) StudioAccentSoft else Color.Transparent)
                                         .clickable {
                                             viewModel.setPaperStyle(style)
                                             showPaperStyleMenu = false
@@ -643,7 +644,7 @@ fun DrawingCanvas(
                                     Text(
                                         name,
                                         fontWeight = if (style == selectedPaperStyle) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (style == selectedPaperStyle) Color(0xFF69489B) else Color(0xFF343849)
+                                        color = if (style == selectedPaperStyle) StudioAccent else StudioText
                                     )
                                 }
                             }
@@ -935,9 +936,9 @@ private fun EraserPopoverCard(
     Surface(
         modifier = Modifier.width(260.dp),
         shape = RoundedCornerShape(20.dp),
-        color = Color(0xFFFCFCFD),
+        color = StudioSurface,
         shadowElevation = 8.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x18000000))
+        border = androidx.compose.foundation.BorderStroke(1.dp, StudioOutline)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -952,13 +953,13 @@ private fun EraserPopoverCard(
                     "Eraser Size",
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 13.sp,
-                    color = Color(0xFF2C2F42)
+                    color = StudioText
                 )
                 Text(
                     "${selectedEraserWidth.toInt()} px",
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
-                    color = Color(0xFF6B7280)
+                    color = StudioMutedText
                 )
             }
 
@@ -971,14 +972,14 @@ private fun EraserPopoverCard(
                     modifier = Modifier
                         .size(46.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFF1F2F6)),
+                        .background(StudioControl),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
                             .size((selectedEraserWidth * 0.28f).coerceIn(8f, 38f).dp)
                             .clip(CircleShape)
-                            .border(1.5.dp, Color(0xFF4A4E68), CircleShape)
+                            .border(1.5.dp, StudioAccent, CircleShape)
                             .background(Color(0x1E000000))
                     )
                 }
@@ -1002,7 +1003,7 @@ private fun EraserPopoverCard(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) ActiveToolHighlight else Color(0xFFF1F2F6))
+                            .background(if (isSelected) ActiveToolHighlight else StudioControl)
                             .clickable { onEraserWidthSelected(size) }
                             .padding(vertical = 6.dp),
                         contentAlignment = Alignment.Center
@@ -1011,7 +1012,7 @@ private fun EraserPopoverCard(
                             label,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) com.example.drawingo.theme.ObsidianBlack else Color(0xFF4A4E68)
+                            color = if (isSelected) StudioAccent else StudioText
                         )
                     }
                 }
@@ -1050,14 +1051,15 @@ fun LiveStrokePreview(
     tool: DrawingTool,
     strokeWidth: Float,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    previewSize: Dp = 48.dp
 ) {
     Canvas(
         modifier = modifier
-            .size(48.dp)
+            .size(previewSize)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFF1F2F6))
-            .border(1.dp, Color(0x18000000), RoundedCornerShape(12.dp))
+            .background(StudioControl)
+            .border(1.dp, StudioOutline, RoundedCornerShape(12.dp))
     ) {
         val points = listOf(
             Offset(size.width * 0.12f, size.height * 0.62f),
@@ -1094,7 +1096,7 @@ fun LiveStrokePreview(
                 }
                 drawPath(
                     path,
-                    Color(0xFF69489B),
+                    StudioAccent,
                     style = Stroke(
                         width = sampleWidth.coerceAtMost(2.dp.toPx()),
                         pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
@@ -1197,22 +1199,43 @@ private fun StudioToolDock(
                             Triple(DrawingTool.LASSO, Icons.Rounded.SelectAll, "Select")
                         ).forEach { (tool, icon, label) ->
                             val selected = selectedTool == tool
+                            val hasMaterialPreview = tool in setOf(
+                                DrawingTool.PEN,
+                                DrawingTool.BRUSH,
+                                DrawingTool.WATERCOLOR,
+                                DrawingTool.CRAYON
+                            )
                             Column(
                                 modifier = Modifier
                                     .width(68.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(if (selected) StudioAccentSoft else StudioControl)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (selected) StudioAccent.copy(alpha = 0.55f) else StudioOutline,
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
                                     .clickable { onToolSelected(tool) }
+                                    .semantics { contentDescription = "$label tool" }
                                     .padding(vertical = 7.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = label,
-                                    tint = if (selected) StudioAccent else StudioText,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                if (hasMaterialPreview) {
+                                    LiveStrokePreview(
+                                        tool = tool,
+                                        strokeWidth = selectedStrokeWidth,
+                                        color = selectedColor,
+                                        previewSize = 34.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = if (selected) StudioAccent else StudioText,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                                 Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = StudioText, maxLines = 1)
                             }
                         }
@@ -1231,6 +1254,9 @@ private fun StudioToolDock(
                         }
                         StrokeSizeRow(
                             selectedStrokeWidth = size,
+                            selectedTool = selectedTool,
+                            selectedColor = selectedColor,
+                            valueRange = if (eraserSelected) 20f..200f else 6f..160f,
                             onWidthSelected = { if (eraserSelected) onEraserWidthSelected(it) else onStrokeWidthSelected(it) }
                         )
                     }
@@ -1275,9 +1301,9 @@ private fun ToolsPopoverCard(
     Surface(
         modifier = Modifier.width(290.dp),
         shape = RoundedCornerShape(20.dp),
-        color = Color(0xFFFCFCFD),
+        color = StudioSurface,
         shadowElevation = 8.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x18000000))
+        border = androidx.compose.foundation.BorderStroke(1.dp, StudioOutline)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -1287,7 +1313,7 @@ private fun ToolsPopoverCard(
                 "Drawing Tools",
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 13.sp,
-                color = Color(0xFF2C2F42)
+                color = StudioText
             )
 
             // Tools Row
@@ -1303,7 +1329,7 @@ private fun ToolsPopoverCard(
                     Column(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (isSelected) ActiveToolHighlight else Color(0xFFF1F2F6))
+                            .background(if (isSelected) ActiveToolHighlight else StudioControl)
                             .clickable { onToolSelected(tool) }
                             .padding(horizontal = 8.dp, vertical = 7.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1312,12 +1338,12 @@ private fun ToolsPopoverCard(
                         Icon(
                             icon,
                             contentDescription = label,
-                            tint = if (isSelected) com.example.drawingo.theme.ObsidianBlack else Color(0xFF3B4058),
+                            tint = if (isSelected) StudioAccent else StudioText,
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
                             label,
-                            color = if (isSelected) com.example.drawingo.theme.ObsidianBlack else Color(0xFF3B4058),
+                            color = StudioText,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -1336,13 +1362,13 @@ private fun ToolsPopoverCard(
                     "Brush Size",
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 12.sp,
-                    color = Color(0xFF2C2F42)
+                    color = StudioText
                 )
                 Text(
                     "${selectedStrokeWidth.toInt()} px",
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
-                    color = Color(0xFF6B7280)
+                    color = StudioMutedText
                 )
             }
 
@@ -1376,7 +1402,7 @@ private fun ToolsPopoverCard(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) ActiveToolHighlight else Color(0xFFF1F2F6))
+                            .background(if (isSelected) ActiveToolHighlight else StudioControl)
                             .clickable { onStrokeWidthSelected(size) }
                             .padding(vertical = 5.dp),
                         contentAlignment = Alignment.Center
@@ -1385,7 +1411,7 @@ private fun ToolsPopoverCard(
                             label,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) com.example.drawingo.theme.ObsidianBlack else Color(0xFF4A4E68)
+                            color = if (isSelected) StudioAccent else StudioText
                         )
                     }
                 }
@@ -1490,7 +1516,7 @@ fun FloatingToolRail(
                                 .background(if (isEraserActive) ActiveToolHighlight else Color(0xF8FFFFFF))
                                 .border(
                                     if (isEraserActive) 2.dp else 1.2.dp,
-                                    if (isEraserActive) com.example.drawingo.theme.ObsidianBlack else Color(0x22000000),
+                                    if (isEraserActive) StudioAccent else StudioOutline,
                                     CircleShape
                                 )
                                 .pointerInput(Unit) {
@@ -1503,7 +1529,7 @@ fun FloatingToolRail(
                             contentAlignment = Alignment.Center
                         ) {
                             EraserIcon(
-                                tint = if (isEraserActive) com.example.drawingo.theme.ObsidianBlack else Color(0xFF3B4058),
+                                tint = if (isEraserActive) StudioAccent else StudioText,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -1511,7 +1537,7 @@ fun FloatingToolRail(
                             "Eraser",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2C2F42)
+                            color = StudioText
                         )
                     }
 
@@ -1525,10 +1551,10 @@ fun FloatingToolRail(
                                 .size(50.dp)
                                 .shadow(4.dp, CircleShape)
                                 .clip(CircleShape)
-                                .background(if (isToolActive) Color(0xF8FFFFFF) else Color(0xD8ECECF0))
+                                .background(if (isToolActive) StudioSurface else StudioControl)
                                 .border(
                                     if (isToolActive) 1.8.dp else 1.dp,
-                                    if (isToolActive) com.example.drawingo.theme.SoftIndigo else Color(0x18000000),
+                                    if (isToolActive) StudioAccent else StudioOutline,
                                     CircleShape
                                 )
                                 .pointerInput(Unit) {
@@ -1542,7 +1568,7 @@ fun FloatingToolRail(
                             Icon(
                                 imageVector = currentIcon,
                                 contentDescription = toolLabel,
-                                tint = if (isToolActive) com.example.drawingo.theme.MidnightIndigo else Color(0x603B4058),
+                                tint = if (isToolActive) StudioAccent else StudioMutedText,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -1550,7 +1576,7 @@ fun FloatingToolRail(
                             toolLabel,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isToolActive) Color(0xFF2C2F42) else Color(0x702C2F42)
+                            color = if (isToolActive) StudioText else StudioMutedText
                         )
                     }
 
@@ -1560,8 +1586,8 @@ fun FloatingToolRail(
                             .size(30.dp)
                             .shadow(2.dp, CircleShape)
                             .clip(CircleShape)
-                            .background(Color(0xE0FFFFFF))
-                            .border(1.dp, Color(0x18000000), CircleShape)
+                            .background(StudioSurface)
+                            .border(1.dp, StudioOutline, CircleShape)
                             .clickable { onToggleHandedness() }
                             .semantics { contentDescription = "Switch controls to ${if (isLeftHanded) "right" else "left"} side" },
                         contentAlignment = Alignment.Center
@@ -1569,7 +1595,7 @@ fun FloatingToolRail(
                         Icon(
                             imageVector = Icons.Rounded.SwapHoriz,
                             contentDescription = null,
-                            tint = Color(0xFF5A5D7A),
+                            tint = StudioMutedText,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -1658,7 +1684,7 @@ fun FloatingColorPalette(
                         "Color",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2C2F42)
+                        color = StudioText
                     )
                 }
             }
@@ -1672,9 +1698,9 @@ fun FloatingColorPalette(
                     Surface(
                         modifier = Modifier.width(280.dp),
                         shape = RoundedCornerShape(20.dp),
-                        color = Color(0xFFFCFCFD),
+                        color = StudioSurface,
                         shadowElevation = 8.dp,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x18000000))
+                        border = androidx.compose.foundation.BorderStroke(1.dp, StudioOutline)
                     ) {
                         Column(
                             modifier = Modifier.padding(12.dp),
@@ -1685,7 +1711,7 @@ fun FloatingColorPalette(
                                 "Color Palette",
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 13.sp,
-                                color = Color(0xFF2C2F42),
+                                color = StudioText,
                                 modifier = Modifier.align(Alignment.Start)
                             )
                             PrimaryColorRow(selectedColor, onColorSelected)
@@ -1696,14 +1722,14 @@ fun FloatingColorPalette(
                             Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFFF1F2F6))
+                                    .background(StudioControl)
                                     .clickable { showColorMixer = true }
                                     .padding(horizontal = 14.dp, vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Icon(Icons.Rounded.Colorize, contentDescription = null, tint = Color(0xFF3B4058), modifier = Modifier.size(16.dp))
-                                Text("Mix Custom Color", fontWeight = FontWeight.Bold, color = Color(0xFF3B4058), fontSize = 11.sp)
+                                Icon(Icons.Rounded.Colorize, contentDescription = null, tint = StudioText, modifier = Modifier.size(16.dp))
+                                Text("Mix Custom Color", fontWeight = FontWeight.Bold, color = StudioText, fontSize = 11.sp)
                             }
                         }
                     }
@@ -1870,31 +1896,35 @@ private val ALL_COLOR_NAMES = listOf(
 )
 
 @Composable
-private fun StrokeSizeRow(selectedStrokeWidth: Float, onWidthSelected: (Float) -> Unit) {
+private fun StrokeSizeRow(
+    selectedStrokeWidth: Float,
+    selectedTool: DrawingTool,
+    selectedColor: Color,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onWidthSelected: (Float) -> Unit
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        DrawingoPalette.strokeSizes.forEach { width ->
-            val selected = selectedStrokeWidth == width
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(if (selected) Color(0xFFE9E1F2) else Color.Transparent)
-                    .clickable { onWidthSelected(width) }
-                    .semantics { contentDescription = "Brush size ${width.toInt()}" },
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size((width * 0.22f).coerceIn(6f, 34f).dp)
-                        .clip(CircleShape)
-                        .background(if (selected) Color(0xFF69489B) else Color(0xFF676B73))
-                )
-            }
-        }
+        LiveStrokePreview(
+            tool = selectedTool,
+            strokeWidth = selectedStrokeWidth,
+            color = selectedColor,
+            previewSize = 40.dp
+        )
+        Slider(
+            value = selectedStrokeWidth.coerceIn(valueRange),
+            onValueChange = onWidthSelected,
+            valueRange = valueRange,
+            modifier = Modifier.weight(1f),
+            colors = SliderDefaults.colors(
+                thumbColor = StudioAccent,
+                activeTrackColor = StudioAccent,
+                inactiveTrackColor = StudioOutline
+            )
+        )
     }
 }
 
@@ -2174,7 +2204,7 @@ private fun DrawScope.drawAllCanvasContent(
             if (stroke.id in selectedStrokeIds && activePresets.isEmpty()) {
                 val bounds = DrawnStroke.calculateBounds(finalStroke.points)
                 drawRect(
-                    color = Color(0xFFC53C65).copy(alpha = 0.3f),
+                    color = StudioAccent.copy(alpha = 0.3f),
                     topLeft = Offset(bounds.left, bounds.top),
                     size = androidx.compose.ui.geometry.Size(bounds.width, bounds.height),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f))

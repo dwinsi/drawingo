@@ -37,6 +37,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import com.example.drawingo.ui.DrawingViewModel.QuickMagicPreset
+import com.example.drawingo.theme.StudioAccent
+import com.example.drawingo.theme.StudioAccentSoft
+import com.example.drawingo.theme.StudioMutedText
+import com.example.drawingo.theme.StudioOutline
+import com.example.drawingo.theme.StudioSurface
+import com.example.drawingo.theme.StudioText
 
 @Composable
 fun AnimationBottomDock(
@@ -111,7 +117,7 @@ fun AnimationBottomDock(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(if (onionSkinEnabled) Color(0xFF69489B) else DockIconBackground)
+                        .background(if (onionSkinEnabled) StudioAccentSoft else DockIconBackground)
                         .clickable { onToggleOnionSkin() },
                     contentAlignment = Alignment.Center
                 ) {
@@ -130,12 +136,12 @@ fun AnimationBottomDock(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) Color(0xFFE9E2F0) else Color.White)
-                                .border(2.dp, if (isSelected) Color(0xFF69489B) else Color(0xFFE8E2D9), RoundedCornerShape(8.dp))
+                                .background(if (isSelected) StudioAccentSoft else StudioSurface)
+                                .border(2.dp, if (isSelected) StudioAccent else StudioOutline, RoundedCornerShape(8.dp))
                                 .clickable { onFrameSelect(index) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("${index + 1}", fontWeight = FontWeight.Bold, color = if (isSelected) Color(0xFF69489B) else Color(0xFF343849))
+                            Text("${index + 1}", fontWeight = FontWeight.Bold, color = if (isSelected) StudioAccent else StudioText)
                         }
                     }
                     
@@ -174,7 +180,7 @@ fun AnimationBottomDock(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Speed", color = Color(0xFF343849), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text("Speed", color = StudioText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Slider(
                     value = playbackFps.toFloat(),
                     onValueChange = { onPlaybackFpsChange(it.roundToInt()) },
@@ -185,7 +191,7 @@ fun AnimationBottomDock(
                         .weight(1f)
                         .semantics { contentDescription = "Flipbook speed, $playbackFps frames per second" }
                 )
-                Text("${playbackFps} fps", color = Color(0xFF343849), fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                Text("${playbackFps} fps", color = StudioText, fontWeight = FontWeight.Medium, fontSize = 13.sp)
             }
         } else if (selectedTab == 1) {
             Row(
@@ -214,7 +220,7 @@ fun AnimationBottomDock(
                     Text(
                         if (canReplay) "Drawing replay" else "Draw something to replay",
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF343849),
+                        color = StudioText,
                         fontSize = 12.sp
                     )
                     Slider(
@@ -263,7 +269,7 @@ private fun AnimationTab(text: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) Color.White else Color.Transparent)
+            .background(if (selected) StudioSurface else Color.Transparent)
             .clickable { onClick() }
             .padding(horizontal = 24.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
@@ -271,7 +277,7 @@ private fun AnimationTab(text: String, selected: Boolean, onClick: () -> Unit) {
         Text(
             text,
             fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
-            color = if (selected) Color(0xFF343849) else Color(0xFF8B8884)
+            color = if (selected) StudioText else StudioMutedText
         )
     }
 }
@@ -298,7 +304,7 @@ private fun PresetButton(label: String, icon: String, selected: Boolean, onClick
         Text(
             label,
             fontWeight = FontWeight.Bold,
-            color = if (selected) ActiveToolHighlight else Color(0xFF343849),
+            color = if (selected) StudioAccent else StudioText,
             fontSize = 12.sp
         )
     }
