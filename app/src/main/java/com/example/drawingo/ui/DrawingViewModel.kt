@@ -780,7 +780,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val strokeColor = when (tool) {
             DrawingTool.ERASER -> Color.White
             DrawingTool.PEN, DrawingTool.BRUSH,
-            DrawingTool.WATERCOLOR, DrawingTool.CRAYON, DrawingTool.FILL, DrawingTool.TEXT -> _selectedColor.value
+            DrawingTool.WATERCOLOR, DrawingTool.CRAYON, DrawingTool.SPRAY, DrawingTool.FILL, DrawingTool.TEXT -> _selectedColor.value
             DrawingTool.LASSO -> StudioAccent
         }
         val strokeWidth = when (tool) {
@@ -790,6 +790,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             DrawingTool.LASSO -> 4f
             DrawingTool.WATERCOLOR -> _selectedStrokeWidth.value * 2.2f
             DrawingTool.CRAYON -> _selectedStrokeWidth.value * 1.25f
+            DrawingTool.SPRAY -> _selectedStrokeWidth.value * 2.0f
             DrawingTool.FILL -> 0f
             DrawingTool.TEXT -> _selectedStrokeWidth.value * 4f // Text scales with brush size
         }
@@ -798,6 +799,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             DrawingTool.BRUSH -> 0.85f
             DrawingTool.WATERCOLOR -> 0.68f
             DrawingTool.CRAYON -> 1.0f
+            DrawingTool.SPRAY -> 0.75f
             DrawingTool.ERASER, DrawingTool.LASSO, DrawingTool.FILL, DrawingTool.TEXT -> 1.0f
         }
         // If text tool, trigger dialog and don't start a line
@@ -820,6 +822,13 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         _activeStrokes.value = _activeStrokes.value + (pointerId to newStroke)
     }
 
+    private data class ContourCandidate(
+        val layerId: Long,
+        val points: List<Offset>,
+        val strokeWidth: Float,
+        val area: Float
+    )
+
     private fun fillEnclosedShape(point: Offset) {
         val frameIndex = _currentFrameIndex.value
         val layerBoundaries = _layers.value
@@ -835,21 +844,21 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             }
 
         val contours = findClosedContours(layerBoundaries)
-        val (fillLayerId, boundary) = contours.asReversed().firstOrNull { (_, points) ->
-            pointInPolygon(point, points)
-        } ?: return
+        val matchingContour = contours
+            .filter { candidate -> pointInPolygon(point, candidate.points, candidate.strokeWidth) }
+            .minByOrNull { it.area } ?: return
 
         val fillStroke = DrawnStroke(
             id = strokeIdGenerator.getAndIncrement(),
             color = _selectedColor.value,
             tool = DrawingTool.FILL,
-            points = boundary,
-            boundingBox = DrawnStroke.calculateBounds(boundary)
+            points = matchingContour.points,
+            boundingBox = DrawnStroke.calculateBounds(matchingContour.points)
         )
         _undoStack.value = _undoStack.value + listOf(_layers.value)
         _redoStack.value = emptyList()
         _layers.value = _layers.value.map { layer ->
-            if (layer.id != fillLayerId) layer else {
+            if (layer.id != matchingContour.layerId) layer else {
                 val updatedFrames = layer.frames.toMutableList()
                 while (updatedFrames.size <= frameIndex) updatedFrames.add(com.example.drawingo.model.DrawingFrame())
                 updatedFrames[frameIndex] = updatedFrames[frameIndex].copy(
@@ -861,57 +870,134 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         updateUndoRedoStates()
     }
 
-    /** Joins strokes whose ends meet, allowing an outline to be drawn in separate gestures. */
-    private fun findClosedContours(strokes: List<Pair<Long, DrawnStroke>>): List<Pair<Long, List<Offset>>> {
-        val contours = mutableListOf<Pair<Long, List<Offset>>>()
+    /** Finds closed contours formed by single or multiple strokes. */
+    private fun findClosedContours(strokes: List<Pair<Long, DrawnStroke>>): List<ContourCandidate> {
+        val candidates = mutableListOf<ContourCandidate>()
+
+        // 1. Single-stroke loop detection (detects full loops, overlapping loops, pigtails, teardrops)
+        for ((layerId, stroke) in strokes) {
+            val pts = stroke.points
+            if (pts.size < 4) continue
+
+            val pathLength = pts.zipWithNext().sumOf { (a, b) ->
+                kotlin.math.sqrt(distanceSquared(a, b).toDouble())
+            }.toFloat()
+
+            val closureTolerance = maxOf(48f, stroke.strokeWidth * 2.5f, pathLength * 0.25f).coerceIn(40f, 300f)
+            val toleranceSq = closureTolerance * closureTolerance
+
+            var bestPolygon: List<Offset>? = null
+            var bestLength = -1
+
+            for (j in pts.indices.reversed()) {
+                if (j < 3) break
+                for (i in 0..j - 3) {
+                    val span = j - i
+                    if (span <= bestLength) continue
+                    if (distanceSquared(pts[i], pts[j]) <= toleranceSq) {
+                        val closed = pts.subList(i, j + 1).toMutableList()
+                        closed.add(pts[i])
+                        bestPolygon = closed
+                        bestLength = span
+                    }
+                }
+            }
+
+            if (bestPolygon != null && bestPolygon.size >= 4) {
+                val area = polygonArea(bestPolygon)
+                if (area > 50f) {
+                    candidates.add(ContourCandidate(layerId, bestPolygon, stroke.strokeWidth, area))
+                }
+            }
+        }
+
+        // 2. Multi-stroke loop detection (chains consecutive intersecting/connecting strokes)
         for (startIndex in strokes.indices.reversed()) {
             val (startLayerId, startStroke) = strokes[startIndex]
             val chain = startStroke.points.toMutableList()
             val used = mutableSetOf(startIndex)
             var layerId = startLayerId
-            var closed = false
+            var maxStrokeWidth = startStroke.strokeWidth
+            var closedPolygon: List<Offset>? = null
 
             while (used.size <= strokes.size) {
-                val start = chain.first()
-                val end = chain.last()
-                val closureTolerance = contourClosureTolerance(chain, startStroke.strokeWidth)
-                if (chain.size >= 4 && distanceSquared(start, end) <= closureTolerance * closureTolerance) {
-                    chain[chain.lastIndex] = start
-                    closed = true
+                val pathLength = chain.zipWithNext().sumOf { (a, b) ->
+                    kotlin.math.sqrt(distanceSquared(a, b).toDouble())
+                }.toFloat()
+
+                val closureTolerance = maxOf(48f, maxStrokeWidth * 2.5f, pathLength * 0.25f).coerceIn(40f, 300f)
+                val toleranceSq = closureTolerance * closureTolerance
+
+                var closureIndex = -1
+                if (chain.size >= 4) {
+                    for (k in 0..chain.size - 4) {
+                        if (distanceSquared(chain.last(), chain[k]) <= toleranceSq) {
+                            closureIndex = k
+                            break
+                        }
+                    }
+                }
+
+                if (closureIndex >= 0) {
+                    val closed = chain.subList(closureIndex, chain.size).toMutableList()
+                    closed.add(chain[closureIndex])
+                    closedPolygon = closed
                     break
                 }
 
                 var nearestIndex = -1
                 var nearestAtStart = false
                 var nearestDistance = Float.MAX_VALUE
+                val endPos = chain.last()
+
                 for (candidateIndex in strokes.indices.reversed()) {
                     if (candidateIndex in used) continue
                     val (candidateLayerId, candidate) = strokes[candidateIndex]
                     val first = candidate.points.first()
                     val last = candidate.points.last()
-                    val tolerance = maxOf(24f, maxOf(startStroke.strokeWidth, candidate.strokeWidth) * 1.5f)
-                    val distanceToFirst = distanceSquared(end, first)
-                    val distanceToLast = distanceSquared(end, last)
+                    val tol = maxOf(36f, maxOf(maxStrokeWidth, candidate.strokeWidth) * 2f)
+                    val distanceToFirst = distanceSquared(endPos, first)
+                    val distanceToLast = distanceSquared(endPos, last)
                     val candidateDistance = minOf(distanceToFirst, distanceToLast)
-                    if (candidateDistance <= tolerance * tolerance && candidateDistance < nearestDistance) {
+                    if (candidateDistance <= tol * tol && candidateDistance < nearestDistance) {
                         nearestIndex = candidateIndex
                         nearestAtStart = distanceToFirst <= distanceToLast
                         nearestDistance = candidateDistance
                         layerId = candidateLayerId
                     }
                 }
+
                 if (nearestIndex < 0) break
 
-                val nextPoints = strokes[nearestIndex].second.points.let { points ->
+                val candidateStroke = strokes[nearestIndex].second
+                maxStrokeWidth = maxOf(maxStrokeWidth, candidateStroke.strokeWidth)
+                val nextPoints = candidateStroke.points.let { points ->
                     if (nearestAtStart) points else points.asReversed()
                 }
                 chain.addAll(nextPoints.drop(1))
                 used += nearestIndex
             }
 
-            if (closed) contours += layerId to chain.toList()
+            if (closedPolygon != null && closedPolygon.size >= 4) {
+                val area = polygonArea(closedPolygon)
+                if (area > 50f) {
+                    candidates.add(ContourCandidate(layerId, closedPolygon, maxStrokeWidth, area))
+                }
+            }
         }
-        return contours
+
+        return candidates
+    }
+
+    private fun polygonArea(points: List<Offset>): Float {
+        if (points.size < 3) return 0f
+        var area = 0f
+        var j = points.lastIndex
+        for (i in points.indices) {
+            area += (points[j].x + points[i].x) * (points[j].y - points[i].y)
+            j = i
+        }
+        return kotlin.math.abs(area / 2f)
     }
 
     private fun distanceSquared(first: Offset, second: Offset): Float {
@@ -920,25 +1006,29 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         return dx * dx + dy * dy
     }
 
-    private fun contourClosureTolerance(points: List<Offset>, strokeWidth: Float): Float {
-        val pathLength = points.zipWithNext().sumOf { (first, second) ->
-            kotlin.math.sqrt(distanceSquared(first, second).toDouble())
-        }.toFloat()
-        // Finger-drawn circles commonly finish a little short of their starting point.
-        // Scale tolerance with the loop while capping it so open paths are not closed
-        // across a large gap just because they are long.
-        return maxOf(48f, strokeWidth * 2f, pathLength * 0.18f).coerceAtMost(180f)
-    }
+    private fun pointInPolygon(point: Offset, polygon: List<Offset>, strokeWidth: Float = 10f): Boolean {
+        if (polygon.size < 3) return false
 
-    private fun pointInPolygon(point: Offset, polygon: List<Offset>): Boolean {
-        var inside = false
+        // 1. Check if tap point is on/near perimeter of the polygon (stroke boundary)
+        val boundaryTolerance = maxOf(28f, strokeWidth * 1.8f)
         var previous = polygon.last()
         for (current in polygon) {
-            if (isNearSegment(point, previous, current, tolerance = 12f)) return true
+            if (isNearSegment(point, previous, current, boundaryTolerance)) {
+                return true
+            }
+            previous = current
+        }
+
+        // 2. Check if tap point is inside the polygon using Ray Casting (even-odd rule)
+        var inside = false
+        previous = polygon.last()
+        for (current in polygon) {
             if ((current.y > point.y) != (previous.y > point.y)) {
                 val crossingX = (previous.x - current.x) * (point.y - current.y) /
                     (previous.y - current.y) + current.x
-                if (point.x < crossingX) inside = !inside
+                if (point.x < crossingX) {
+                    inside = !inside
+                }
             }
             previous = current
         }

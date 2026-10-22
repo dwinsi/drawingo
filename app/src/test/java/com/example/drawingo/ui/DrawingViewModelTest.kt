@@ -31,6 +31,7 @@ class DrawingViewModelTest {
     private val fakeDao = object : DrawingDao {
         override fun getAllProjects(): Flow<List<DrawingProject>> = flowOf(emptyList())
         override suspend fun getProjectById(id: Long): DrawingProject? = null
+        override suspend fun getMostRecentProject(): DrawingProject? = null
         override suspend fun insertProject(project: DrawingProject): Long = 1L
         override suspend fun updateProject(project: DrawingProject) {}
         override suspend fun deleteProject(id: Long) {}
@@ -116,5 +117,53 @@ class DrawingViewModelTest {
         viewModel.createNewProject()
         assertEquals(emptySet<DrawingViewModel.QuickMagicPreset>(), viewModel.activePresets.value)
     }
+
+    @Test
+    fun `fill tool fills enclosed shape when tapping anywhere inside or on the drawn object`() {
+        // Draw a square shape: (100,100) -> (300,100) -> (300,300) -> (100,300) -> (100,105)
+        viewModel.setTool(DrawingTool.PEN)
+        viewModel.onPointerDown(pointerId = 1L, screenPosition = Offset(100f, 100f))
+        viewModel.onPointerMove(pointerId = 1L, screenPosition = Offset(300f, 100f))
+        viewModel.onPointerMove(pointerId = 1L, screenPosition = Offset(300f, 300f))
+        viewModel.onPointerMove(pointerId = 1L, screenPosition = Offset(100f, 300f))
+        viewModel.onPointerMove(pointerId = 1L, screenPosition = Offset(100f, 105f))
+        viewModel.onPointerUp(pointerId = 1L)
+
+        val totalStrokes = { viewModel.layers.value.sumOf { layer -> layer.frames.sumOf { it.strokes.size } } }
+        assertEquals(1, totalStrokes())
+
+        // Select Fill tool and tap in the CENTER of the drawn object (200, 200)
+        viewModel.setTool(DrawingTool.FILL)
+        viewModel.onPointerDown(pointerId = 2L, screenPosition = Offset(200f, 200f))
+
+        assertEquals(2, totalStrokes())
+        val fillStroke = viewModel.layers.value[0].frames[0].strokes.last()
+        assertEquals(DrawingTool.FILL, fillStroke.tool)
+
+        // Undo fill
+        viewModel.undo()
+        assertEquals(1, totalStrokes())
+
+        // Tap on the BOUNDARY of the drawn object (300, 200)
+        viewModel.onPointerDown(pointerId = 3L, screenPosition = Offset(300f, 200f))
+        assertEquals(2, totalStrokes())
+        assertEquals(DrawingTool.FILL, viewModel.layers.value[0].frames[0].strokes.last().tool)
+    }
+
+    @Test
+    fun `spray paint tool creates strokes with spray tool properties`() {
+        viewModel.setTool(DrawingTool.SPRAY)
+        assertEquals(DrawingTool.SPRAY, viewModel.selectedTool.value)
+
+        viewModel.onPointerDown(pointerId = 1L, screenPosition = Offset(50f, 50f))
+        viewModel.onPointerMove(pointerId = 1L, screenPosition = Offset(100f, 100f))
+        viewModel.onPointerUp(pointerId = 1L)
+
+        val stroke = viewModel.layers.value[0].frames[0].strokes.last()
+        assertEquals(DrawingTool.SPRAY, stroke.tool)
+        assertEquals(0.75f, stroke.alpha)
+    }
 }
+
+
 

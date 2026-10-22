@@ -1,6 +1,7 @@
 package com.example.drawingo.ui
 
 import android.net.Uri
+import com.example.drawingo.util.SprayRenderer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -1227,6 +1228,7 @@ fun LiveStrokePreview(
         when (tool) {
             DrawingTool.WATERCOLOR -> WatercolorRenderer.draw(drawContext.canvas.nativeCanvas, sampleStroke)
             DrawingTool.CRAYON -> CrayonRenderer.drawCrayonStroke(drawContext.canvas.nativeCanvas, sampleStroke)
+            DrawingTool.SPRAY -> SprayRenderer.draw(drawContext.canvas.nativeCanvas, sampleStroke)
             DrawingTool.FILL -> drawCircle(color.copy(alpha = 0.78f), radius = size.minDimension * 0.27f)
             DrawingTool.ERASER -> {
                 val path = Path().apply {
@@ -1319,6 +1321,7 @@ private fun RecentToolCaddy(
                     DrawingTool.BRUSH -> Icons.Rounded.Brush
                     DrawingTool.WATERCOLOR -> Icons.Rounded.WaterDrop
                     DrawingTool.CRAYON -> Icons.Rounded.Draw
+                    DrawingTool.SPRAY -> Icons.Rounded.Grain
                     DrawingTool.FILL -> Icons.Rounded.FormatColorFill
                     DrawingTool.ERASER -> Icons.Rounded.AutoFixOff
                     DrawingTool.TEXT -> Icons.Rounded.TextFields
@@ -1329,6 +1332,7 @@ private fun RecentToolCaddy(
                     DrawingTool.BRUSH -> "Brush"
                     DrawingTool.WATERCOLOR -> "Watercolor"
                     DrawingTool.CRAYON -> "Crayon"
+                    DrawingTool.SPRAY -> "Spray"
                     DrawingTool.FILL -> "Fill"
                     DrawingTool.ERASER -> "Eraser"
                     DrawingTool.TEXT -> "Text"
@@ -1468,6 +1472,7 @@ private fun StudioToolDock(
                             Triple(DrawingTool.BRUSH, Icons.Rounded.Brush, "Brush"),
                             Triple(DrawingTool.WATERCOLOR, Icons.Rounded.WaterDrop, "Watercolor"),
                             Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
+                            Triple(DrawingTool.SPRAY, Icons.Rounded.Grain, "Spray"),
                             Triple(DrawingTool.FILL, Icons.Rounded.FormatColorFill, "Fill"),
                             Triple(DrawingTool.ERASER, Icons.Rounded.AutoFixOff, "Eraser"),
                             Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text"),
@@ -1478,7 +1483,8 @@ private fun StudioToolDock(
                                 DrawingTool.PEN,
                                 DrawingTool.BRUSH,
                                 DrawingTool.WATERCOLOR,
-                                DrawingTool.CRAYON
+                                DrawingTool.CRAYON,
+                                DrawingTool.SPRAY
                             )
                             Column(
                                 modifier = Modifier
@@ -1568,6 +1574,7 @@ private fun ToolsPopoverCard(
         Triple(DrawingTool.BRUSH, Icons.Rounded.Brush, "Brush"),
         Triple(DrawingTool.WATERCOLOR, Icons.Rounded.WaterDrop, "Watercolor"),
         Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
+        Triple(DrawingTool.SPRAY, Icons.Rounded.Grain, "Spray"),
         Triple(DrawingTool.FILL, Icons.Rounded.FormatColorFill, "Fill"),
         Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text"),
         Triple(DrawingTool.LASSO, Icons.Rounded.SelectAll, "Lasso")
@@ -1722,6 +1729,7 @@ fun FloatingToolRail(
         DrawingTool.BRUSH -> Icons.Rounded.Brush
         DrawingTool.WATERCOLOR -> Icons.Rounded.WaterDrop
         DrawingTool.CRAYON -> Icons.Rounded.Draw
+        DrawingTool.SPRAY -> Icons.Rounded.Grain
         DrawingTool.FILL -> Icons.Rounded.FormatColorFill
         DrawingTool.TEXT -> Icons.Rounded.TextFields
         DrawingTool.LASSO -> Icons.Rounded.SelectAll
@@ -1732,6 +1740,7 @@ fun FloatingToolRail(
         DrawingTool.BRUSH -> "Brush"
         DrawingTool.WATERCOLOR -> "Water"
         DrawingTool.CRAYON -> "Crayon"
+        DrawingTool.SPRAY -> "Spray"
         DrawingTool.FILL -> "Fill"
         DrawingTool.TEXT -> "Text"
         DrawingTool.LASSO -> "Lasso"
@@ -2594,6 +2603,9 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
         }
         DrawingTool.CRAYON -> {
             CrayonRenderer.drawCrayonStroke(drawContext.canvas.nativeCanvas, s)
+        }
+        DrawingTool.SPRAY -> {
+            SprayRenderer.draw(drawContext.canvas.nativeCanvas, s)
         }
         DrawingTool.ERASER -> {
             drawPath(

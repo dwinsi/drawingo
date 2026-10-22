@@ -11,6 +11,7 @@ enum class DrawingTool {
     BRUSH,
     WATERCOLOR,
     CRAYON,
+    SPRAY,
     FILL,
     TEXT
 }

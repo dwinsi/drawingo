@@ -179,6 +179,9 @@ object CanvasBitmapUtils {
                 DrawingTool.CRAYON -> {
                     CrayonRenderer.drawCrayonStroke(canvas, stroke, scale, offsetX, offsetY)
                 }
+                DrawingTool.SPRAY -> {
+                    SprayRenderer.draw(canvas, stroke, scale, offsetX, offsetY)
+                }
                 else -> canvas.drawPath(path, paint)
             }
         }
