@@ -137,14 +137,41 @@ object CanvasBitmapUtils {
 
             if (stroke.tool == DrawingTool.TEXT) {
                 val text = stroke.text
-                if (text != null) {
+                if (text != null && stroke.points.isNotEmpty()) {
+                    val p0 = stroke.points[0]
+                    val cx = p0.x * scale + offsetX
+                    val cy = p0.y * scale + offsetY
+
+                    var rotationAngle = 0f
+                    var scaleFactor = 1f
+
+                    if (stroke.points.size >= 2) {
+                        val p1 = stroke.points[1]
+                        val dx = (p1.x - p0.x) * scale
+                        val dy = (p1.y - p0.y) * scale
+                        val currentRadius = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                        val defaultRadius = (stroke.strokeWidth * scale * text.length * 0.32f).coerceAtLeast(24f * scale)
+                        if (defaultRadius > 0f && currentRadius > 0f) {
+                            scaleFactor = currentRadius / defaultRadius
+                            rotationAngle = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+                        }
+                    }
+
+                    val effectiveTextSize = stroke.strokeWidth * scale * scaleFactor
                     paint.style = Paint.Style.FILL
-                    paint.textSize = baseWidth
+                    paint.textSize = effectiveTextSize
                     paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
                     paint.textAlign = Paint.Align.CENTER
-                    val x = stroke.points[0].x * scale + offsetX
-                    val y = stroke.points[0].y * scale + offsetY + (paint.textSize / 3f)
-                    canvas.drawText(text, x, y, paint)
+                    paint.color = stroke.color.toArgb()
+                    paint.alpha = (stroke.alpha * 255).toInt().coerceIn(0, 255)
+
+                    canvas.save()
+                    canvas.translate(cx, cy)
+                    if (rotationAngle != 0f) {
+                        canvas.rotate(rotationAngle)
+                    }
+                    canvas.drawText(text, 0f, (effectiveTextSize / 3f), paint)
+                    canvas.restore()
                 }
                 continue
             }

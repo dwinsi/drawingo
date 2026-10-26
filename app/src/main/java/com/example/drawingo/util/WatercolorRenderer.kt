@@ -39,14 +39,15 @@ object WatercolorRenderer {
         stroke: DrawnStroke,
         scale: Float = 1f,
         offsetX: Float = 0f,
-        offsetY: Float = 0f
+        offsetY: Float = 0f,
+        alphaMultiplier: Float = 1f
     ) {
         val points = stroke.points
         if (points.isEmpty()) return
 
         val baseWidth = (stroke.strokeWidth * scale).coerceAtLeast(4f)
         val color = stroke.color.toArgb()
-        val baseAlpha = (stroke.alpha * 255).toInt().coerceIn(10, 255)
+        val baseAlpha = (stroke.alpha * alphaMultiplier * 255).toInt().coerceIn(10, 255)
 
         if (scale != 1f || offsetX != 0f || offsetY != 0f) {
             shaderMatrix.reset()
@@ -62,22 +63,28 @@ object WatercolorRenderer {
             return
         }
 
-        // Build continuous smooth quadratic path
-        val path = Path()
-        var previousX = points.first().x * scale + offsetX
-        var previousY = points.first().y * scale + offsetY
-        path.moveTo(previousX, previousY)
-        for (index in 1 until points.size) {
-            val point = points[index]
-            val x = point.x * scale + offsetX
-            val y = point.y * scale + offsetY
-            val midpointX = (previousX + x) * 0.5f
-            val midpointY = (previousY + y) * 0.5f
-            path.quadTo(previousX, previousY, midpointX, midpointY)
-            previousX = x
-            previousY = y
+        class WatercolorCache(val path: Path, val pointCount: Int, val scale: Float, val ox: Float, val oy: Float)
+        var cache = stroke.renderCache as? WatercolorCache
+        if (cache == null || cache.pointCount != points.size || cache.scale != scale || cache.ox != offsetX || cache.oy != offsetY) {
+            val path = Path()
+            var previousX = points.first().x * scale + offsetX
+            var previousY = points.first().y * scale + offsetY
+            path.moveTo(previousX, previousY)
+            for (index in 1 until points.size) {
+                val point = points[index]
+                val x = point.x * scale + offsetX
+                val y = point.y * scale + offsetY
+                val midpointX = (previousX + x) * 0.5f
+                val midpointY = (previousY + y) * 0.5f
+                path.quadTo(previousX, previousY, midpointX, midpointY)
+                previousX = x
+                previousY = y
+            }
+            path.lineTo(previousX, previousY)
+            cache = WatercolorCache(path, points.size, scale, offsetX, offsetY)
+            stroke.renderCache = cache
         }
-        path.lineTo(previousX, previousY)
+        val path = cache.path
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE

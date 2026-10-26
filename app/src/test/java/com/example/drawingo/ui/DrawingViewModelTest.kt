@@ -163,7 +163,40 @@ class DrawingViewModelTest {
         assertEquals(DrawingTool.SPRAY, stroke.tool)
         assertEquals(0.75f, stroke.alpha)
     }
+
+    @Test
+    fun `text stroke supports selection moving scaling and rotation`() {
+        viewModel.setTool(DrawingTool.TEXT)
+        viewModel.onPointerDown(pointerId = 1L, screenPosition = Offset(200f, 200f))
+        viewModel.addTextStroke("Hello World")
+
+        val textStroke = viewModel.layers.value[0].frames[0].strokes.last()
+        assertEquals(DrawingTool.TEXT, textStroke.tool)
+        assertEquals("Hello World", textStroke.text)
+        assertTrue(textStroke.points.size >= 2)
+
+        val handlePos = textStroke.points[1]
+        // Simulate dragging the scale and rotate handle
+        viewModel.updateTextStrokeTransform(textStroke.id, Offset(handlePos.x + 50f, handlePos.y + 50f))
+
+        val updatedStroke = viewModel.layers.value[0].frames[0].strokes.last()
+        assertEquals(Offset(handlePos.x + 50f, handlePos.y + 50f), updatedStroke.points[1])
+        assertTrue(updatedStroke.boundingBox.width > textStroke.boundingBox.width)
+    }
+
+    @Test
+    fun `switching tool clears any in flight active strokes`() {
+        viewModel.setTool(DrawingTool.PEN)
+        viewModel.onPointerDown(pointerId = 1L, screenPosition = Offset(10f, 10f))
+        assertEquals(1, viewModel.activeStrokes.value.size)
+
+        // User switches tool mid-flight or after an incomplete touch
+        viewModel.setTool(DrawingTool.SPRAY)
+        assertEquals(DrawingTool.SPRAY, viewModel.selectedTool.value)
+        assertTrue(viewModel.activeStrokes.value.isEmpty())
+    }
 }
+
 
 
 

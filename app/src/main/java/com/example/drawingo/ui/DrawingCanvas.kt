@@ -189,16 +189,16 @@ fun DrawingCanvas(
     val canvasOffsetX by viewModel.canvasOffsetX.collectAsState()
     val canvasOffsetY by viewModel.canvasOffsetY.collectAsState()
 
+    var isToolDrawerExpanded by remember { mutableStateOf(false) }
     val completedStrokes by viewModel.completedStrokes.collectAsState()
     val activeStrokes by viewModel.activeStrokes.collectAsState()
-    val isDrawing = activeStrokes.isNotEmpty()
+    val isDrawing = activeStrokes.isNotEmpty() && !isToolDrawerExpanded
     val controlsAlpha by animateFloatAsState(
         targetValue = if (isDrawing) 0.15f else 1.0f,
         animationSpec = tween(180),
         label = "controlsAlpha"
     )
 
-    var isToolDrawerExpanded by remember { mutableStateOf(false) }
     var toolDockHeightPx by remember { mutableIntStateOf(0) }
     var canvasBoundsPx by remember { mutableStateOf(IntSize.Zero) }
     var toolCaddyOffsetYDp by remember {
@@ -229,7 +229,7 @@ fun DrawingCanvas(
     var showAnimationDock by remember { mutableStateOf(false) }
     var showMenus by remember { mutableStateOf(false) }
     var isZenMode by remember { mutableStateOf(false) }
-    val showTextPrompt by viewModel.showTextPrompt.collectAsState()
+
     
     // Animation States
     val currentFrameIndex by viewModel.currentFrameIndex.collectAsState()
@@ -254,11 +254,14 @@ fun DrawingCanvas(
         drawingReplayProgress = 0f
     }
 
+    val needsContinuousAnimation = activePresets.isNotEmpty() || isDrawingReplayPlaying
     var frameTimeMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            withInfiniteAnimationFrameMillis {
-                frameTimeMs = System.currentTimeMillis()
+    LaunchedEffect(needsContinuousAnimation) {
+        if (needsContinuousAnimation) {
+            while (true) {
+                withInfiniteAnimationFrameMillis {
+                    frameTimeMs = System.currentTimeMillis()
+                }
             }
         }
     }
@@ -321,11 +324,20 @@ fun DrawingCanvas(
                                     } else if (change.changedToUp()) {
                                         viewModel.onPointerUp(pointerId, position)
                                         change.consume()
+                                    } else if (!change.pressed) {
+                                        viewModel.onPointerCancel(pointerId)
                                     }
                                 }
                             } else if (event.changes.size >= 2) {
                                 for (change in event.changes) {
                                     viewModel.onPointerCancel(change.id.value)
+                                }
+                            }
+                            // Clean up any stranded pointers when no finger is pressed
+                            val anyPressed = event.changes.any { it.pressed }
+                            if (!anyPressed && activeStrokes.isNotEmpty()) {
+                                for (pointerId in activeStrokes.keys) {
+                                    viewModel.onPointerCancel(pointerId)
                                 }
                             }
                         }
@@ -470,7 +482,15 @@ fun DrawingCanvas(
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 8.dp)
                     .onSizeChanged { toolDockHeightPx = it.height }
-                    .graphicsLayer { alpha = controlsAlpha }
+                    .graphicsLayer { alpha = if (isToolDrawerExpanded) 1f else controlsAlpha }
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
             )
         }
 
@@ -509,6 +529,14 @@ fun DrawingCanvas(
                         y = -(toolDockHeight.dp + 12.dp) + effectiveOffsetY.dp
                     )
                     .graphicsLayer { alpha = controlsAlpha }
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
             )
         }
 
@@ -610,30 +638,7 @@ fun DrawingCanvas(
         }
 
 
-        if (showTextPrompt) {
-            var textValue by remember { mutableStateOf("") }
-            AlertDialog(
-                onDismissRequest = { viewModel.cancelTextPrompt() },
-                title = { Text("Add Text") },
-                text = {
-                    TextField(
-                        value = textValue,
-                        onValueChange = { textValue = it },
-                        placeholder = { Text("Type here...") }
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = { viewModel.addTextStroke(textValue) }) {
-                        Text("Add")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.cancelTextPrompt() }) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
+
 
         AnimatedVisibility(
             visible = showMenus,
@@ -1475,7 +1480,6 @@ private fun StudioToolDock(
                             Triple(DrawingTool.SPRAY, Icons.Rounded.Grain, "Spray"),
                             Triple(DrawingTool.FILL, Icons.Rounded.FormatColorFill, "Fill"),
                             Triple(DrawingTool.ERASER, Icons.Rounded.AutoFixOff, "Eraser"),
-                            Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text"),
                             Triple(DrawingTool.LASSO, Icons.Rounded.SelectAll, "Select")
                         ).forEach { (tool, icon, label) ->
                             val selected = selectedTool == tool
@@ -1576,7 +1580,6 @@ private fun ToolsPopoverCard(
         Triple(DrawingTool.CRAYON, Icons.Rounded.Draw, "Crayon"),
         Triple(DrawingTool.SPRAY, Icons.Rounded.Grain, "Spray"),
         Triple(DrawingTool.FILL, Icons.Rounded.FormatColorFill, "Fill"),
-        Triple(DrawingTool.TEXT, Icons.Rounded.TextFields, "Text"),
         Triple(DrawingTool.LASSO, Icons.Rounded.SelectAll, "Lasso")
     )
 
@@ -2446,53 +2449,73 @@ private fun DrawScope.drawAllCanvasContent(
         if (onionSkinEnabled && currentFrameIndex > 0) {
             val prevFrame = layer.frames.getOrNull(currentFrameIndex - 1)
             prevFrame?.strokes?.sortedBy { if (it.tool == DrawingTool.FILL) 0 else 1 }?.forEach { stroke ->
-                val ghostStroke = stroke.copy(alpha = stroke.alpha * layerAlpha * 0.3f)
-                drawSingleStroke(ghostStroke)
+                drawSingleStroke(stroke, alphaMultiplier = layerAlpha * 0.3f)
             }
         }
         
         // Draw current frame
         val currentFrame = layer.frames.getOrNull(currentFrameIndex)
-        currentFrame?.strokes?.filter { it.tool == DrawingTool.FILL }?.forEach { stroke ->
-            drawSingleStroke(stroke.copy(alpha = stroke.alpha * layerAlpha))
-        }
-        currentFrame?.strokes?.filter { it.tool != DrawingTool.FILL }?.forEach { stroke ->
+        val frameStrokes = currentFrame?.strokes.orEmpty()
+        val sortedStrokes = frameStrokes.sortedBy { if (it.tool == DrawingTool.FILL) 0 else 1 }
+
+        for (stroke in sortedStrokes) {
             val revealFraction = strokeRevealFractions?.get(stroke.id)
-            if (strokeRevealFractions != null && revealFraction == null) return@forEach
+            if (strokeRevealFractions != null && revealFraction == null) continue
             var finalStroke = stroke
             
             // Apply visual transform if this stroke is currently selected by the lasso
-            if (stroke.id in selectedStrokeIds) {
+            if (stroke.id in selectedStrokeIds && lassoTransform != Offset.Zero) {
                 val shiftedPoints = stroke.points.map { Offset(it.x + lassoTransform.x, it.y + lassoTransform.y) }
                 finalStroke = stroke.copy(points = shiftedPoints)
             }
             
-            val strokeWithAlpha = finalStroke.copy(alpha = finalStroke.alpha * layerAlpha)
             val replayStroke = if (strokeRevealFractions != null) {
-                strokeWithAlpha.revealedTo(revealFraction ?: 0f)
-            } else strokeWithAlpha
+                finalStroke.revealedTo(revealFraction ?: 0f)
+            } else finalStroke
             
             if (activePresets.isNotEmpty()) {
                 // Animate only if no strokes are selected, OR if this specific stroke is selected
                 if (selectedStrokeIds.isEmpty() || stroke.id in selectedStrokeIds) {
                     val magicStroke = processMagicStroke(replayStroke, activePresets, timeMs, groupCenter, groupBounds, size)
-                    if (magicStroke != null) drawSingleStroke(magicStroke)
+                    if (magicStroke != null) drawSingleStroke(magicStroke, alphaMultiplier = layerAlpha)
                 } else {
-                    drawSingleStroke(replayStroke)
+                    drawSingleStroke(replayStroke, alphaMultiplier = layerAlpha)
                 }
             } else {
-                drawSingleStroke(replayStroke)
+                drawSingleStroke(replayStroke, alphaMultiplier = layerAlpha)
             }
             
-            // Draw selection highlight bounding box only if no animation is currently active
-            if (stroke.id in selectedStrokeIds && activePresets.isEmpty()) {
-                val bounds = DrawnStroke.calculateBounds(finalStroke.points)
+            // Draw selection highlight bounding box for strokes when selected and not animating
+            if (stroke.tool != DrawingTool.FILL && stroke.id in selectedStrokeIds && activePresets.isEmpty()) {
+                val bounds = finalStroke.boundingBox
                 drawRect(
                     color = StudioAccent.copy(alpha = 0.3f),
                     topLeft = Offset(bounds.left, bounds.top),
                     size = androidx.compose.ui.geometry.Size(bounds.width, bounds.height),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f))
                 )
+
+                if (stroke.tool == DrawingTool.TEXT && finalStroke.points.size >= 2) {
+                    val p0 = finalStroke.points[0]
+                    val p1 = finalStroke.points[1]
+                    drawLine(
+                        color = StudioAccent,
+                        start = p0,
+                        end = p1,
+                        strokeWidth = 2f,
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                    )
+                    drawCircle(
+                        color = StudioAccent,
+                        radius = 8.dp.toPx(),
+                        center = p1
+                    )
+                    drawCircle(
+                        color = androidx.compose.ui.graphics.Color.White,
+                        radius = 5.dp.toPx(),
+                        center = p1
+                    )
+                }
             }
         }
         
@@ -2501,22 +2524,30 @@ private fun DrawScope.drawAllCanvasContent(
             for (stroke in activeStrokes) {
                 // If it's a lasso drag stroke (-1L), we don't draw it here, we already transformed the selected strokes visually
                 if (stroke.id == -1L && stroke.tool == DrawingTool.LASSO) continue
-                drawSingleStroke(stroke.copy(alpha = stroke.alpha * layerAlpha))
+                drawSingleStroke(stroke, alphaMultiplier = layerAlpha)
             }
         }
     }
 }
 
-private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
+private class PressureSegment(val path: Path, val width: Float)
+
+private fun DrawScope.drawSingleStroke(stroke: DrawnStroke, alphaMultiplier: Float = 1.0f) {
     if (stroke.points.isEmpty()) return
 
+    val effectiveAlpha = (stroke.alpha * alphaMultiplier).coerceIn(0f, 1f)
+
     if (stroke.tool == DrawingTool.FILL) {
-        val fillPath = Path().apply {
-            moveTo(stroke.points.first().x, stroke.points.first().y)
-            stroke.points.drop(1).forEach { lineTo(it.x, it.y) }
-            close()
+        var fillPath = stroke.renderCache as? Path
+        if (fillPath == null) {
+            fillPath = Path().apply {
+                moveTo(stroke.points.first().x, stroke.points.first().y)
+                stroke.points.drop(1).forEach { lineTo(it.x, it.y) }
+                close()
+            }
+            stroke.renderCache = fillPath
         }
-        drawPath(fillPath, stroke.color.copy(alpha = stroke.alpha))
+        drawPath(fillPath, stroke.color.copy(alpha = effectiveAlpha))
         return
     }
     
@@ -2533,83 +2564,103 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
     
     // If the stroke supports pressure and we have pressure data, draw variable width
     if ((s.tool == DrawingTool.PEN || s.tool == DrawingTool.BRUSH) && s.pressures.size == s.points.size) {
-        var previousX = s.points[0].x
-        var previousY = s.points[0].y
-        var previousPressure = s.pressures[0]
-        
-        var lastDrawX = previousX
-        var lastDrawY = previousY
-        
-        for (i in 1 until s.points.size) {
-            val currentX = s.points[i].x
-            val currentY = s.points[i].y
-            val currentPressure = s.pressures[i]
+        @Suppress("UNCHECKED_CAST")
+        var segments = s.renderCache as? List<PressureSegment>
+        if (segments == null) {
+            val builtSegments = mutableListOf<PressureSegment>()
+            var previousX = s.points[0].x
+            var previousY = s.points[0].y
+            var previousPressure = s.pressures[0]
             
-            val midX = (previousX + currentX) / 2f
-            val midY = (previousY + currentY) / 2f
+            var lastDrawX = previousX
+            var lastDrawY = previousY
             
-            // Map pressure to width (smooth transition between previous and current pressure)
-            val avgWidth = s.strokeWidth * (0.2f + ((previousPressure + currentPressure) / 2f) * 1.5f)
+            for (i in 1 until s.points.size) {
+                val currentX = s.points[i].x
+                val currentY = s.points[i].y
+                val currentPressure = s.pressures[i]
+                
+                val midX = (previousX + currentX) / 2f
+                val midY = (previousY + currentY) / 2f
+                
+                // Map pressure to width (smooth transition between previous and current pressure)
+                val avgWidth = s.strokeWidth * (0.2f + ((previousPressure + currentPressure) / 2f) * 1.5f)
+                
+                val segmentPath = Path()
+                segmentPath.moveTo(lastDrawX, lastDrawY)
+                segmentPath.quadraticTo(previousX, previousY, midX, midY)
+                
+                builtSegments.add(PressureSegment(segmentPath, avgWidth))
+                
+                lastDrawX = midX
+                lastDrawY = midY
+                previousX = currentX
+                previousY = currentY
+                previousPressure = currentPressure
+            }
             
-            val segmentPath = Path()
-            segmentPath.moveTo(lastDrawX, lastDrawY)
-            segmentPath.quadraticTo(previousX, previousY, midX, midY)
+            // Final segment connecting to the last point
+            val finalPath = Path()
+            finalPath.moveTo(lastDrawX, lastDrawY)
+            finalPath.lineTo(previousX, previousY)
+            val finalWidth = s.strokeWidth * (0.2f + previousPressure * 1.5f)
+            builtSegments.add(PressureSegment(finalPath, finalWidth))
             
-            drawPath(
-                path = segmentPath,
-                color = s.color.copy(alpha = s.alpha),
-                style = Stroke(width = avgWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
-            )
-            
-            lastDrawX = midX
-            lastDrawY = midY
-            previousX = currentX
-            previousY = currentY
-            previousPressure = currentPressure
+            segments = builtSegments
+            s.renderCache = segments
+            if (s !== stroke) {
+                stroke.renderCache = segments
+            }
         }
         
-        // Final segment connecting to the last point
-        val finalPath = Path()
-        finalPath.moveTo(lastDrawX, lastDrawY)
-        finalPath.lineTo(previousX, previousY)
-        val finalWidth = s.strokeWidth * (0.2f + previousPressure * 1.5f)
-        
-        drawPath(
-            path = finalPath,
-            color = s.color.copy(alpha = s.alpha),
-            style = Stroke(width = finalWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
+        val strokeColor = s.color.copy(alpha = effectiveAlpha)
+        for (segment in segments) {
+            drawPath(
+                path = segment.path,
+                color = strokeColor,
+                style = Stroke(width = segment.width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+        }
         return
     }
 
     // Standard uniform path drawing (fallback or for non-pressure tools)
-    val path = Path()
-    var previousX = s.points[0].x
-    var previousY = s.points[0].y
-    path.moveTo(previousX, previousY)
-    for (i in 1 until s.points.size) {
-        val currentX = s.points[i].x
-        val currentY = s.points[i].y
-        val midX = (previousX + currentX) / 2f
-        val midY = (previousY + currentY) / 2f
-        path.quadraticTo(previousX, previousY, midX, midY)
-        previousX = currentX
-        previousY = currentY
+    var path = s.renderCache as? Path
+    if (path == null && s.tool != DrawingTool.WATERCOLOR && s.tool != DrawingTool.CRAYON && s.tool != DrawingTool.SPRAY && s.tool != DrawingTool.TEXT) {
+        path = Path()
+        var previousX = s.points[0].x
+        var previousY = s.points[0].y
+        path.moveTo(previousX, previousY)
+        for (i in 1 until s.points.size) {
+            val currentX = s.points[i].x
+            val currentY = s.points[i].y
+            val midX = (previousX + currentX) / 2f
+            val midY = (previousY + currentY) / 2f
+            path.quadraticTo(previousX, previousY, midX, midY)
+            previousX = currentX
+            previousY = currentY
+        }
+        path.lineTo(previousX, previousY)
+        s.renderCache = path
+        if (s !== stroke) {
+            stroke.renderCache = path
+        }
     }
-    path.lineTo(previousX, previousY)
+
+    val strokeColor = s.color.copy(alpha = effectiveAlpha)
     when (s.tool) {
         DrawingTool.WATERCOLOR -> {
-            WatercolorRenderer.draw(drawContext.canvas.nativeCanvas, s)
+            WatercolorRenderer.draw(drawContext.canvas.nativeCanvas, s, alphaMultiplier = alphaMultiplier)
         }
         DrawingTool.CRAYON -> {
-            CrayonRenderer.drawCrayonStroke(drawContext.canvas.nativeCanvas, s)
+            CrayonRenderer.drawCrayonStroke(drawContext.canvas.nativeCanvas, s, alphaMultiplier = alphaMultiplier)
         }
         DrawingTool.SPRAY -> {
-            SprayRenderer.draw(drawContext.canvas.nativeCanvas, s)
+            SprayRenderer.draw(drawContext.canvas.nativeCanvas, s, alphaMultiplier = alphaMultiplier)
         }
         DrawingTool.ERASER -> {
             drawPath(
-                path = path,
+                path = path!!,
                 color = Color.White,
                 style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
                 blendMode = BlendMode.Clear
@@ -2617,24 +2668,50 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke) {
         }
         DrawingTool.TEXT -> {
             val text = s.text
-            if (text != null) {
-                val paint = android.graphics.Paint().apply {
+            if (text != null && s.points.isNotEmpty()) {
+                val p0 = s.points[0]
+                val cx = p0.x
+                val cy = p0.y
+
+                var rotationAngle = 0f
+                var scaleFactor = 1f
+
+                if (s.points.size >= 2) {
+                    val p1 = s.points[1]
+                    val dx = p1.x - p0.x
+                    val dy = p1.y - p0.y
+                    val currentRadius = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                    val defaultRadius = (s.strokeWidth * text.length * 0.32f).coerceAtLeast(24f)
+                    if (defaultRadius > 0f && currentRadius > 0f) {
+                        scaleFactor = currentRadius / defaultRadius
+                        rotationAngle = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+                    }
+                }
+
+                val finalScale = (scaleFactor * (s.pressures.getOrNull(0) ?: 1f)).coerceIn(0.1f, 10f)
+                val effectiveTextSize = s.strokeWidth * finalScale
+
+                val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                     color = s.color.toArgb()
-                    textSize = s.strokeWidth
+                    textSize = effectiveTextSize
                     typeface = android.graphics.Typeface.DEFAULT_BOLD
                     textAlign = android.graphics.Paint.Align.CENTER
+                    alpha = (effectiveAlpha * 255).toInt().coerceIn(0, 255)
                 }
-                drawContext.canvas.nativeCanvas.drawText(
-                    text,
-                    previousX,
-                    previousY + (paint.textSize / 3f), // approximate vertical centering
-                    paint
-                )
+
+                val nativeCanvas = drawContext.canvas.nativeCanvas
+                nativeCanvas.save()
+                nativeCanvas.translate(cx, cy)
+                if (rotationAngle != 0f) {
+                    nativeCanvas.rotate(rotationAngle)
+                }
+                nativeCanvas.drawText(text, 0f, (effectiveTextSize / 3f), paint)
+                nativeCanvas.restore()
             }
         }
         else -> drawPath(
-            path = path,
-            color = s.color.copy(alpha = s.alpha),
+            path = path!!,
+            color = strokeColor,
             style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
     }

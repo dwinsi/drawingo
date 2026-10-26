@@ -117,6 +117,11 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _showTextPrompt = MutableStateFlow(false)
     val showTextPrompt: StateFlow<Boolean> = _showTextPrompt.asStateFlow()
 
+    private val _textPromptInitialValue = MutableStateFlow("")
+    val textPromptInitialValue: StateFlow<String> = _textPromptInitialValue.asStateFlow()
+
+    private val _editingTextStrokeId = MutableStateFlow<Long?>(null)
+
     private var pointerDownCanvasPos: Offset? = null
 
     private val _textPromptPosition = MutableStateFlow(Offset.Zero)
@@ -468,29 +473,156 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     fun cancelTextPrompt() {
         _showTextPrompt.value = false
+        _editingTextStrokeId.value = null
     }
 
     fun addTextStroke(text: String) {
         _showTextPrompt.value = false
-        if (text.isBlank()) return
+        if (text.isBlank()) {
+            _editingTextStrokeId.value = null
+            return
+        }
 
         val canvasPos = _textPromptPosition.value
         val tool = DrawingTool.TEXT
+        val textSize = _selectedStrokeWidth.value * 4f
+        val defaultRadius = (textSize * text.length * 0.32f).coerceAtLeast(24f)
+        val handlePos = Offset(canvasPos.x + defaultRadius, canvasPos.y)
+        val points = listOf(canvasPos, handlePos)
+        val bounds = DrawnStroke.calculateTextBounds(text, textSize, canvasPos)
 
-        val newStroke = DrawnStroke(
-            id = strokeIdGenerator.getAndIncrement(),
-            color = _selectedColor.value,
-            strokeWidth = _selectedStrokeWidth.value * 4f,
-            alpha = 1.0f,
-            tool = tool,
-            points = listOf(canvasPos),
-            text = text,
-            boundingBox = Rect(canvasPos, 1f) // Bounding box approximation for now
-        )
+        val editingId = _editingTextStrokeId.value
+        if (editingId != null) {
+            val activeLayerId = _selectedLayerId.value ?: return
+            val frameIndex = _currentFrameIndex.value
+            _undoStack.value = _undoStack.value + listOf(_layers.value)
+            _redoStack.value = emptyList()
+            _layers.value = _layers.value.map { layer ->
+                if (layer.id != activeLayerId) layer else {
+                    val updatedFrames = layer.frames.toMutableList()
+                    val currentFrame = updatedFrames.getOrNull(frameIndex)
+                    if (currentFrame != null) {
+                        val updatedStrokes = currentFrame.strokes.map { stroke ->
+                            if (stroke.id == editingId) {
+                                // Keep the existing position and rotation, but apply new text/color/font attributes
+                                val oldScaleFactor = if (stroke.points.size >= 2) {
+                                    val dx = stroke.points[1].x - stroke.points[0].x
+                                    val dy = stroke.points[1].y - stroke.points[0].y
+                                    val oldRadius = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                                    val oldDefaultRadius = (stroke.strokeWidth * (stroke.text?.length ?: 1) * 0.32f).coerceAtLeast(24f)
+                                    if (oldDefaultRadius > 0f) oldRadius / oldDefaultRadius else 1f
+                                } else 1f
+                                
+                                val newScaleFactor = oldScaleFactor
+                                val newDefaultRadius = (textSize * text.length * 0.32f).coerceAtLeast(24f)
+                                val newRadius = newDefaultRadius * newScaleFactor
+                                
+                                // Preserve old rotation if we had 2 points
+                                val newPoints = if (stroke.points.size >= 2) {
+                                    val p0 = stroke.points[0]
+                                    val p1 = stroke.points[1]
+                                    val angle = kotlin.math.atan2((p1.y - p0.y).toDouble(), (p1.x - p0.x).toDouble()).toFloat()
+                                    val newP1 = Offset(
+                                        p0.x + newRadius * kotlin.math.cos(angle.toDouble()).toFloat(),
+                                        p0.y + newRadius * kotlin.math.sin(angle.toDouble()).toFloat()
+                                    )
+                                    listOf(p0, newP1)
+                                } else points
+                                
+                                stroke.copy(
+                                    text = text,
+                                    color = _selectedColor.value,
+                                    strokeWidth = textSize,
+                                    points = newPoints,
+                                    boundingBox = DrawnStroke.calculateTextBounds(text, textSize, stroke.points.firstOrNull() ?: canvasPos, newScaleFactor)
+                                )
+                            } else stroke
+                        }
+                        updatedFrames[frameIndex] = currentFrame.copy(strokes = updatedStrokes)
+                    }
+                    layer.copy(frames = updatedFrames)
+                }
+            }
+            updateUndoRedoStates()
+        } else {
+            val newStroke = DrawnStroke(
+                id = strokeIdGenerator.getAndIncrement(),
+                color = _selectedColor.value,
+                strokeWidth = textSize,
+                alpha = 1.0f,
+                tool = tool,
+                points = points,
+                text = text,
+                boundingBox = bounds
+            )
 
-        // Inject this directly as a completed stroke
-        _activeStrokes.value = _activeStrokes.value + (-2L to newStroke)
-        onPointerUp(-2L)
+            // Inject this directly as a completed stroke
+            _activeStrokes.value = _activeStrokes.value + (-2L to newStroke)
+            onPointerUp(-2L)
+        }
+        _editingTextStrokeId.value = null
+    }
+
+    fun updateTextStrokeTransform(strokeId: Long, handlePosition: Offset) {
+        val activeLayerId = _selectedLayerId.value ?: return
+        val frameIndex = _currentFrameIndex.value
+
+        _layers.value = _layers.value.map { layer ->
+            if (layer.id != activeLayerId) layer else {
+                val updatedFrames = layer.frames.toMutableList()
+                val currentFrame = updatedFrames.getOrNull(frameIndex)
+                if (currentFrame != null) {
+                    val updatedStrokes = currentFrame.strokes.map { stroke ->
+                        if (stroke.id == strokeId && stroke.points.isNotEmpty()) {
+                            val p0 = stroke.points[0]
+                            val newPoints = listOf(p0, handlePosition)
+                            val dx = handlePosition.x - p0.x
+                            val dy = handlePosition.y - p0.y
+                            val currentRadius = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                            val defaultRadius = (stroke.strokeWidth * (stroke.text?.length ?: 1) * 0.32f).coerceAtLeast(24f)
+                            val scaleFactor = if (defaultRadius > 0f) currentRadius / defaultRadius else 1f
+                            val newBounds = DrawnStroke.calculateTextBounds(
+                                text = stroke.text ?: "",
+                                textSize = stroke.strokeWidth,
+                                center = p0,
+                                scaleFactor = scaleFactor
+                            )
+                            stroke.copy(points = newPoints, boundingBox = newBounds)
+                        } else stroke
+                    }
+                    updatedFrames[frameIndex] = currentFrame.copy(strokes = updatedStrokes)
+                }
+                layer.copy(frames = updatedFrames)
+            }
+        }
+    }
+
+    fun updateTextStrokePosition(strokeId: Long, dx: Float, dy: Float) {
+        val activeLayerId = _selectedLayerId.value ?: return
+        val frameIndex = _currentFrameIndex.value
+
+        _layers.value = _layers.value.map { layer ->
+            if (layer.id != activeLayerId) layer else {
+                val updatedFrames = layer.frames.toMutableList()
+                val currentFrame = updatedFrames.getOrNull(frameIndex)
+                if (currentFrame != null) {
+                    val updatedStrokes = currentFrame.strokes.map { stroke ->
+                        if (stroke.id == strokeId && stroke.points.isNotEmpty()) {
+                            val newPoints = stroke.points.map { Offset(it.x + dx, it.y + dy) }
+                            val newBounds = Rect(
+                                stroke.boundingBox.left + dx,
+                                stroke.boundingBox.top + dy,
+                                stroke.boundingBox.right + dx,
+                                stroke.boundingBox.bottom + dy
+                            )
+                            stroke.copy(points = newPoints, boundingBox = newBounds)
+                        } else stroke
+                    }
+                    updatedFrames[frameIndex] = currentFrame.copy(strokes = updatedStrokes)
+                }
+                layer.copy(frames = updatedFrames)
+            }
+        }
     }
 
     // Frame Management Functions
@@ -640,6 +772,9 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     }
 
     fun setTool(tool: DrawingTool) {
+        if (_activeStrokes.value.isNotEmpty()) {
+            _activeStrokes.value = emptyMap()
+        }
         if (_selectedTool.value == DrawingTool.LASSO && tool != DrawingTool.LASSO) {
             applyLassoTransformIfAny()
         }
@@ -802,9 +937,69 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             DrawingTool.SPRAY -> 0.75f
             DrawingTool.ERASER, DrawingTool.LASSO, DrawingTool.FILL, DrawingTool.TEXT -> 1.0f
         }
-        // If text tool, trigger dialog and don't start a line
+        // If text tool, check if user tapped an existing text stroke to select/edit it
         if (tool == DrawingTool.TEXT) {
+            // 1. Check if tapping the scale/rotate handle of an ALREADY selected text stroke
+            val selectedIds = _selectedStrokes.value
+            if (selectedIds.isNotEmpty()) {
+                val selectedTextStroke = _layers.value.flatMap { layer ->
+                    layer.frames.getOrNull(_currentFrameIndex.value)?.strokes.orEmpty()
+                }.firstOrNull { stroke ->
+                    stroke.id in selectedIds && stroke.tool == DrawingTool.TEXT && stroke.points.size >= 2
+                }
+
+                if (selectedTextStroke != null) {
+                    val handlePos = selectedTextStroke.points[1]
+                    val distSq = distanceSquared(canvasPos, handlePos)
+                    val handleRadius = 48f
+                    if (distSq <= handleRadius * handleRadius) {
+                        _undoStack.value = _undoStack.value + listOf(_layers.value)
+                        _redoStack.value = emptyList()
+                        updateUndoRedoStates()
+                        
+                        val specialId = -1000000L - selectedTextStroke.id
+                        _activeStrokes.value = _activeStrokes.value + (pointerId to DrawnStroke(
+                            id = specialId,
+                            color = Color.Transparent,
+                            tool = DrawingTool.TEXT,
+                            points = listOf(canvasPos)
+                        ))
+                        return
+                    }
+                }
+            }
+
+            // 2. Check if tapping ANY text stroke's bounding box
+            val tappedTextStroke = _layers.value.flatMap { layer ->
+                layer.frames.getOrNull(_currentFrameIndex.value)?.strokes.orEmpty()
+            }.reversed().firstOrNull { stroke ->
+                stroke.tool == DrawingTool.TEXT && stroke.boundingBox.contains(canvasPos)
+            }
+
+            if (tappedTextStroke != null) {
+                if (tappedTextStroke.id !in _selectedStrokes.value) {
+                    _selectedStrokes.value = setOf(tappedTextStroke.id)
+                }
+                
+                _undoStack.value = _undoStack.value + listOf(_layers.value)
+                _redoStack.value = emptyList()
+                updateUndoRedoStates()
+                
+                val specialId = -2000000L - tappedTextStroke.id
+                _activeStrokes.value = _activeStrokes.value + (pointerId to DrawnStroke(
+                    id = specialId,
+                    color = Color.Transparent,
+                    tool = DrawingTool.TEXT,
+                    points = listOf(canvasPos) // Store initial touch to track drag distance
+                ))
+                return
+            }
+
+            // 3. Tapping empty space with TEXT tool -> create new text
+            _selectedStrokes.value = emptySet()
+            _editingTextStrokeId.value = null
             _textPromptPosition.value = canvasPos
+            _textPromptInitialValue.value = ""
             _showTextPrompt.value = true
             return
         }
@@ -1050,7 +1245,29 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
         val currentStroke = _activeStrokes.value[pointerId] ?: return
         val canvasPos = toCanvasCoordinate(screenPosition)
-        
+
+        // Handle Text Dragging / Transforming
+        if (currentStroke.id <= -1000000L && currentStroke.tool == DrawingTool.TEXT) {
+            if (currentStroke.id <= -2000000L) {
+                // Moving the text
+                val targetStrokeId = -currentStroke.id - 2000000L
+                val lastPos = currentStroke.points.last()
+                val dx = canvasPos.x - lastPos.x
+                val dy = canvasPos.y - lastPos.y
+                
+                val updated = currentStroke.copy(points = currentStroke.points + canvasPos)
+                _activeStrokes.value = _activeStrokes.value + (pointerId to updated)
+                
+                updateTextStrokePosition(targetStrokeId, dx, dy)
+                return
+            } else {
+                // Rotating/Scaling
+                val targetStrokeId = -currentStroke.id - 1000000L
+                updateTextStrokeTransform(targetStrokeId, canvasPos)
+                return
+            }
+        }
+
         // Handle Lasso Dragging
         if (currentStroke.id == -1L && currentStroke.tool == DrawingTool.LASSO) {
             val startPos = currentStroke.points.first()
@@ -1085,6 +1302,33 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         
         val activeStroke = _activeStrokes.value[pointerId] ?: return
         _activeStrokes.value = _activeStrokes.value - pointerId
+
+        // Handle Text Touch / Drag Complete
+        if (activeStroke.id <= -2000000L && activeStroke.tool == DrawingTool.TEXT) {
+            val first = activeStroke.points.first()
+            val last = activeStroke.points.last()
+            val distSq = distanceSquared(first, last)
+            
+            // If they didn't move it much, treat as a tap to edit
+            if (distSq < 100f) {
+                val targetStrokeId = -activeStroke.id - 2000000L
+                val tappedTextStroke = _layers.value.flatMap { layer ->
+                    layer.frames.getOrNull(_currentFrameIndex.value)?.strokes.orEmpty()
+                }.firstOrNull { it.id == targetStrokeId }
+                
+                if (tappedTextStroke != null) {
+                    _editingTextStrokeId.value = tappedTextStroke.id
+                    _textPromptPosition.value = tappedTextStroke.points.first()
+                    _textPromptInitialValue.value = tappedTextStroke.text ?: ""
+                    _showTextPrompt.value = true
+                }
+            }
+            return
+        } else if (activeStroke.id <= -1000000L && activeStroke.tool == DrawingTool.TEXT) {
+            // Finished rotating/scaling text handle
+            return
+        }
+
         val stroke = screenPosition?.let { releasePosition ->
             val canvasPosition = toCanvasCoordinate(releasePosition)
             if (activeStroke.points.lastOrNull() == canvasPosition) activeStroke

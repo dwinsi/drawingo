@@ -109,8 +109,12 @@ data class DrawnStroke(
     val points: List<Offset> = emptyList(),
     val pressures: List<Float> = emptyList(),
     val text: String? = null,
-    val boundingBox: Rect = calculateBounds(points)
+    val boundingBox: Rect = if (tool == DrawingTool.TEXT) calculateTextBoundsForStroke(points, text, strokeWidth) else calculateBounds(points)
 ) {
+    // Cached render data for high-performance rendering (not serialized, ignored in equality/hashCode)
+    @Transient
+    var renderCache: Any? = null
+
     companion object {
         fun calculateBounds(points: List<Offset>): Rect {
             if (points.isEmpty()) return Rect.Zero
@@ -126,6 +130,40 @@ data class DrawnStroke(
                 if (p.y > maxY) maxY = p.y
             }
             return Rect(minX, minY, maxX, maxY)
+        }
+        
+        fun calculateTextBoundsForStroke(points: List<Offset>, text: String?, strokeWidth: Float): Rect {
+            if (points.isEmpty()) return Rect.Zero
+            val center = points[0]
+            var scaleFactor = 1f
+            if (points.size >= 2) {
+                val dx = points[1].x - points[0].x
+                val dy = points[1].y - points[0].y
+                val currentRadius = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                val defaultRadius = (strokeWidth * (text?.length ?: 1) * 0.32f).coerceAtLeast(24f)
+                if (defaultRadius > 0f) {
+                    scaleFactor = currentRadius / defaultRadius
+                }
+            }
+            return calculateTextBounds(text ?: "", strokeWidth, center, scaleFactor)
+        }
+
+        fun calculateTextBounds(
+            text: String,
+            textSize: Float,
+            center: Offset,
+            scaleFactor: Float = 1f
+        ): Rect {
+            val effSize = textSize * scaleFactor
+            val halfWidth = (text.length * effSize * 0.32f).coerceAtLeast(24f)
+            val halfHeight = (effSize * 0.65f).coerceAtLeast(18f)
+            val pad = 16f
+            return Rect(
+                left = center.x - halfWidth - pad,
+                top = center.y - halfHeight - pad,
+                right = center.x + halfWidth + pad,
+                bottom = center.y + halfHeight + pad
+            )
         }
     }
 }

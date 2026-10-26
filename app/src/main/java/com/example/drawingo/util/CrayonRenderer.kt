@@ -52,17 +52,35 @@ object CrayonRenderer {
      * @param offsetX Coordinate X offset (default 0f).
      * @param offsetY Coordinate Y offset (default 0f).
      */
+    private class CrayonCache(
+        val layerBounds: RectF,
+        val strandPaths: List<Path>,
+        val strandPaints: List<Paint>,
+        val maskPaint: Paint,
+        val dabPaint: Paint?,
+        val dabCenter: Pair<Float, Float>?,
+        val dabRadius: Float,
+        val pointCount: Int,
+        val strokeWidth: Float,
+        val color: Int,
+        val scale: Float,
+        val offsetX: Float,
+        val offsetY: Float
+    )
+
     fun drawCrayonStroke(
         canvas: Canvas,
         stroke: DrawnStroke,
         scale: Float = 1f,
         offsetX: Float = 0f,
-        offsetY: Float = 0f
+        offsetY: Float = 0f,
+        alphaMultiplier: Float = 1f
     ) {
         val points = stroke.points
         if (points.isEmpty()) return
 
         val baseWidth = stroke.strokeWidth * scale
+        val baseArgb = stroke.color.toArgb()
 
         // Anchor grain shader to canvas space (scaling/translating if export coordinates differ)
         if (scale != 1f || offsetX != 0f || offsetY != 0f) {
@@ -74,153 +92,207 @@ object CrayonRenderer {
             grainShader.setLocalMatrix(null)
         }
 
-        // Calculate stroke bounding box with generous padding
-        var minX = Float.MAX_VALUE
-        var minY = Float.MAX_VALUE
-        var maxX = -Float.MAX_VALUE
-        var maxY = -Float.MAX_VALUE
-
-        for (p in points) {
-            val px = p.x * scale + offsetX
-            val py = p.y * scale + offsetY
-            if (px < minX) minX = px
-            if (px > maxX) maxX = px
-            if (py < minY) minY = py
-            if (py > maxY) maxY = py
-        }
-
-        val padding = baseWidth * 2.5f + 16f
-        val layerBounds = RectF(
-            minX - padding,
-            minY - padding,
-            maxX + padding,
-            maxY + padding
-        )
-
-        // 1. Calculate effective coverage from pressure and velocity
-        val avgPressure = if (stroke.pressures.isNotEmpty()) {
-            stroke.pressures.average().toFloat()
+        val existingCache = stroke.renderCache as? CrayonCache
+        val cache = if (
+            existingCache != null &&
+            existingCache.pointCount == points.size &&
+            existingCache.strokeWidth == stroke.strokeWidth &&
+            existingCache.color == baseArgb &&
+            existingCache.scale == scale &&
+            existingCache.offsetX == offsetX &&
+            existingCache.offsetY == offsetY
+        ) {
+            existingCache
         } else {
-            0.5f
-        }
+            // Calculate stroke bounding box with generous padding
+            var minX = Float.MAX_VALUE
+            var minY = Float.MAX_VALUE
+            var maxX = -Float.MAX_VALUE
+            var maxY = -Float.MAX_VALUE
 
-        var totalDist = 0f
-        for (i in 1 until points.size) {
-            val p0 = points[i - 1]
-            val p1 = points[i]
-            totalDist += hypot(p1.x - p0.x, p1.y - p0.y)
-        }
-        val avgStep = if (points.size > 1) totalDist / (points.size - 1) else 8f
-        val speedFactor = ((avgStep - 4f) / 30f).coerceIn(0f, 1f)
+            for (p in points) {
+                val px = p.x * scale + offsetX
+                val py = p.y * scale + offsetY
+                if (px < minX) minX = px
+                if (px > maxX) maxX = px
+                if (py < minY) minY = py
+                if (py > maxY) maxY = py
+            }
 
-        // Light pressure + fast move = low coverage (peaks only)
-        // Heavy pressure + slow move = high coverage (fills pits)
-        val pEff = (avgPressure * 0.72f + (1f - speedFactor) * 0.28f).coerceIn(0.12f, 0.96f)
-
-        // ColorMatrix mapping: a' = k * a + b
-        val k = 0.85f + 1.45f * (1.0f - pEff)
-        val b = (pEff - 0.40f) * 1.55f * 255f
-
-        val colorMatrix = ColorMatrix(
-            floatArrayOf(
-                0f, 0f, 0f, 0f, 0f,
-                0f, 0f, 0f, 0f, 0f,
-                0f, 0f, 0f, 0f, 0f,
-                0f, 0f, 0f, k, b
+            val padding = baseWidth * 2.5f + 16f
+            val layerBounds = RectF(
+                minX - padding,
+                minY - padding,
+                maxX + padding,
+                maxY + padding
             )
-        )
 
-        val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = grainShader
-            colorFilter = ColorMatrixColorFilter(colorMatrix)
-            xfermode = dstInXfermode
-        }
-
-        // 2. Open offscreen layer so self-intersections do not darken prematurely
-        val saveCount = canvas.saveLayer(layerBounds, null)
-
-        val baseArgb = stroke.color.toArgb()
-        val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(baseArgb, hsv)
-
-        if (points.size == 1) {
-            // Single tap dot/dab
-            val p = points[0]
-            val cx = p.x * scale + offsetX
-            val cy = p.y * scale + offsetY
-            val dabPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.FILL
-                color = baseArgb or (0xFF shl 24)
+            // 1. Calculate effective coverage from pressure and velocity
+            val avgPressure = if (stroke.pressures.isNotEmpty()) {
+                stroke.pressures.average().toFloat()
+            } else {
+                0.5f
             }
-            canvas.drawCircle(cx, cy, baseWidth * 0.5f, dabPaint)
-        } else {
-            // 3. Build 4 parallel sub-strokes with striated waxy offsets and color jitter
-            val strandFractions = floatArrayOf(-0.35f, -0.12f, 0.12f, 0.35f)
 
-            for (s in 0 until NUM_STRANDS) {
-                val strandPath = Path()
-                val strandWidth = (baseWidth * (0.36f + (s % 2) * 0.08f)).coerceAtLeast(1.2f)
-                val baseFraction = strandFractions[s]
+            var totalDist = 0f
+            for (i in 1 until points.size) {
+                val p0 = points[i - 1]
+                val p1 = points[i]
+                totalDist += hypot(p1.x - p0.x, p1.y - p0.y)
+            }
+            val avgStep = if (points.size > 1) totalDist / (points.size - 1) else 8f
+            val speedFactor = ((avgStep - 4f) / 30f).coerceIn(0f, 1f)
 
-                // Micro-variations in hue (+/- 2 deg), sat (+/- 4%), val (+/- 7%)
-                val strandSeed = stroke.id xor (s.toLong() * 37L)
-                val hueShift = (((strandSeed and 15L).toFloat() / 15f) - 0.5f) * 4f
-                val satMult = 1f + (((strandSeed ushr 4 and 15L).toFloat() / 15f) - 0.5f) * 0.08f
-                val valMult = 1f + (((strandSeed ushr 8 and 15L).toFloat() / 15f) - 0.5f) * 0.14f
+            // Light pressure + fast move = low coverage (peaks only)
+            // Heavy pressure + slow move = high coverage (fills pits)
+            val pEff = (avgPressure * 0.72f + (1f - speedFactor) * 0.28f).coerceIn(0.12f, 0.96f)
 
-                val strandHsv = floatArrayOf(
-                    (hsv[0] + hueShift).mod(360f),
-                    (hsv[1] * satMult).coerceIn(0f, 1f),
-                    (hsv[2] * valMult).coerceIn(0f, 1f)
+            // ColorMatrix mapping: a' = k * a + b
+            val k = 0.85f + 1.45f * (1.0f - pEff)
+            val b = (pEff - 0.40f) * 1.55f * 255f
+
+            val colorMatrix = ColorMatrix(
+                floatArrayOf(
+                    0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 0f, 0f,
+                    0f, 0f, 0f, k, b
                 )
-                val strandColor = android.graphics.Color.HSVToColor(255, strandHsv)
+            )
 
-                val strandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    style = Paint.Style.STROKE
-                    strokeCap = Paint.Cap.ROUND
-                    strokeJoin = Paint.Join.ROUND
-                    this.strokeWidth = strandWidth
-                    this.color = strandColor
+            val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = grainShader
+                colorFilter = ColorMatrixColorFilter(colorMatrix)
+                xfermode = dstInXfermode
+            }
+
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(baseArgb, hsv)
+
+            if (points.size == 1) {
+                val p = points[0]
+                val cx = p.x * scale + offsetX
+                val cy = p.y * scale + offsetY
+                val dabPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.FILL
+                    color = baseArgb or (0xFF shl 24)
                 }
+                val newCache = CrayonCache(
+                    layerBounds = layerBounds,
+                    strandPaths = emptyList(),
+                    strandPaints = emptyList(),
+                    maskPaint = maskPaint,
+                    dabPaint = dabPaint,
+                    dabCenter = Pair(cx, cy),
+                    dabRadius = baseWidth * 0.5f,
+                    pointCount = points.size,
+                    strokeWidth = stroke.strokeWidth,
+                    color = baseArgb,
+                    scale = scale,
+                    offsetX = offsetX,
+                    offsetY = offsetY
+                )
+                stroke.renderCache = newCache
+                newCache
+            } else {
+                val strandFractions = floatArrayOf(-0.35f, -0.12f, 0.12f, 0.35f)
+                val strandPaths = mutableListOf<Path>()
+                val strandPaints = mutableListOf<Paint>()
 
-                var prevX = 0f
-                var prevY = 0f
+                for (s in 0 until NUM_STRANDS) {
+                    val strandPath = Path()
+                    val strandWidth = (baseWidth * (0.36f + (s % 2) * 0.08f)).coerceAtLeast(1.2f)
+                    val baseFraction = strandFractions[s]
 
-                for (i in points.indices) {
-                    val p = points[i]
+                    val strandSeed = stroke.id xor (s.toLong() * 37L)
+                    val hueShift = (((strandSeed and 15L).toFloat() / 15f) - 0.5f) * 4f
+                    val satMult = 1f + (((strandSeed ushr 4 and 15L).toFloat() / 15f) - 0.5f) * 0.08f
+                    val valMult = 1f + (((strandSeed ushr 8 and 15L).toFloat() / 15f) - 0.5f) * 0.14f
 
-                    // Calculate normal direction
-                    val (nx, ny) = getPointNormal(points, i)
+                    val strandHsv = floatArrayOf(
+                        (hsv[0] + hueShift).mod(360f),
+                        (hsv[1] * satMult).coerceIn(0f, 1f),
+                        (hsv[2] * valMult).coerceIn(0f, 1f)
+                    )
+                    val strandColor = android.graphics.Color.HSVToColor(255, strandHsv)
 
-                    // Directional waxy jitter along normal
-                    val hash = ((stroke.id xor (i.toLong() * 73L + s.toLong() * 197L)) * 0x45D9F3BL).toInt()
-                    val jitter = ((hash and 0xFF) / 255f - 0.5f) * 0.22f
-                    val totalOffset = (baseFraction + jitter) * baseWidth
-
-                    val px = (p.x * scale + offsetX) + nx * totalOffset
-                    val py = (p.y * scale + offsetY) + ny * totalOffset
-
-                    if (i == 0) {
-                        strandPath.moveTo(px, py)
-                        prevX = px
-                        prevY = py
-                    } else {
-                        val midX = (prevX + px) * 0.5f
-                        val midY = (prevY + py) * 0.5f
-                        strandPath.quadTo(prevX, prevY, midX, midY)
-                        prevX = px
-                        prevY = py
+                    val strandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        style = Paint.Style.STROKE
+                        strokeCap = Paint.Cap.ROUND
+                        strokeJoin = Paint.Join.ROUND
+                        this.strokeWidth = strandWidth
+                        this.color = strandColor
                     }
+
+                    var prevX = 0f
+                    var prevY = 0f
+
+                    for (i in points.indices) {
+                        val p = points[i]
+                        val (nx, ny) = getPointNormal(points, i)
+
+                        val hash = ((stroke.id xor (i.toLong() * 73L + s.toLong() * 197L)) * 0x45D9F3BL).toInt()
+                        val jitter = ((hash and 0xFF) / 255f - 0.5f) * 0.22f
+                        val totalOffset = (baseFraction + jitter) * baseWidth
+
+                        val px = (p.x * scale + offsetX) + nx * totalOffset
+                        val py = (p.y * scale + offsetY) + ny * totalOffset
+
+                        if (i == 0) {
+                            strandPath.moveTo(px, py)
+                            prevX = px
+                            prevY = py
+                        } else {
+                            val midX = (prevX + px) * 0.5f
+                            val midY = (prevY + py) * 0.5f
+                            strandPath.quadTo(prevX, prevY, midX, midY)
+                            prevX = px
+                            prevY = py
+                        }
+                    }
+                    strandPath.lineTo(prevX, prevY)
+                    strandPaths.add(strandPath)
+                    strandPaints.add(strandPaint)
                 }
-                strandPath.lineTo(prevX, prevY)
-                canvas.drawPath(strandPath, strandPaint)
+
+                val newCache = CrayonCache(
+                    layerBounds = layerBounds,
+                    strandPaths = strandPaths,
+                    strandPaints = strandPaints,
+                    maskPaint = maskPaint,
+                    dabPaint = null,
+                    dabCenter = null,
+                    dabRadius = 0f,
+                    pointCount = points.size,
+                    strokeWidth = stroke.strokeWidth,
+                    color = baseArgb,
+                    scale = scale,
+                    offsetX = offsetX,
+                    offsetY = offsetY
+                )
+                stroke.renderCache = newCache
+                newCache
             }
         }
 
-        // 4. Multiply stroke layer with paper grain mask (DST_IN)
-        canvas.drawRect(layerBounds, maskPaint)
+        val layerPaint = if (alphaMultiplier < 1f) {
+            Paint().apply { alpha = (alphaMultiplier * 255).toInt().coerceIn(0, 255) }
+        } else null
 
-        // 5. Composite back onto canvas
+        val saveCount = canvas.saveLayer(cache.layerBounds, layerPaint)
+
+        if (cache.dabPaint != null && cache.dabCenter != null) {
+            canvas.drawCircle(cache.dabCenter.first, cache.dabCenter.second, cache.dabRadius, cache.dabPaint)
+        } else {
+            for (i in cache.strandPaths.indices) {
+                canvas.drawPath(cache.strandPaths[i], cache.strandPaints[i])
+            }
+        }
+
+        // Multiply stroke layer with paper grain mask (DST_IN)
+        canvas.drawRect(cache.layerBounds, cache.maskPaint)
+
+        // Composite back onto canvas
         canvas.restoreToCount(saveCount)
     }
 
