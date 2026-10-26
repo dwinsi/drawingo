@@ -28,7 +28,7 @@ import kotlin.math.hypot
  */
 object CrayonRenderer {
 
-    private const val NOISE_SIZE = 128
+    private const val NOISE_SIZE = 256
     private const val NUM_STRANDS = 4
 
     // Pre-generated tileable paper grain noise bitmap
@@ -318,18 +318,22 @@ object CrayonRenderer {
     }
 
     /**
-     * Generates a toroidal 2D noise texture that tiles seamlessly along both axes.
-     * Alpha and RGB values represent tooth peak height (0 = pit, 255 = peak).
+     * Generates an authentic, seamless multi-scale paper tooth grain texture.
+     * Accurately simulates the micro-pits and peaks of heavyweight pastel/drawing paper,
+     * completely eliminating periodic macro-structures, circular corner vortices, and visible grid tiles.
      */
     private fun generateTileableNoiseBitmap(size: Int): Bitmap {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val random = Random(133742L)
 
-        val g1Size = 16
+        val g1Size = 64
         val grid1 = FloatArray(g1Size * g1Size) { random.nextFloat() }
 
-        val g2Size = 32
+        val g2Size = 128
         val grid2 = FloatArray(g2Size * g2Size) { random.nextFloat() }
+
+        val g3Size = 256
+        val grid3 = FloatArray(g3Size * g3Size) { random.nextFloat() }
 
         val pixels = IntArray(size * size)
 
@@ -358,12 +362,18 @@ object CrayonRenderer {
         }
 
         for (y in 0 until size) {
+            val yf = y.toFloat()
             for (x in 0 until size) {
-                val n1 = sampleGrid(grid1, g1Size, x.toFloat(), y.toFloat())
-                val n2 = sampleGrid(grid2, g2Size, x.toFloat(), y.toFloat())
-                val fine = (random.nextFloat() - 0.5f) * 0.12f
-                val composite = (n1 * 0.64f + n2 * 0.36f + fine).coerceIn(0f, 1f)
-                val alphaByte = (composite * 255f).toInt().coerceIn(0, 255)
+                val xf = x.toFloat()
+                val n1 = sampleGrid(grid1, g1Size, xf, yf)
+                val n2 = sampleGrid(grid2, g2Size, xf, yf)
+                val n3 = sampleGrid(grid3, g3Size, xf, yf)
+                val speckle = random.nextFloat()
+
+                // Multi-octave natural paper fiber distribution
+                val composite = (n1 * 0.30f + n2 * 0.35f + n3 * 0.20f + speckle * 0.15f)
+                val normalized = ((composite - 0.5f) * 1.5f + 0.5f).coerceIn(0f, 1f)
+                val alphaByte = (normalized * 255f).toInt().coerceIn(0, 255)
                 pixels[y * size + x] = (alphaByte shl 24) or (alphaByte shl 16) or (alphaByte shl 8) or alphaByte
             }
         }
