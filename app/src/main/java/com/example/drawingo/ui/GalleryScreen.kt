@@ -293,6 +293,7 @@ fun GalleryScreen(
                                     modifier = Modifier.padding(start = 4.dp, top = 14.dp, end = 4.dp, bottom = 4.dp),
                                     verticalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
+                                    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
                                     Text(
                                         text = project.name,
                                         maxLines = 1,
@@ -301,7 +302,7 @@ fun GalleryScreen(
                                         style = MaterialTheme.typography.titleSmall
                                     )
                                     Text(
-                                        text = "Edited ${SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(project.updatedAt))}",
+                                        text = "Edited ${dateFormat.format(Date(project.updatedAt))}",
                                         fontSize = 12.sp,
                                         color = StudioMutedText
                                     )
@@ -319,7 +320,7 @@ fun GalleryScreen(
 private fun ProjectThumbnail(path: String?, description: String) {
     val bitmap by produceState<Bitmap?>(initialValue = null, key1 = path) {
         value = if (path.isNullOrBlank()) null else withContext(Dispatchers.IO) {
-            BitmapFactory.decodeFile(path)
+            decodeSampledBitmapFromFile(path, 512, 512)
         }
     }
 
@@ -349,4 +350,29 @@ private fun ProjectThumbnail(path: String?, description: String) {
             )
         }
     }
+}
+
+private fun decodeSampledBitmapFromFile(path: String, reqWidth: Int, reqHeight: Int): Bitmap? {
+    return try {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, options)
+        options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+        options.inJustDecodeBounds = false
+        BitmapFactory.decodeFile(path, options)
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+    val (height: Int, width: Int) = options.outHeight to options.outWidth
+    var inSampleSize = 1
+    if (height > reqHeight || width > reqWidth) {
+        val halfHeight = height / 2
+        val halfWidth = width / 2
+        while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+            inSampleSize *= 2
+        }
+    }
+    return inSampleSize
 }

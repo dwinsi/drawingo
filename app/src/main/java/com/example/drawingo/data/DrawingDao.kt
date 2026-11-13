@@ -66,10 +66,11 @@ interface DrawingDao {
         val savedLayerIds = insertLayers(layers.map { it.copy(id = 0, projectId = projectId) })
         insertStrokes(strokes.map { stroke ->
             val layerIndex = stroke.layerId.toInt()
+            val mappedLayerId = savedLayerIds.getOrNull(layerIndex) ?: savedLayerIds.firstOrNull() ?: 0L
             stroke.copy(
                 id = 0,
                 projectId = projectId,
-                layerId = savedLayerIds[layerIndex]
+                layerId = mappedLayerId
             )
         })
         return projectId

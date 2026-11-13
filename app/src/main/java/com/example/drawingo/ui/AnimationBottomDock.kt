@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,35 +19,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Block
-import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.Casino
-import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Explore
-import androidx.compose.material.icons.rounded.Flare
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.material.icons.rounded.Flip
-import androidx.compose.material.icons.rounded.Loop
 import androidx.compose.material.icons.rounded.Layers
-import androidx.compose.material.icons.rounded.OpenWith
-import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Pool
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.SportsBasketball
 import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material.icons.rounded.Water
-import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.Slider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,8 +60,12 @@ import com.example.drawingo.theme.StudioOutline
 import com.example.drawingo.theme.StudioSurface
 import com.example.drawingo.theme.StudioText
 
+
+
 @Composable
 fun AnimationBottomDock(
+    selectedTab: Int = 0,
+    onTabSelected: (Int) -> Unit = {},
     currentFrameIndex: Int,
     frameCount: Int,
     isPlaying: Boolean,
@@ -94,9 +87,10 @@ fun AnimationBottomDock(
     onToggleReplay: () -> Unit,
     onReplaySeek: (Float) -> Unit,
     onResetReplay: () -> Unit,
+    onClose: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableStateOf(1) } // 0 = Flipbook, 1 = Replay, 2 = Motion
+    var currentTab by remember(selectedTab) { mutableIntStateOf(selectedTab) }
 
     Column(
         modifier = modifier
@@ -105,22 +99,54 @@ fun AnimationBottomDock(
             .clip(RoundedCornerShape(26.dp))
             .background(ToolDockBackgroundColor)
             .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // Tabs
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(DockIconBackground, RoundedCornerShape(16.dp))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            AnimationTab("Flipbook", selectedTab == 0) { selectedTab = 0 }
-            AnimationTab("Replay", selectedTab == 1) { selectedTab = 1 }
-            AnimationTab("Motion", selectedTab == 2) { selectedTab = 2 }
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(DockIconBackground, RoundedCornerShape(16.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                AnimationTab("🎬 Movie", currentTab == 0) {
+                    currentTab = 0
+                    onTabSelected(0)
+                }
+                AnimationTab("⏩ Replay", currentTab == 1) {
+                    currentTab = 1
+                    onTabSelected(1)
+                }
+                AnimationTab("✨ Magic", currentTab == 2) {
+                    currentTab = 2
+                    onTabSelected(2)
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(DockIconBackground)
+                    .clickable { onClose() }
+                    .semantics { contentDescription = "Close animation dock" },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = null,
+                    tint = StudioText,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
 
-        if (selectedTab == 0) {
+        if (currentTab == 0) {
             // Flipbook Timeline
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -240,7 +266,7 @@ fun AnimationBottomDock(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Speed", color = StudioText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text("Speed", color = StudioText, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Slider(
                     value = playbackFps.toFloat(),
                     onValueChange = { onPlaybackFpsChange(it.roundToInt()) },
@@ -251,9 +277,9 @@ fun AnimationBottomDock(
                         .weight(1f)
                         .semantics { contentDescription = "Flipbook speed, $playbackFps frames per second" }
                 )
-                Text("${playbackFps} fps", color = StudioText, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                Text("${playbackFps} fps", color = StudioText, fontWeight = FontWeight.Medium, fontSize = 12.sp)
             }
-        } else if (selectedTab == 1) {
+        } else if (currentTab == 1) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -308,22 +334,23 @@ fun AnimationBottomDock(
                     Icon(Icons.Rounded.Replay, contentDescription = null, tint = StudioText)
                 }
             }
-        } else {
-            // Locally rendered motion effects
+        } else if (currentTab == 2) {
             val scrollState = rememberScrollState()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(scrollState),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Spacer(modifier = Modifier.width(8.dp))
-                PresetButton("Clear", Icons.Rounded.Block, activePresets.isEmpty()) { onClearPresets() }
+                PresetButton("Off", Icons.Rounded.Block, activePresets.isEmpty()) { onClearPresets() }
                 QuickMagicPreset.entries.forEach { preset ->
-                    PresetButton(preset.label, preset.icon, activePresets.contains(preset)) { onTogglePreset(preset) }
+                    PresetButton(
+                        label = preset.label,
+                        icon = preset.icon,
+                        selected = activePresets.contains(preset)
+                    ) { onTogglePreset(preset) }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
             }
         }
     }
@@ -336,13 +363,14 @@ private fun AnimationTab(text: String, selected: Boolean, onClick: () -> Unit) {
             .clip(RoundedCornerShape(12.dp))
             .background(if (selected) StudioSurface else Color.Transparent)
             .clickable { onClick() }
-            .padding(horizontal = 24.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text,
             fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
-            color = if (selected) StudioText else StudioMutedText
+            color = if (selected) StudioText else StudioMutedText,
+            fontSize = 13.sp
         )
     }
 }
@@ -353,19 +381,20 @@ private fun PresetButton(label: String, icon: ImageVector, selected: Boolean, on
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable { onClick() }
             .semantics { contentDescription = if (selected) "$label effect enabled" else "$label effect" }
             .padding(8.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(52.dp)
                 .clip(CircleShape)
-                .background(if (selected) StudioAccentSoft else DockIconBackground),
+                .background(if (selected) StudioAccentSoft else DockIconBackground)
+                .border(1.5.dp, if (selected) StudioAccentUi else Color.Transparent, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = if (selected) StudioAccentUi else StudioText, modifier = Modifier.size(24.dp))
+            Icon(icon, contentDescription = null, tint = if (selected) StudioAccentUi else StudioText, modifier = Modifier.size(26.dp))
         }
         Text(
             label,
@@ -378,20 +407,10 @@ private fun PresetButton(label: String, icon: ImageVector, selected: Boolean, on
 
 private val QuickMagicPreset.icon: ImageVector
     get() = when (this) {
-        QuickMagicPreset.WIGGLE -> Icons.Rounded.Waves
-        QuickMagicPreset.PULSE -> Icons.Rounded.FavoriteBorder
-        QuickMagicPreset.FLOAT -> Icons.Rounded.Cloud
-        QuickMagicPreset.SHIMMER -> Icons.Rounded.Flare
-        QuickMagicPreset.SPIN -> Icons.Rounded.Refresh
-        QuickMagicPreset.WANDER -> Icons.Rounded.Explore
-        QuickMagicPreset.FLIP -> Icons.Rounded.Flip
-        QuickMagicPreset.TRANSLATE -> Icons.Rounded.OpenWith
-        QuickMagicPreset.RANDOM -> Icons.Rounded.Casino
+        QuickMagicPreset.DANCING -> Icons.Rounded.MusicNote
+        QuickMagicPreset.SWIMMING -> Icons.Rounded.Pool
+        QuickMagicPreset.SPARKLE -> Icons.Rounded.AutoAwesome
+        QuickMagicPreset.TWIRL -> Icons.Rounded.Sync
         QuickMagicPreset.BOUNCE -> Icons.Rounded.SportsBasketball
-        QuickMagicPreset.WAVE -> Icons.Rounded.Water
-        QuickMagicPreset.SWING -> Icons.Rounded.Sync
-        QuickMagicPreset.JITTER -> Icons.Rounded.Bolt
-        QuickMagicPreset.HEARTBEAT -> Icons.Rounded.Favorite
-        QuickMagicPreset.SPIRAL -> Icons.Rounded.Loop
-        QuickMagicPreset.COLOR_CYCLE -> Icons.Rounded.Palette
+        QuickMagicPreset.RAINBOW -> Icons.Rounded.Palette
     }

@@ -199,8 +199,16 @@ object CrayonRenderer {
                 val strandPaths = mutableListOf<Path>()
                 val strandPaints = mutableListOf<Paint>()
 
+                val appendMode = existingCache != null &&
+                                 existingCache.pointCount < points.size &&
+                                 existingCache.strokeWidth == stroke.strokeWidth &&
+                                 existingCache.color == baseArgb &&
+                                 existingCache.scale == scale &&
+                                 existingCache.offsetX == offsetX &&
+                                 existingCache.offsetY == offsetY
+
                 for (s in 0 until NUM_STRANDS) {
-                    val strandPath = Path()
+                    val strandPath = if (appendMode) existingCache!!.strandPaths[s] else Path()
                     val strandWidth = (baseWidth * (0.36f + (s % 2) * 0.08f)).coerceAtLeast(1.2f)
                     val baseFraction = strandFractions[s]
 
@@ -216,7 +224,7 @@ object CrayonRenderer {
                     )
                     val strandColor = android.graphics.Color.HSVToColor(255, strandHsv)
 
-                    val strandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    val strandPaint = if (appendMode) existingCache!!.strandPaints[s] else Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         style = Paint.Style.STROKE
                         strokeCap = Paint.Cap.ROUND
                         strokeJoin = Paint.Join.ROUND
@@ -227,7 +235,9 @@ object CrayonRenderer {
                     var prevX = 0f
                     var prevY = 0f
 
-                    for (i in points.indices) {
+                    val startIndex = if (appendMode) existingCache!!.pointCount - 1 else 0
+
+                    for (i in startIndex until points.size) {
                         val p = points[i]
                         val (nx, ny) = getPointNormal(points, i)
 
@@ -238,8 +248,11 @@ object CrayonRenderer {
                         val px = (p.x * scale + offsetX) + nx * totalOffset
                         val py = (p.y * scale + offsetY) + ny * totalOffset
 
-                        if (i == 0) {
+                        if (i == 0 && !appendMode) {
                             strandPath.moveTo(px, py)
+                            prevX = px
+                            prevY = py
+                        } else if (i == startIndex && appendMode) {
                             prevX = px
                             prevY = py
                         } else {

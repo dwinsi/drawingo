@@ -104,9 +104,4 @@ class MainActivity : ComponentActivity() {
         }
         super.onStop()
     }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        soundManager.release()
-    }
 }

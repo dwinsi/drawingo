@@ -9,17 +9,9 @@ Drawingo is a native Android drawing and animation app. Its direction is a calm,
 - Freehand drawing with pen, brush, watercolor, crayon, fill for closed loops, eraser, lasso selection, and text tools.
 - Watercolor uses soft translucent washes and pigment blooms; crayon uses a textured wax stroke. Live material samples in the expanded tool dock show how each tool draws.
 - A hue-organized color palette, custom color mixing with direct hex entry, and separate continuous stroke and eraser size sliders with live previews.
-- A unified bottom tool dock keeps the primary color row visible; its pull-up drawer adds a second horizontally scrollable row with the rest of the palette, plus horizontally scrollable tools and size controls. A vertical, draggable edge caddy keeps the three most recently selected tools one tap away, including in Zen mode. It stays tucked behind a small edge tab until opened, then tucks away after a tool is selected. Its position is saved locally and its side can be changed from More actions.
-- Drawing controls, animation controls, layers, and the project gallery support System, Light, and Dark appearance modes. Choose a mode from the canvas More actions menu; the selection is saved locally. The canvas defaults to white and also supports grid, ruled, and kraft backgrounds independently of the UI theme.
-- Undo, redo, clear, canvas pan and zoom, and horizontal, vertical, or quad symmetry.
-- Canvas background choices: white, grid, ruled, and kraft; imported images can also be used as a background.
-- A focus mode that hides drawing controls.
-
-### Animation and effects
-
-- Stroke replay reveals the current frame's strokes in their original order and direction, with play/pause, scrubbing, and restart controls.
-- Flipbook animation with frame selection, adding, duplicating and deleting frames, adjustable playback speed (1–24 fps), and onion skin.
-- Optional locally rendered motion effects including wiggle, pulse, float, shimmer, spin, wander, flip, translate, random, bounce, wave, swing, jitter, heartbeat, spiral, and color cycle.
+- A bottom tool dock keeps drawing tools (pen, brush, watercolor, crayon, spray, fill, eraser, select) permanently visible. Pulling up the drawer reveals the full color palette swatches, stroke/eraser size sliders, and color mixer.
+- A vertical side feature rail on the screen edge gives 1-tap access to ✨ Magic Motion, 🎬 Movie Anim, 📄 Paper style, 🪞 Magic Mirror (symmetry), 📚 Layers, and 👁️ Focus mode.
+- Optional locally rendered kid-friendly Magic Motion effects (Dancing, Swimming, Sparkling, Twirling, Bouncing, Rainbow) and multi-frame flipbook animation / stroke replay are organized in dedicated 1-tap docks.
 - Stroke replay, motion effects, and flipbook playback run locally. The app does not currently use an AI model to recognize or animate a subject.
 
 ### Projects, image input, and output

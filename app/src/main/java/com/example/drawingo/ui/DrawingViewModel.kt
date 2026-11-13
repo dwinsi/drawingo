@@ -92,22 +92,12 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     val onionSkinEnabled: StateFlow<Boolean> = _onionSkinEnabled.asStateFlow()
 
     enum class QuickMagicPreset(val label: String) {
-        WIGGLE("Wiggle"),
-        PULSE("Pulse"),
-        FLOAT("Float"),
-        SHIMMER("Shimmer"),
-        SPIN("Spin"),
-        WANDER("Wander"),
-        FLIP("Flip"),
-        TRANSLATE("Translate"),
-        RANDOM("Random"),
-        BOUNCE("Bounce"),
-        WAVE("Wave"),
-        SWING("Swing"),
-        JITTER("Jitter"),
-        HEARTBEAT("Heartbeat"),
-        SPIRAL("Spiral"),
-        COLOR_CYCLE("Color")
+        DANCING("Dancing"),
+        SWIMMING("Swimming"),
+        SPARKLE("Sparkling"),
+        TWIRL("Twirling"),
+        BOUNCE("Bouncing"),
+        RAINBOW("Rainbow")
     }
     
     private val _activePresets = MutableStateFlow<Set<QuickMagicPreset>>(emptySet())
@@ -263,8 +253,11 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     }
 
     private suspend fun createProjectThumbnail(context: Context, projectId: Long): String? {
-        val width = screenWidth.toInt().coerceAtLeast(1)
-        val height = screenHeight.toInt().coerceAtLeast(1)
+        val metrics = context.resources.displayMetrics
+        val effectiveWidth = if (screenWidth > 0f) screenWidth.toInt() else metrics.widthPixels
+        val effectiveHeight = if (screenHeight > 0f) screenHeight.toInt() else metrics.heightPixels
+        val width = effectiveWidth.coerceAtLeast(100)
+        val height = effectiveHeight.coerceAtLeast(100)
         val frameIndex = _currentFrameIndex.value
         val visibleStrokes = _layers.value
             .filter { it.isVisible }
@@ -765,10 +758,14 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     private val _activeStrokes = MutableStateFlow<Map<Long, DrawnStroke>>(emptyMap())
     val activeStrokes: StateFlow<Map<Long, DrawnStroke>> = _activeStrokes.asStateFlow()
 
+    private val _isDrawing = MutableStateFlow(false)
+    val isDrawing: StateFlow<Boolean> = _isDrawing.asStateFlow()
+
     private var animationLoopJob: Job? = null
 
     companion object {
         private const val MAX_STORED_STROKES = 250
+        private const val MAX_UNDO_DEPTH = 30
     }
 
     fun setTool(tool: DrawingTool) {
@@ -830,6 +827,13 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         )
     }
 
+    private fun pushUndoState() {
+        val updatedUndo = (_undoStack.value + listOf(_layers.value)).takeLast(MAX_UNDO_DEPTH)
+        _undoStack.value = updatedUndo
+        _redoStack.value = emptyList()
+        updateUndoRedoStates()
+    }
+
     fun undo() {
         val currentUndo = _undoStack.value
         if (currentUndo.isNotEmpty()) {
@@ -838,7 +842,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             
             val previousState = currentUndo.last()
             val newUndo = currentUndo.dropLast(1)
-            _redoStack.value = _redoStack.value + listOf(_layers.value)
+            _redoStack.value = (_redoStack.value + listOf(_layers.value)).takeLast(MAX_UNDO_DEPTH)
             _undoStack.value = newUndo
             _layers.value = previousState
             updateUndoRedoStates()
@@ -853,7 +857,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             
             val nextState = currentRedo.last()
             val newRedo = currentRedo.dropLast(1)
-            _undoStack.value = _undoStack.value + listOf(_layers.value)
+            _undoStack.value = (_undoStack.value + listOf(_layers.value)).takeLast(MAX_UNDO_DEPTH)
             _redoStack.value = newRedo
             _layers.value = nextState
             updateUndoRedoStates()
@@ -862,12 +866,10 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
     fun clearCanvas() {
         if (_layers.value.any { layer -> layer.frames.any { it.strokes.isNotEmpty() } }) {
-
             _selectedStrokes.value = emptySet()
             _lassoTransform.value = Offset.Zero
             
-            _undoStack.value = _undoStack.value + listOf(_layers.value)
-            _redoStack.value = emptyList()
+            pushUndoState()
             val currentFrameIdx = _currentFrameIndex.value
             _layers.value = _layers.value.map { layer -> 
                 val updatedFrames = layer.frames.toMutableList()
@@ -950,7 +952,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
 
                 if (selectedTextStroke != null) {
                     val handlePos = selectedTextStroke.points[1]
-                    val distSq = distanceSquared(canvasPos, handlePos)
+                    val distSq = com.example.drawingo.util.ShapeFillUtils.distanceSquared(canvasPos, handlePos)
                     val handleRadius = 48f
                     if (distSq <= handleRadius * handleRadius) {
                         _undoStack.value = _undoStack.value + listOf(_layers.value)
@@ -1017,13 +1019,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         _activeStrokes.value = _activeStrokes.value + (pointerId to newStroke)
     }
 
-    private data class ContourCandidate(
-        val layerId: Long,
-        val points: List<Offset>,
-        val strokeWidth: Float,
-        val area: Float
-    )
-
     private fun fillEnclosedShape(point: Offset) {
         val frameIndex = _currentFrameIndex.value
         val layerBoundaries = _layers.value
@@ -1035,25 +1030,30 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
                             stroke.tool != DrawingTool.LASSO && stroke.tool != DrawingTool.TEXT &&
                             stroke.points.size >= 2
                     }
-                    .map { layer.id to it }
             }
 
-        val contours = findClosedContours(layerBoundaries)
-        val matchingContour = contours
-            .filter { candidate -> pointInPolygon(point, candidate.points, candidate.strokeWidth) }
-            .minByOrNull { it.area } ?: return
+        val pointList = com.example.drawingo.util.ShapeFillUtils.floodFillVector(
+            strokes = layerBoundaries,
+            point = point,
+            width = screenWidth.toInt(),
+            height = screenHeight.toInt()
+        ) ?: return
 
         val fillStroke = DrawnStroke(
             id = strokeIdGenerator.getAndIncrement(),
             color = _selectedColor.value,
             tool = DrawingTool.FILL,
-            points = matchingContour.points,
-            boundingBox = DrawnStroke.calculateBounds(matchingContour.points)
+            points = pointList,
+            boundingBox = DrawnStroke.calculateBounds(pointList)
         )
+        
         _undoStack.value = _undoStack.value + listOf(_layers.value)
         _redoStack.value = emptyList()
+        
+        // Add to active layer
+        val activeLayerId = _selectedLayerId.value ?: return
         _layers.value = _layers.value.map { layer ->
-            if (layer.id != matchingContour.layerId) layer else {
+            if (layer.id != activeLayerId) layer else {
                 val updatedFrames = layer.frames.toMutableList()
                 while (updatedFrames.size <= frameIndex) updatedFrames.add(com.example.drawingo.model.DrawingFrame())
                 updatedFrames[frameIndex] = updatedFrames[frameIndex].copy(
@@ -1063,182 +1063,6 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
             }
         }
         updateUndoRedoStates()
-    }
-
-    /** Finds closed contours formed by single or multiple strokes. */
-    private fun findClosedContours(strokes: List<Pair<Long, DrawnStroke>>): List<ContourCandidate> {
-        val candidates = mutableListOf<ContourCandidate>()
-
-        // 1. Single-stroke loop detection (detects full loops, overlapping loops, pigtails, teardrops)
-        for ((layerId, stroke) in strokes) {
-            val pts = stroke.points
-            if (pts.size < 4) continue
-
-            val pathLength = pts.zipWithNext().sumOf { (a, b) ->
-                kotlin.math.sqrt(distanceSquared(a, b).toDouble())
-            }.toFloat()
-
-            val closureTolerance = maxOf(48f, stroke.strokeWidth * 2.5f, pathLength * 0.25f).coerceIn(40f, 300f)
-            val toleranceSq = closureTolerance * closureTolerance
-
-            var bestPolygon: List<Offset>? = null
-            var bestLength = -1
-
-            for (j in pts.indices.reversed()) {
-                if (j < 3) break
-                for (i in 0..j - 3) {
-                    val span = j - i
-                    if (span <= bestLength) continue
-                    if (distanceSquared(pts[i], pts[j]) <= toleranceSq) {
-                        val closed = pts.subList(i, j + 1).toMutableList()
-                        closed.add(pts[i])
-                        bestPolygon = closed
-                        bestLength = span
-                    }
-                }
-            }
-
-            if (bestPolygon != null && bestPolygon.size >= 4) {
-                val area = polygonArea(bestPolygon)
-                if (area > 50f) {
-                    candidates.add(ContourCandidate(layerId, bestPolygon, stroke.strokeWidth, area))
-                }
-            }
-        }
-
-        // 2. Multi-stroke loop detection (chains consecutive intersecting/connecting strokes)
-        for (startIndex in strokes.indices.reversed()) {
-            val (startLayerId, startStroke) = strokes[startIndex]
-            val chain = startStroke.points.toMutableList()
-            val used = mutableSetOf(startIndex)
-            var layerId = startLayerId
-            var maxStrokeWidth = startStroke.strokeWidth
-            var closedPolygon: List<Offset>? = null
-
-            while (used.size <= strokes.size) {
-                val pathLength = chain.zipWithNext().sumOf { (a, b) ->
-                    kotlin.math.sqrt(distanceSquared(a, b).toDouble())
-                }.toFloat()
-
-                val closureTolerance = maxOf(48f, maxStrokeWidth * 2.5f, pathLength * 0.25f).coerceIn(40f, 300f)
-                val toleranceSq = closureTolerance * closureTolerance
-
-                var closureIndex = -1
-                if (chain.size >= 4) {
-                    for (k in 0..chain.size - 4) {
-                        if (distanceSquared(chain.last(), chain[k]) <= toleranceSq) {
-                            closureIndex = k
-                            break
-                        }
-                    }
-                }
-
-                if (closureIndex >= 0) {
-                    val closed = chain.subList(closureIndex, chain.size).toMutableList()
-                    closed.add(chain[closureIndex])
-                    closedPolygon = closed
-                    break
-                }
-
-                var nearestIndex = -1
-                var nearestAtStart = false
-                var nearestDistance = Float.MAX_VALUE
-                val endPos = chain.last()
-
-                for (candidateIndex in strokes.indices.reversed()) {
-                    if (candidateIndex in used) continue
-                    val (candidateLayerId, candidate) = strokes[candidateIndex]
-                    val first = candidate.points.first()
-                    val last = candidate.points.last()
-                    val tol = maxOf(36f, maxOf(maxStrokeWidth, candidate.strokeWidth) * 2f)
-                    val distanceToFirst = distanceSquared(endPos, first)
-                    val distanceToLast = distanceSquared(endPos, last)
-                    val candidateDistance = minOf(distanceToFirst, distanceToLast)
-                    if (candidateDistance <= tol * tol && candidateDistance < nearestDistance) {
-                        nearestIndex = candidateIndex
-                        nearestAtStart = distanceToFirst <= distanceToLast
-                        nearestDistance = candidateDistance
-                        layerId = candidateLayerId
-                    }
-                }
-
-                if (nearestIndex < 0) break
-
-                val candidateStroke = strokes[nearestIndex].second
-                maxStrokeWidth = maxOf(maxStrokeWidth, candidateStroke.strokeWidth)
-                val nextPoints = candidateStroke.points.let { points ->
-                    if (nearestAtStart) points else points.asReversed()
-                }
-                chain.addAll(nextPoints.drop(1))
-                used += nearestIndex
-            }
-
-            if (closedPolygon != null && closedPolygon.size >= 4) {
-                val area = polygonArea(closedPolygon)
-                if (area > 50f) {
-                    candidates.add(ContourCandidate(layerId, closedPolygon, maxStrokeWidth, area))
-                }
-            }
-        }
-
-        return candidates
-    }
-
-    private fun polygonArea(points: List<Offset>): Float {
-        if (points.size < 3) return 0f
-        var area = 0f
-        var j = points.lastIndex
-        for (i in points.indices) {
-            area += (points[j].x + points[i].x) * (points[j].y - points[i].y)
-            j = i
-        }
-        return kotlin.math.abs(area / 2f)
-    }
-
-    private fun distanceSquared(first: Offset, second: Offset): Float {
-        val dx = first.x - second.x
-        val dy = first.y - second.y
-        return dx * dx + dy * dy
-    }
-
-    private fun pointInPolygon(point: Offset, polygon: List<Offset>, strokeWidth: Float = 10f): Boolean {
-        if (polygon.size < 3) return false
-
-        // 1. Check if tap point is on/near perimeter of the polygon (stroke boundary)
-        val boundaryTolerance = maxOf(28f, strokeWidth * 1.8f)
-        var previous = polygon.last()
-        for (current in polygon) {
-            if (isNearSegment(point, previous, current, boundaryTolerance)) {
-                return true
-            }
-            previous = current
-        }
-
-        // 2. Check if tap point is inside the polygon using Ray Casting (even-odd rule)
-        var inside = false
-        previous = polygon.last()
-        for (current in polygon) {
-            if ((current.y > point.y) != (previous.y > point.y)) {
-                val crossingX = (previous.x - current.x) * (point.y - current.y) /
-                    (previous.y - current.y) + current.x
-                if (point.x < crossingX) {
-                    inside = !inside
-                }
-            }
-            previous = current
-        }
-        return inside
-    }
-
-    private fun isNearSegment(point: Offset, start: Offset, end: Offset, tolerance: Float): Boolean {
-        val dx = end.x - start.x
-        val dy = end.y - start.y
-        val lengthSquared = dx * dx + dy * dy
-        if (lengthSquared == 0f) return distanceSquared(point, start) <= tolerance * tolerance
-        val projection = (((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
-            .coerceIn(0f, 1f)
-        val closest = Offset(start.x + projection * dx, start.y + projection * dy)
-        return distanceSquared(point, closest) <= tolerance * tolerance
     }
 
     fun onPointerMove(pointerId: Long, screenPosition: Offset, pressure: Float = 1.0f) {
@@ -1293,8 +1117,10 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         val updatedStroke = currentStroke.copy(
             points = currentStroke.points + canvasPos,
             pressures = currentStroke.pressures + pressure
-        )
+        ).apply { renderCache = currentStroke.renderCache }
+        
         _activeStrokes.value = _activeStrokes.value + (pointerId to updatedStroke)
+        _isDrawing.value = _activeStrokes.value.isNotEmpty()
     }
 
     fun onPointerUp(pointerId: Long, screenPosition: Offset? = null) {
@@ -1302,12 +1128,13 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
         
         val activeStroke = _activeStrokes.value[pointerId] ?: return
         _activeStrokes.value = _activeStrokes.value - pointerId
+        _isDrawing.value = _activeStrokes.value.isNotEmpty()
 
         // Handle Text Touch / Drag Complete
         if (activeStroke.id <= -2000000L && activeStroke.tool == DrawingTool.TEXT) {
             val first = activeStroke.points.first()
             val last = activeStroke.points.last()
-            val distSq = distanceSquared(first, last)
+            val distSq = com.example.drawingo.util.ShapeFillUtils.distanceSquared(first, last)
             
             // If they didn't move it much, treat as a tap to edit
             if (distSq < 100f) {
@@ -1481,6 +1308,7 @@ class DrawingViewModel(private val drawingDao: DrawingDao) : ViewModel() {
     fun onPointerCancel(pointerId: Long) {
         pointerDownCanvasPos = null
         _activeStrokes.value = _activeStrokes.value - pointerId
+        _isDrawing.value = _activeStrokes.value.isNotEmpty()
     }
 
     override fun onCleared() {

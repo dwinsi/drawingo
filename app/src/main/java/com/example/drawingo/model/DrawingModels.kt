@@ -32,7 +32,10 @@ enum class SymmetryMode {
 
 data class DrawingFrame(
     val strokes: List<DrawnStroke> = emptyList()
-)
+) {
+    @Transient
+    var renderCache: Any? = null
+}
 
 data class DrawingLayer(
     val id: Long = 0,
@@ -124,11 +127,13 @@ data class DrawnStroke(
             var maxY = Float.MIN_VALUE
 
             for (p in points) {
+                if (p == Offset.Unspecified || p.x.isNaN() || p.y.isNaN()) continue
                 if (p.x < minX) minX = p.x
                 if (p.x > maxX) maxX = p.x
                 if (p.y < minY) minY = p.y
                 if (p.y > maxY) maxY = p.y
             }
+            if (minX == Float.MAX_VALUE) return Rect.Zero
             return Rect(minX, minY, maxX, maxY)
         }
         

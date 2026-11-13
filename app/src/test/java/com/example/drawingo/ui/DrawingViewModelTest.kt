@@ -1,6 +1,7 @@
 package com.example.drawingo.ui
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import com.example.drawingo.model.DrawingTool
 import com.example.drawingo.model.DrawingoPalette
 import kotlinx.coroutines.Dispatchers
@@ -104,15 +105,15 @@ class DrawingViewModelTest {
     }
 
     @Test
-    fun `quick magic preset can be updated to translate and random`() {
+    fun `quick magic preset can be updated to dancing and swimming`() {
         assertEquals(emptySet<DrawingViewModel.QuickMagicPreset>(), viewModel.activePresets.value)
 
-        viewModel.toggleQuickMagicPreset(DrawingViewModel.QuickMagicPreset.TRANSLATE)
-        assertTrue(viewModel.activePresets.value.contains(DrawingViewModel.QuickMagicPreset.TRANSLATE))
+        viewModel.toggleQuickMagicPreset(DrawingViewModel.QuickMagicPreset.DANCING)
+        assertTrue(viewModel.activePresets.value.contains(DrawingViewModel.QuickMagicPreset.DANCING))
 
-        viewModel.toggleQuickMagicPreset(DrawingViewModel.QuickMagicPreset.RANDOM)
-        assertTrue(viewModel.activePresets.value.contains(DrawingViewModel.QuickMagicPreset.RANDOM))
-        assertTrue(viewModel.activePresets.value.contains(DrawingViewModel.QuickMagicPreset.TRANSLATE))
+        viewModel.toggleQuickMagicPreset(DrawingViewModel.QuickMagicPreset.SWIMMING)
+        assertTrue(viewModel.activePresets.value.contains(DrawingViewModel.QuickMagicPreset.SWIMMING))
+        assertTrue(viewModel.activePresets.value.contains(DrawingViewModel.QuickMagicPreset.DANCING))
 
         viewModel.createNewProject()
         assertEquals(emptySet<DrawingViewModel.QuickMagicPreset>(), viewModel.activePresets.value)

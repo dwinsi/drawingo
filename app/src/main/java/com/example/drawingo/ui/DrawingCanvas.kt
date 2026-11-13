@@ -191,8 +191,9 @@ fun DrawingCanvas(
 
     var isToolDrawerExpanded by remember { mutableStateOf(false) }
     val completedStrokes by viewModel.completedStrokes.collectAsState()
-    val activeStrokes by viewModel.activeStrokes.collectAsState()
-    val isDrawing = activeStrokes.isNotEmpty() && !isToolDrawerExpanded
+    val activeStrokesState = viewModel.activeStrokes.collectAsState()
+    val isDrawingActive by viewModel.isDrawing.collectAsState()
+    val isDrawing = isDrawingActive && !isToolDrawerExpanded
     val controlsAlpha by animateFloatAsState(
         targetValue = if (isDrawing) 0.15f else 1.0f,
         animationSpec = tween(180),
@@ -335,8 +336,9 @@ fun DrawingCanvas(
                             }
                             // Clean up any stranded pointers when no finger is pressed
                             val anyPressed = event.changes.any { it.pressed }
-                            if (!anyPressed && activeStrokes.isNotEmpty()) {
-                                for (pointerId in activeStrokes.keys) {
+                            val activePointerKeys = activeStrokesState.value.keys
+                            if (!anyPressed && activePointerKeys.isNotEmpty()) {
+                                for (pointerId in activePointerKeys) {
                                     viewModel.onPointerCancel(pointerId)
                                 }
                             }
@@ -398,7 +400,7 @@ fun DrawingCanvas(
                         // Render Text Input bounds if needed, for now just render strokes
                         drawAllCanvasContent(
                             layers = layers,
-                            activeStrokes = activeStrokes.values.toList(),
+                            activeStrokes = activeStrokesState.value.values.toList(),
                             activeLayerId = selectedLayerId,
                             currentFrameIndex = currentFrameIndex,
                             onionSkinEnabled = onionSkinEnabled && !isPlayingLocalAnimation,
@@ -2423,10 +2425,14 @@ private fun DrawScope.drawAllCanvasContent(
         
         globalTargetStrokes.forEach { stroke ->
             val points = if (stroke.id in selectedStrokeIds) {
-                stroke.points.map { Offset(it.x + lassoTransform.x, it.y + lassoTransform.y) }
+                stroke.points.map { 
+                    if (it == Offset.Unspecified) Offset.Unspecified 
+                    else Offset(it.x + lassoTransform.x, it.y + lassoTransform.y) 
+                }
             } else stroke.points
             
             points.forEach { p ->
+                if (p == Offset.Unspecified || p.x.isNaN() || p.y.isNaN()) return@forEach
                 if (p.x < minX) minX = p.x
                 if (p.x > maxX) maxX = p.x
                 if (p.y < minY) minY = p.y
@@ -2448,73 +2454,131 @@ private fun DrawScope.drawAllCanvasContent(
         // Draw onion skin (previous frame)
         if (onionSkinEnabled && currentFrameIndex > 0) {
             val prevFrame = layer.frames.getOrNull(currentFrameIndex - 1)
-            prevFrame?.strokes?.sortedBy { if (it.tool == DrawingTool.FILL) 0 else 1 }?.forEach { stroke ->
-                drawSingleStroke(stroke, alphaMultiplier = layerAlpha * 0.3f)
+            if (prevFrame != null && prevFrame.strokes.isNotEmpty()) {
+                var prevFrameCache = prevFrame.renderCache as? android.graphics.Picture
+                if (prevFrameCache == null) {
+                    prevFrameCache = android.graphics.Picture()
+                    val picCanvas = prevFrameCache.beginRecording(size.width.toInt(), size.height.toInt())
+                    val composeCanvas = androidx.compose.ui.graphics.Canvas(picCanvas)
+                    val drawScope = androidx.compose.ui.graphics.drawscope.CanvasDrawScope()
+                    drawScope.draw(
+                        androidx.compose.ui.unit.Density(1f),
+                        androidx.compose.ui.unit.LayoutDirection.Ltr,
+                        composeCanvas,
+                        size
+                    ) {
+                        val sortedStrokes = prevFrame.strokes.sortedBy { if (it.tool == DrawingTool.FILL) 0 else 1 }
+                        for (stroke in sortedStrokes) {
+                            drawSingleStroke(stroke, 1.0f)
+                        }
+                    }
+                    prevFrameCache.endRecording()
+                    prevFrame.renderCache = prevFrameCache
+                }
+                
+                val paint = android.graphics.Paint().apply { alpha = (layerAlpha * 0.3f * 255).toInt() }
+                drawContext.canvas.nativeCanvas.saveLayer(null, paint)
+                drawContext.canvas.nativeCanvas.drawPicture(prevFrameCache)
+                drawContext.canvas.nativeCanvas.restore()
             }
         }
         
         // Draw current frame
         val currentFrame = layer.frames.getOrNull(currentFrameIndex)
-        val frameStrokes = currentFrame?.strokes.orEmpty()
-        val sortedStrokes = frameStrokes.sortedBy { if (it.tool == DrawingTool.FILL) 0 else 1 }
+        if (currentFrame == null) continue
+        val frameStrokes = currentFrame.strokes
 
-        for (stroke in sortedStrokes) {
-            val revealFraction = strokeRevealFractions?.get(stroke.id)
-            if (strokeRevealFractions != null && revealFraction == null) continue
-            var finalStroke = stroke
-            
-            // Apply visual transform if this stroke is currently selected by the lasso
-            if (stroke.id in selectedStrokeIds && lassoTransform != Offset.Zero) {
-                val shiftedPoints = stroke.points.map { Offset(it.x + lassoTransform.x, it.y + lassoTransform.y) }
-                finalStroke = stroke.copy(points = shiftedPoints)
+        val canUseCache = activePresets.isEmpty() && strokeRevealFractions == null && selectedStrokeIds.isEmpty()
+        if (canUseCache) {
+            var frameCache = currentFrame.renderCache as? android.graphics.Picture
+            if (frameCache == null) {
+                frameCache = android.graphics.Picture()
+                val picCanvas = frameCache.beginRecording(size.width.toInt(), size.height.toInt())
+                val composeCanvas = androidx.compose.ui.graphics.Canvas(picCanvas)
+                val drawScope = androidx.compose.ui.graphics.drawscope.CanvasDrawScope()
+                drawScope.draw(
+                    androidx.compose.ui.unit.Density(1f), // Assuming density is ok for pixel coordinates here
+                    androidx.compose.ui.unit.LayoutDirection.Ltr,
+                    composeCanvas,
+                    size
+                ) {
+                    val sortedStrokes = frameStrokes.sortedBy { if (it.tool == DrawingTool.FILL) 0 else 1 }
+                    for (stroke in sortedStrokes) {
+                        drawSingleStroke(stroke, 1.0f)
+                    }
+                }
+                frameCache.endRecording()
+                currentFrame.renderCache = frameCache
             }
-            
-            val replayStroke = if (strokeRevealFractions != null) {
-                finalStroke.revealedTo(revealFraction ?: 0f)
-            } else finalStroke
-            
-            if (activePresets.isNotEmpty()) {
-                // Animate only if no strokes are selected, OR if this specific stroke is selected
-                if (selectedStrokeIds.isEmpty() || stroke.id in selectedStrokeIds) {
-                    val magicStroke = processMagicStroke(replayStroke, activePresets, timeMs, groupCenter, groupBounds, size)
-                    if (magicStroke != null) drawSingleStroke(magicStroke, alphaMultiplier = layerAlpha)
+
+            if (layerAlpha < 1f) {
+                val paint = android.graphics.Paint().apply { alpha = (layerAlpha * 255).toInt() }
+                drawContext.canvas.nativeCanvas.saveLayer(null, paint)
+                drawContext.canvas.nativeCanvas.drawPicture(frameCache)
+                drawContext.canvas.nativeCanvas.restore()
+            } else {
+                drawContext.canvas.nativeCanvas.drawPicture(frameCache)
+            }
+        } else {
+            val sortedStrokes = frameStrokes.sortedBy { if (it.tool == DrawingTool.FILL) 0 else 1 }
+            for (stroke in sortedStrokes) {
+                val revealFraction = strokeRevealFractions?.get(stroke.id)
+                if (strokeRevealFractions != null && revealFraction == null) continue
+                var finalStroke = stroke
+                
+                // Apply visual transform if this stroke is currently selected by the lasso
+                if (stroke.id in selectedStrokeIds && lassoTransform != Offset.Zero) {
+                    val shiftedPoints = stroke.points.map { Offset(it.x + lassoTransform.x, it.y + lassoTransform.y) }
+                    finalStroke = stroke.copy(points = shiftedPoints)
+                }
+                
+                val replayStroke = if (strokeRevealFractions != null) {
+                    finalStroke.revealedTo(revealFraction ?: 0f)
+                } else finalStroke
+                
+                if (activePresets.isNotEmpty()) {
+                    // Animate only if no strokes are selected, OR if this specific stroke is selected
+                    if (selectedStrokeIds.isEmpty() || stroke.id in selectedStrokeIds) {
+                        val magicStroke = processMagicStroke(replayStroke, activePresets, timeMs, groupCenter, groupBounds, size)
+                        if (magicStroke != null) drawSingleStroke(magicStroke, alphaMultiplier = layerAlpha)
+                    } else {
+                        drawSingleStroke(replayStroke, alphaMultiplier = layerAlpha)
+                    }
                 } else {
                     drawSingleStroke(replayStroke, alphaMultiplier = layerAlpha)
                 }
-            } else {
-                drawSingleStroke(replayStroke, alphaMultiplier = layerAlpha)
-            }
-            
-            // Draw selection highlight bounding box for strokes when selected and not animating
-            if (stroke.tool != DrawingTool.FILL && stroke.id in selectedStrokeIds && activePresets.isEmpty()) {
-                val bounds = finalStroke.boundingBox
-                drawRect(
-                    color = StudioAccent.copy(alpha = 0.3f),
-                    topLeft = Offset(bounds.left, bounds.top),
-                    size = androidx.compose.ui.geometry.Size(bounds.width, bounds.height),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f))
-                )
+                
+                // Draw selection highlight bounding box for strokes when selected and not animating
+                if (stroke.tool != DrawingTool.FILL && stroke.id in selectedStrokeIds && activePresets.isEmpty()) {
+                    val bounds = finalStroke.boundingBox
+                    drawRect(
+                        color = StudioAccent.copy(alpha = 0.3f),
+                        topLeft = Offset(bounds.left, bounds.top),
+                        size = androidx.compose.ui.geometry.Size(bounds.width, bounds.height),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f))
+                    )
 
-                if (stroke.tool == DrawingTool.TEXT && finalStroke.points.size >= 2) {
-                    val p0 = finalStroke.points[0]
-                    val p1 = finalStroke.points[1]
-                    drawLine(
-                        color = StudioAccent,
-                        start = p0,
-                        end = p1,
-                        strokeWidth = 2f,
-                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
-                    )
-                    drawCircle(
-                        color = StudioAccent,
-                        radius = 8.dp.toPx(),
-                        center = p1
-                    )
-                    drawCircle(
-                        color = androidx.compose.ui.graphics.Color.White,
-                        radius = 5.dp.toPx(),
-                        center = p1
-                    )
+                    if (stroke.tool == DrawingTool.TEXT && finalStroke.points.size >= 2) {
+                        val p0 = finalStroke.points[0]
+                        val p1 = finalStroke.points[1]
+                        drawLine(
+                            color = StudioAccent,
+                            start = p0,
+                            end = p1,
+                            strokeWidth = 2f,
+                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                        )
+                        drawCircle(
+                            color = StudioAccent,
+                            radius = 8.dp.toPx(),
+                            center = p1
+                        )
+                        drawCircle(
+                            color = androidx.compose.ui.graphics.Color.White,
+                            radius = 5.dp.toPx(),
+                            center = p1
+                        )
+                    }
                 }
             }
         }
@@ -2531,6 +2595,8 @@ private fun DrawScope.drawAllCanvasContent(
 }
 
 private class PressureSegment(val path: Path, val width: Float)
+private class PressureCache(val segments: MutableList<PressureSegment>, var pointCount: Int, var lastDrawX: Float, var lastDrawY: Float, var previousX: Float, var previousY: Float, var previousPressure: Float)
+private class UniformPathCache(val path: Path, var pointCount: Int, var previousX: Float, var previousY: Float)
 
 private fun DrawScope.drawSingleStroke(stroke: DrawnStroke, alphaMultiplier: Float = 1.0f) {
     if (stroke.points.isEmpty()) return
@@ -2541,9 +2607,22 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke, alphaMultiplier: Flo
         var fillPath = stroke.renderCache as? Path
         if (fillPath == null) {
             fillPath = Path().apply {
-                moveTo(stroke.points.first().x, stroke.points.first().y)
-                stroke.points.drop(1).forEach { lineTo(it.x, it.y) }
-                close()
+                fillType = androidx.compose.ui.graphics.PathFillType.EvenOdd
+                var isNewSubpath = true
+                for (pt in stroke.points) {
+                    if (pt == Offset.Unspecified || pt.x.isNaN() || pt.y.isNaN()) {
+                        close()
+                        isNewSubpath = true
+                    } else {
+                        if (isNewSubpath) {
+                            moveTo(pt.x, pt.y)
+                            isNewSubpath = false
+                        } else {
+                            lineTo(pt.x, pt.y)
+                        }
+                    }
+                }
+                if (!isNewSubpath) close()
             }
             stroke.renderCache = fillPath
         }
@@ -2564,90 +2643,116 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke, alphaMultiplier: Flo
     
     // If the stroke supports pressure and we have pressure data, draw variable width
     if ((s.tool == DrawingTool.PEN || s.tool == DrawingTool.BRUSH) && s.pressures.size == s.points.size) {
-        @Suppress("UNCHECKED_CAST")
-        var segments = s.renderCache as? List<PressureSegment>
-        if (segments == null) {
-            val builtSegments = mutableListOf<PressureSegment>()
-            var previousX = s.points[0].x
-            var previousY = s.points[0].y
-            var previousPressure = s.pressures[0]
-            
-            var lastDrawX = previousX
-            var lastDrawY = previousY
-            
-            for (i in 1 until s.points.size) {
-                val currentX = s.points[i].x
-                val currentY = s.points[i].y
-                val currentPressure = s.pressures[i]
-                
-                val midX = (previousX + currentX) / 2f
-                val midY = (previousY + currentY) / 2f
-                
-                // Map pressure to width (smooth transition between previous and current pressure)
-                val avgWidth = s.strokeWidth * (0.2f + ((previousPressure + currentPressure) / 2f) * 1.5f)
-                
-                val segmentPath = Path()
-                segmentPath.moveTo(lastDrawX, lastDrawY)
-                segmentPath.quadraticTo(previousX, previousY, midX, midY)
-                
-                builtSegments.add(PressureSegment(segmentPath, avgWidth))
-                
-                lastDrawX = midX
-                lastDrawY = midY
-                previousX = currentX
-                previousY = currentY
-                previousPressure = currentPressure
-            }
-            
-            // Final segment connecting to the last point
-            val finalPath = Path()
-            finalPath.moveTo(lastDrawX, lastDrawY)
-            finalPath.lineTo(previousX, previousY)
-            val finalWidth = s.strokeWidth * (0.2f + previousPressure * 1.5f)
-            builtSegments.add(PressureSegment(finalPath, finalWidth))
-            
-            segments = builtSegments
-            s.renderCache = segments
-            if (s !== stroke) {
-                stroke.renderCache = segments
-            }
+        var cache = s.renderCache as? PressureCache
+        if (cache == null) {
+            cache = PressureCache(
+                segments = mutableListOf(),
+                pointCount = 1,
+                lastDrawX = s.points[0].x,
+                lastDrawY = s.points[0].y,
+                previousX = s.points[0].x,
+                previousY = s.points[0].y,
+                previousPressure = s.pressures[0]
+            )
+            s.renderCache = cache
+            if (s !== stroke) stroke.renderCache = cache
         }
         
+        for (i in cache.pointCount until s.points.size) {
+            val currentX = s.points[i].x
+            val currentY = s.points[i].y
+            val currentPressure = s.pressures[i]
+            
+            val midX = (cache.previousX + currentX) / 2f
+            val midY = (cache.previousY + currentY) / 2f
+            
+            val avgWidth = s.strokeWidth * (0.2f + ((cache.previousPressure + currentPressure) / 2f) * 1.5f)
+            
+            val segmentPath = Path()
+            segmentPath.moveTo(cache.lastDrawX, cache.lastDrawY)
+            segmentPath.quadraticTo(cache.previousX, cache.previousY, midX, midY)
+            
+            cache.segments.add(PressureSegment(segmentPath, avgWidth))
+            
+            cache.lastDrawX = midX
+            cache.lastDrawY = midY
+            cache.previousX = currentX
+            cache.previousY = currentY
+            cache.previousPressure = currentPressure
+        }
+        cache.pointCount = s.points.size
+        
         val strokeColor = s.color.copy(alpha = effectiveAlpha)
-        for (segment in segments) {
+        for (segment in cache.segments) {
             drawPath(
                 path = segment.path,
                 color = strokeColor,
                 style = Stroke(width = segment.width, cap = StrokeCap.Round, join = StrokeJoin.Round)
             )
         }
+        
+        val finalPath = Path()
+        finalPath.moveTo(cache.lastDrawX, cache.lastDrawY)
+        finalPath.lineTo(cache.previousX, cache.previousY)
+        val finalWidth = s.strokeWidth * (0.2f + cache.previousPressure * 1.5f)
+        drawPath(
+            path = finalPath,
+            color = strokeColor,
+            style = Stroke(width = finalWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
         return
     }
 
     // Standard uniform path drawing (fallback or for non-pressure tools)
-    var path = s.renderCache as? Path
-    if (path == null && s.tool != DrawingTool.WATERCOLOR && s.tool != DrawingTool.CRAYON && s.tool != DrawingTool.SPRAY && s.tool != DrawingTool.TEXT) {
-        path = Path()
-        var previousX = s.points[0].x
-        var previousY = s.points[0].y
-        path.moveTo(previousX, previousY)
-        for (i in 1 until s.points.size) {
+    val strokeColor = s.color.copy(alpha = effectiveAlpha)
+    
+    if (s.tool != DrawingTool.WATERCOLOR && s.tool != DrawingTool.CRAYON && s.tool != DrawingTool.SPRAY && s.tool != DrawingTool.TEXT) {
+        var cache = s.renderCache as? UniformPathCache
+        if (cache == null) {
+            val p0 = s.points[0]
+            val path = Path().apply { moveTo(p0.x, p0.y) }
+            cache = UniformPathCache(path, 1, p0.x, p0.y)
+            s.renderCache = cache
+            if (s !== stroke) stroke.renderCache = cache
+        }
+        
+        for (i in cache.pointCount until s.points.size) {
             val currentX = s.points[i].x
             val currentY = s.points[i].y
-            val midX = (previousX + currentX) / 2f
-            val midY = (previousY + currentY) / 2f
-            path.quadraticTo(previousX, previousY, midX, midY)
-            previousX = currentX
-            previousY = currentY
+            val midX = (cache.previousX + currentX) / 2f
+            val midY = (cache.previousY + currentY) / 2f
+            cache.path.quadraticTo(cache.previousX, cache.previousY, midX, midY)
+            cache.previousX = currentX
+            cache.previousY = currentY
         }
-        path.lineTo(previousX, previousY)
-        s.renderCache = path
-        if (s !== stroke) {
-            stroke.renderCache = path
+        cache.pointCount = s.points.size
+        
+        if (s.tool == DrawingTool.ERASER) {
+            val drawPath = Path().apply {
+                addPath(cache.path)
+                lineTo(cache.previousX, cache.previousY)
+            }
+            drawPath(
+                path = drawPath,
+                color = Color.White,
+                style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                blendMode = BlendMode.Clear
+            )
+        } else {
+            // Other uniform path tool (if any)
+            val drawPath = Path().apply {
+                addPath(cache.path)
+                lineTo(cache.previousX, cache.previousY)
+            }
+            drawPath(
+                path = drawPath,
+                color = strokeColor,
+                style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
         }
+        return
     }
 
-    val strokeColor = s.color.copy(alpha = effectiveAlpha)
     when (s.tool) {
         DrawingTool.WATERCOLOR -> {
             WatercolorRenderer.draw(drawContext.canvas.nativeCanvas, s, alphaMultiplier = alphaMultiplier)
@@ -2657,14 +2762,6 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke, alphaMultiplier: Flo
         }
         DrawingTool.SPRAY -> {
             SprayRenderer.draw(drawContext.canvas.nativeCanvas, s, alphaMultiplier = alphaMultiplier)
-        }
-        DrawingTool.ERASER -> {
-            drawPath(
-                path = path!!,
-                color = Color.White,
-                style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
-                blendMode = BlendMode.Clear
-            )
         }
         DrawingTool.TEXT -> {
             val text = s.text
@@ -2709,10 +2806,6 @@ private fun DrawScope.drawSingleStroke(stroke: DrawnStroke, alphaMultiplier: Flo
                 nativeCanvas.restore()
             }
         }
-        else -> drawPath(
-            path = path!!,
-            color = strokeColor,
-            style = Stroke(width = s.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
+        else -> Unit
     }
 }

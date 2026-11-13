@@ -19,35 +19,140 @@ object QuickMagicRenderer {
         groupBounds: Rect? = null,
         canvasSize: Size? = null
     ): DrawnStroke? {
-        if (stroke.points.size < 2 || presets.isEmpty()) return stroke
+        if (stroke.points.isEmpty() || presets.isEmpty()) return stroke
 
         var currentStroke = stroke
 
-        // Apply point-level distortions first
-        if (presets.contains(QuickMagicPreset.WIGGLE)) currentStroke = wiggleStroke(currentStroke, timeMs)
-        if (presets.contains(QuickMagicPreset.WAVE)) currentStroke = waveStroke(currentStroke, timeMs)
-        if (presets.contains(QuickMagicPreset.JITTER)) currentStroke = jitterStroke(currentStroke, timeMs)
-        if (presets.contains(QuickMagicPreset.SHIMMER)) currentStroke = shimmerStroke(currentStroke, timeMs)
-
-        // Apply scale/alpha effects
-        if (presets.contains(QuickMagicPreset.PULSE)) currentStroke = pulseStroke(currentStroke, timeMs)
-        if (presets.contains(QuickMagicPreset.HEARTBEAT)) currentStroke = heartbeatStroke(currentStroke, timeMs)
-        if (presets.contains(QuickMagicPreset.COLOR_CYCLE)) currentStroke = colorCycleStroke(currentStroke, timeMs)
-
-        // Apply rotations
-        if (presets.contains(QuickMagicPreset.SPIN)) currentStroke = spinStroke(currentStroke, timeMs, groupCenter)
-        if (presets.contains(QuickMagicPreset.FLIP)) currentStroke = flipStroke(currentStroke, timeMs, groupCenter)
-        if (presets.contains(QuickMagicPreset.SWING)) currentStroke = swingStroke(currentStroke, timeMs, groupCenter, groupBounds)
-        if (presets.contains(QuickMagicPreset.SPIRAL)) currentStroke = spiralStroke(currentStroke, timeMs, groupCenter)
-
-        // Apply translations last
-        if (presets.contains(QuickMagicPreset.FLOAT)) currentStroke = floatStroke(currentStroke, timeMs)
-        if (presets.contains(QuickMagicPreset.BOUNCE)) currentStroke = bounceStroke(currentStroke, timeMs, groupBounds)
-        if (presets.contains(QuickMagicPreset.WANDER)) currentStroke = wanderStroke(currentStroke, timeMs)
-        if (presets.contains(QuickMagicPreset.TRANSLATE)) currentStroke = translateStroke(currentStroke, timeMs, groupBounds, canvasSize)
-        if (presets.contains(QuickMagicPreset.RANDOM)) currentStroke = randomRoamStroke(currentStroke, timeMs, groupCenter, groupBounds, canvasSize)
+        if (presets.contains(QuickMagicPreset.DANCING)) {
+            currentStroke = danceStroke(currentStroke, timeMs, groupCenter, groupBounds)
+        }
+        if (presets.contains(QuickMagicPreset.SWIMMING)) {
+            currentStroke = swimStroke(currentStroke, timeMs, groupCenter, groupBounds, canvasSize)
+        }
+        if (presets.contains(QuickMagicPreset.SPARKLE)) {
+            currentStroke = shimmerStroke(currentStroke, timeMs)
+            currentStroke = pulseStroke(currentStroke, timeMs)
+        }
+        if (presets.contains(QuickMagicPreset.TWIRL)) {
+            currentStroke = spinStroke(currentStroke, timeMs, groupCenter)
+        }
+        if (presets.contains(QuickMagicPreset.BOUNCE)) {
+            currentStroke = heartbeatStroke(currentStroke, timeMs)
+            currentStroke = bounceStroke(currentStroke, timeMs, groupBounds)
+        }
+        if (presets.contains(QuickMagicPreset.RAINBOW)) {
+            currentStroke = colorCycleStroke(currentStroke, timeMs)
+        }
 
         return currentStroke
+    }
+
+    private fun danceStroke(
+        stroke: DrawnStroke,
+        timeMs: Long,
+        groupCenter: Offset?,
+        groupBounds: Rect?
+    ): DrawnStroke {
+        if (stroke.points.isEmpty()) return stroke
+        val timeSec = (timeMs % 100000L) / 1000f
+
+        val freq = 2f * PI.toFloat()
+
+        val cx = groupCenter?.x ?: stroke.points.map { it.x }.average().toFloat()
+        val cy = groupCenter?.y ?: stroke.points.map { it.y }.average().toFloat()
+
+        // 3D Sphere Rotation angles (Yaw = horizontal spin around Y, Pitch = vertical tilt around X, Roll = sway around Z)
+        val yaw = timeSec * 2.5f                              // Continuous 3D sphere spin
+        val pitch = sin(timeSec * 1.8f) * 0.45f + 0.25f       // 3D forward/backward tilt & dip
+        val roll = cos(timeSec * 1.2f) * 0.35f               // 3D side-to-side sway
+
+        // 3D Circular Orbit & Revolving Motion
+        val orbitRadiusX = 55f
+        val orbitRadiusY = 25f
+        val orbitRadiusZ = 75f
+        val orbitAngle = timeSec * 2.0f
+        val orbitX = cos(orbitAngle) * orbitRadiusX
+        val orbitY = sin(orbitAngle) * orbitRadiusY
+        val orbitZ = sin(orbitAngle) * orbitRadiusZ
+
+        // Hop / jump height in Y
+        val hopY = -kotlin.math.abs(sin(timeSec * freq * 1.5f)) * 40f
+
+        val cosYaw = cos(yaw)
+        val sinYaw = sin(yaw)
+        val cosPitch = cos(pitch)
+        val sinPitch = sin(pitch)
+        val cosRoll = cos(roll)
+        val sinRoll = sin(roll)
+
+        val cameraDistance = 800f
+        val amp = stroke.strokeWidth * 0.35f
+
+        var totalPerspectiveScale = 0f
+
+        val dancedPoints = stroke.points.mapIndexed { index, p ->
+            val x0 = p.x - cx
+            val y0 = p.y - cy
+            val z0 = 0f
+
+            // Pitch rotation (X-axis)
+            val y1 = y0 * cosPitch - z0 * sinPitch
+            val z1 = y0 * sinPitch + z0 * cosPitch
+            val x1 = x0
+
+            // Yaw rotation (Y-axis - 3D Sphere Spin)
+            val x2 = x1 * cosYaw + z1 * sinYaw
+            val z2 = -x1 * sinYaw + z1 * cosYaw
+            val y2 = y1
+
+            // Roll rotation (Z-axis)
+            val x3 = x2 * cosRoll - y2 * sinRoll
+            val y3 = x2 * sinRoll + y2 * cosRoll
+            val z3 = z2
+
+            // Combine with 3D Orbit & Hop
+            val worldX = x3 + orbitX
+            val worldY = y3 + orbitY + hopY
+            val worldZ = z3 + orbitZ
+
+            // 3D Perspective Projection
+            val perspectiveScale = (cameraDistance / (cameraDistance + worldZ)).coerceIn(0.35f, 2.2f)
+            totalPerspectiveScale += perspectiveScale
+
+            val wiggle = sin(index * 0.15f + timeSec * 8f) * amp * perspectiveScale
+
+            val screenX = cx + worldX * perspectiveScale + wiggle
+            val screenY = cy + worldY * perspectiveScale + wiggle
+
+            Offset(screenX, screenY)
+        }
+
+        val avgScale = (totalPerspectiveScale / stroke.points.size).coerceIn(0.6f, 1.8f)
+        return stroke.copy(
+            points = dancedPoints,
+            strokeWidth = stroke.strokeWidth * avgScale
+        )
+    }
+
+    private fun swimStroke(
+        stroke: DrawnStroke,
+        timeMs: Long,
+        groupCenter: Offset?,
+        groupBounds: Rect?,
+        canvasSize: Size?
+    ): DrawnStroke {
+        if (stroke.points.isEmpty()) return stroke
+
+        // Roam gracefully across canvas area
+        var current = randomRoamStroke(stroke, timeMs, groupCenter, groupBounds, canvasSize)
+
+        // Wave motion along stroke
+        current = waveStroke(current, timeMs)
+
+        // Floating buoyancy
+        current = floatStroke(current, timeMs)
+
+        return current
     }
 
     private fun bounceStroke(stroke: DrawnStroke, timeMs: Long, groupBounds: Rect?): DrawnStroke {

@@ -17,7 +17,7 @@ class SoundManager(context: Context) {
     private var popSoundId: Int = 0
     private var chimeSoundId: Int = 0
     private var squeakSoundId: Int = 0
-    private val loadedSoundIds = mutableSetOf<Int>()
+    private val loadedSoundIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
 
     init {
         val audioAttributes = AudioAttributes.Builder()

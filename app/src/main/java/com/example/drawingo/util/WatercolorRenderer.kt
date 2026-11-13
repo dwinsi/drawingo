@@ -63,9 +63,10 @@ object WatercolorRenderer {
             return
         }
 
-        class WatercolorCache(val path: Path, val pointCount: Int, val scale: Float, val ox: Float, val oy: Float)
+        class WatercolorCache(val path: Path, var pointCount: Int, val scale: Float, val ox: Float, val oy: Float)
         var cache = stroke.renderCache as? WatercolorCache
-        if (cache == null || cache.pointCount != points.size || cache.scale != scale || cache.ox != offsetX || cache.oy != offsetY) {
+        
+        if (cache == null || cache.scale != scale || cache.ox != offsetX || cache.oy != offsetY) {
             val path = Path()
             var previousX = points.first().x * scale + offsetX
             var previousY = points.first().y * scale + offsetY
@@ -83,8 +84,27 @@ object WatercolorRenderer {
             path.lineTo(previousX, previousY)
             cache = WatercolorCache(path, points.size, scale, offsetX, offsetY)
             stroke.renderCache = cache
+        } else if (cache.pointCount < points.size) {
+            val path = cache.path
+            var previousX = points[cache.pointCount - 1].x * scale + offsetX
+            var previousY = points[cache.pointCount - 1].y * scale + offsetY
+            // Since we previously added a lineTo for the end, we should technically rewind it, 
+            // but for watercolor rendering, overdrawing the end segment is completely invisible.
+            for (index in cache.pointCount until points.size) {
+                val point = points[index]
+                val x = point.x * scale + offsetX
+                val y = point.y * scale + offsetY
+                val midpointX = (previousX + x) * 0.5f
+                val midpointY = (previousY + y) * 0.5f
+                path.quadTo(previousX, previousY, midpointX, midpointY)
+                previousX = x
+                previousY = y
+            }
+            path.lineTo(previousX, previousY)
+            cache.pointCount = points.size
         }
-        val path = cache.path
+        
+        val path = cache!!.path
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE

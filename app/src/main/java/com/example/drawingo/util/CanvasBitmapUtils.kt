@@ -33,7 +33,7 @@ object CanvasBitmapUtils {
         
         // Draw background image if present
         if (backgroundImagePath != null) {
-            val bgBitmap = android.graphics.BitmapFactory.decodeFile(backgroundImagePath)
+            val bgBitmap = decodeSampledBitmapFromFile(backgroundImagePath, width, height)
             if (bgBitmap != null) {
                 // Exact same scaling logic as DrawingCanvas to ensure perfect visual match
                 val scale = minOf(width.toFloat() / bgBitmap.width, height.toFloat() / bgBitmap.height)
@@ -214,5 +214,30 @@ object CanvasBitmapUtils {
         }
 
         return bitmap
+    }
+
+    private fun decodeSampledBitmapFromFile(path: String, reqWidth: Int, reqHeight: Int): Bitmap? {
+        return try {
+            val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(path, options)
+            options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+            options.inJustDecodeBounds = false
+            android.graphics.BitmapFactory.decodeFile(path, options)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun calculateInSampleSize(options: android.graphics.BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val (height: Int, width: Int) = options.outHeight to options.outWidth
+        var inSampleSize = 1
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
     }
 }
