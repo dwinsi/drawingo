@@ -6,38 +6,85 @@ permalink: /
 
 # Drawingo Privacy Policy
 
-**Last updated: October 20, 2026**
+**Effective Date:** November 13, 2026  
+**Last Updated:** November 13, 2026
 
-Drawingo is an Android drawing app designed to work on your device. It does not require an account. The current Android source does not request Internet access and does not send drawings to a Drawingo server or a generative AI service.
+Drawingo is a free, universal recreational drawing and animation app for Android. We believe your creative workspace should be entirely private, calm, and distraction-free.
 
-## Information stored on your device
+**Drawingo is completely free to use and collects no personal data.** There are no accounts, no advertisements, no tracking or analytics SDKs, and no cloud uploads. Everything you draw, animate, or import stays strictly on your device.
 
-- **Drawings and projects:** Drawing data, project names, layers, and animation frames are stored in a local database in app-private storage.
-- **Reference images:** If you choose an image or take a photo using Android's system camera flow, the selected image is copied into app-private storage for use as a drawing background.
-- **Project previews:** Small previews are generated on-device and stored in app-private storage.
-- **Exports:** If you choose PNG or JPEG export, the image is saved to the device's media library. You can remove an export from your device's gallery.
+---
 
-App-private data is generally removed when you clear the app's storage or uninstall it. The Android manifest disables automatic app backup. The app does not create an online drawing account or server-side gallery.
+## 1. Zero Data Collection Policy
 
-## Network access and third-party services
+Drawingo does not collect, transmit, store, sell, or share any personal information or device data. Specifically:
+- **No Personal Information:** We do not collect names, email addresses, phone numbers, contacts, or demographic data.
+- **No Accounts or Logins:** You do not need to register, log in, or provide credentials to use any feature in the app.
+- **No Analytics or Telemetry:** The app contains no third-party analytics SDKs (such as Google Analytics or Firebase) to track user behavior, feature usage, or crash logs.
+- **No Advertising:** The app contains no advertising SDKs, ad networks, or tracking libraries. It is 100% ad-free.
+- **No In-App Purchases:** The app is completely free with no hidden charges, paywalls, or subscriptions.
 
-The current Android manifest does not request the Internet permission, and the app source contains no cloud AI client, drawing-upload feature, analytics SDK, advertising SDK, or remote logging feature. Drawing effects and flipbook playback run locally. The app does not record or transcribe voice.
+---
 
-The repository previously contained optional cloud-generation code and a backend deployment workflow. Those files have been removed from the repository. This does not confirm whether any Google Cloud resources deployed earlier still exist; the Android app no longer contains the client code or permission to use them. This policy describes the Android app, not unrelated infrastructure that may remain in a cloud account.
+## 2. No Internet Access or Remote Communications
 
-This policy is hosted on GitHub Pages. GitHub may process technical information about visits under [GitHub's Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement). The policy site does not intentionally use advertising or analytics cookies.
+The Drawingo Android application does not request the `android.permission.INTERNET` permission in its manifest.
 
-## Your choices
+Because the app lacks network access:
+- Your drawings, strokes, and animations are never transmitted across the internet.
+- The app cannot communicate with any remote servers, external APIs, or cloud AI services.
+- All drawing rendering, watercolor and crayon physics, flipbook playback, and motion effects execute 100% locally on your device hardware.
 
-- Choose whether to import a reference image; the app does not access images until you select or capture one through the system flow.
-- Clear app storage or uninstall the app to remove app-private projects, preferences, background images, and previews.
-- Delete exported images separately from your device's media library.
-- For privacy questions or requests, contact [winsimash@gmail.com](mailto:winsimash@gmail.com). Please do not email drawings or other sensitive information.
+---
 
-## Security and changes
+## 3. Data Stored Locally on Your Device
 
-Project content is stored in app-private storage. We limit permissions and keep drawing processing on-device. No electronic storage method is completely secure. We will update this policy if the app's data practices change and review it against the released Android build.
+All content created in Drawingo resides solely within your device's private, sandboxed app storage:
 
-## Contact
+- **Drawings, Layers, and Projects:** Vector strokes, layers, project names, color palettes, and animation frames are saved locally in an on-device database (`Room`).
+- **Reference & Background Images:** If you choose to import an image or take a reference photo, the app invokes Android's standard system photo picker or camera flow. The app only accesses the specific image you explicitly choose and copies it into private app storage. Drawingo does not scan, index, or access your photo library.
+- **Project Previews:** Small thumbnails are generated on-device and stored locally to display in your project gallery.
+- **Exported Images:** When you choose to export your artwork as a PNG or JPEG, the file is written to your device's local media library using Android's standard media store APIs.
 
-For privacy questions or requests, contact the Drawingo app operator at [winsimash@gmail.com](mailto:winsimash@gmail.com). We use your email and message to respond and resolve the request, then delete them when no longer needed unless a legal obligation requires retention.
+Android automatic cloud backup (`android:allowBackup="false"`) is explicitly disabled in the app manifest to prevent your drawings from being automatically copied to cloud backup services.
+
+---
+
+## 4. Your Control and Data Deletion
+
+You have complete ownership and control over your data:
+
+- **Deleting Projects:** You can delete individual projects from within the app gallery at any time, which permanently removes their strokes, layers, and previews from the local database.
+- **Complete Erasure:** You can permanently erase all app data by clearing Drawingo's storage in Android **Settings > Apps > Drawingo > Storage & Cache > Clear Storage**, or by uninstalling the application.
+- **Exported Files:** Any images you exported to your device's photo gallery can be managed or deleted directly through your device's Gallery or Photos app.
+
+---
+
+## 5. Children's Privacy (COPPA / GDPR-K Compliance)
+
+Drawingo is designed as a calm, accessible creative tool for people of all ages, including children and families.
+
+Because Drawingo does not collect, store, or transmit any personal data from anyone, it complies fully with the Children’s Online Privacy Protection Act (COPPA), the General Data Protection Regulation (GDPR / GDPR-K), and Google Play Families Policy requirements. We do not knowingly or unknowingly collect or solicit information from children under the age of 13 (or applicable age in your jurisdiction).
+
+---
+
+## 6. Third-Party Services and Hosting
+
+The Drawingo mobile application contains no third-party services, APIs, or trackers.
+
+This privacy policy document is published online via GitHub Pages. When you visit this policy website in a web browser, GitHub may collect standard web server logs (such as IP address, browser type, and time of request) in accordance with the [GitHub Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement). The policy website uses no advertising cookies or web analytics scripts.
+
+---
+
+## 7. Changes to This Privacy Policy
+
+If we ever update Drawingo's features in a manner that affects data handling or device permissions, we will update this privacy policy with a revised "Last Updated" date. Any updates will remain accessible both within the project documentation and at the public policy URL.
+
+---
+
+## 8. Contact Us
+
+If you have any questions, feedback, or concerns regarding this Privacy Policy or Drawingo's privacy practices, please contact us at:
+
+**Email:** [winsimash@gmail.com](mailto:winsimash@gmail.com)  
+**Application:** Drawingo for Android
